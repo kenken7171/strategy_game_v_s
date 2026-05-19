@@ -1,0 +1,11 @@
+{
+  "name": "@chronicle-knights/cli",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "simulate:unit": "bun run src/simulate_unit.ts",
+    "simulate": "bun run src/simulate_history.ts",
+    "report": "bun run src/generate_report.ts",
+    "full-cycle": "bun run simulate && bun run report"
+  }
+}

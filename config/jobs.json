@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "id": "iron_wall_knight",
+      "name": "鉄壁騎士",
+      "description": "自分隊をSDF分、大隊をBDF分（FRONT配置時）守る前衛特化型",
+      "defaults": { "frontAttack": 50, "rearAttack": 10, "speed": 10, "maxHp": 250, "sdf": 15, "bdf": 10, "ab": 0, "hl": 0 }
+    },
+    {
+      "id": "tactician",
+      "name": "戦術官",
+      "description": "大隊全員のSPDとFA/RAをバフする支援型",
+      "defaults": { "frontAttack": 20, "rearAttack": 20, "speed": 35, "maxHp": 120, "sdf": 0, "bdf": 0, "ab": 20, "hl": 0 }
+    },
+    {
+      "id": "medic",
+      "name": "衛生兵",
+      "description": "ターン終了時に分隊全員をHL分回復する後方支援型",
+      "defaults": { "frontAttack": 10, "rearAttack": 10, "speed": 25, "maxHp": 100, "sdf": 0, "bdf": 0, "ab": 0, "hl": 30 }
+    },
+    {
+      "id": "sniper",
+      "name": "狙撃兵",
+      "description": "ターン開始1番手の時に2回攻撃する後衛特化型",
+      "defaults": { "frontAttack": 20, "rearAttack": 90, "speed": 40, "maxHp": 80, "sdf": 0, "bdf": 0, "ab": 0, "hl": 0 }
+    }
+  ]
+}
