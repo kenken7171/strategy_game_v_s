@@ -34,17 +34,20 @@ const NAMES = [
 let unitCounter = 0;
 
 function makeRecruit(): Unit {
-  const joinAge  = ri(14, 18);
-  const peakAge  = joinAge + ri(10, 18);
-  const maxAge   = peakAge + ri(15, 25);
-  const name     = NAMES[unitCounter % NAMES.length];
-  const id       = `u${String(unitCounter).padStart(3, "0")}`;
+  const joinAge      = ri(14, 18);
+  const peakStartAge = joinAge + ri(8, 15);
+  const peakEndAge   = peakStartAge + ri(3, 8);
+  const maxAge       = peakEndAge + ri(15, 25);
+  const name         = NAMES[unitCounter % NAMES.length];
+  const id           = `u${String(unitCounter).padStart(3, "0")}`;
   unitCounter++;
   return new Unit({
     id,
     name,
     age: joinAge,
-    peakAge,
+    birthYear: 0,
+    peakStartAge,
+    peakEndAge,
     maxAge,
     baseStats: { strength: ri(70, 130), agility: 0, intelligence: 0, endurance: 0 },
   });
@@ -58,7 +61,8 @@ interface UnitRecord {
   joinYear: number;
   retireYear: number | null;
   joinAge: number;
-  peakAge: number;
+  peakStartAge: number;
+  peakEndAge: number;
   maxAge: number;
   baseStrength: number;
   peakStrength: number;
@@ -97,7 +101,8 @@ function registerUnit(u: Unit, joinYear: number) {
     joinYear,
     retireYear: null,
     joinAge: u.age,
-    peakAge: u.peakAge,
+    peakStartAge: u.peakStartAge,
+    peakEndAge: u.peakEndAge,
     maxAge: u.maxAge,
     baseStrength: u.baseStats.strength,
     peakStrength: u.stats.strength,

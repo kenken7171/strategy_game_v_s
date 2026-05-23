@@ -11,7 +11,9 @@ export interface UnitProps {
   readonly id: string;
   readonly name: string;
   readonly age: number;
-  readonly peakAge: number;
+  readonly birthYear?: number;
+  readonly peakStartAge: number;
+  readonly peakEndAge: number;
   readonly maxAge: number;
   readonly baseStats: Stats;
   readonly maxHp?: number;
@@ -32,7 +34,9 @@ export class Unit {
   readonly id: string;
   readonly name: string;
   readonly age: number;
-  readonly peakAge: number;
+  readonly birthYear: number | null;
+  readonly peakStartAge: number;
+  readonly peakEndAge: number;
   readonly maxAge: number;
   readonly baseStats: Stats;
   readonly maxHp: number;
@@ -52,7 +56,9 @@ export class Unit {
     this.id = props.id;
     this.name = props.name;
     this.age = props.age;
-    this.peakAge = props.peakAge;
+    this.birthYear = props.birthYear ?? null;
+    this.peakStartAge = props.peakStartAge;
+    this.peakEndAge = props.peakEndAge;
     this.maxAge = props.maxAge;
     this.baseStats = props.baseStats;
     this.maxHp = props.maxHp ?? 100;
@@ -70,23 +76,28 @@ export class Unit {
   }
 
   /**
-   * 年齢による能力補正係数（0.0〜1.0）。
-   * f(a) = 1 - k*(a - peakAge)^2, k = 1/(maxAge - peakAge)^2
-   * peakAgeで1.0、maxAgeで0.0になる二次関数モデル。
+   * 年齢による能力補正係数（0.0〜1.0）。三段階モデル:
+   *   修業期 (age < peakStartAge): 線形上昇 [0 → 1]
+   *   全盛期 (peakStartAge <= age <= peakEndAge): 1.0 固定
+   *   衰退期 (age > peakEndAge): 3%/年で複利減衰
    */
   get growthFactor(): number {
     if (this.age >= this.maxAge) return 0;
-    const k = 1 / Math.pow(this.maxAge - this.peakAge, 2);
-    return Math.max(0, 1 - k * Math.pow(this.age - this.peakAge, 2));
+    if (this.age <= this.peakEndAge && this.age >= this.peakStartAge) return 1;
+    if (this.age < this.peakStartAge) {
+      return this.age / this.peakStartAge;
+    }
+    const yearsDeclined = this.age - this.peakEndAge;
+    return Math.pow(1 - 0.03, yearsDeclined);
   }
 
   get stats(): Stats {
     const f = this.growthFactor;
     return {
-      strength: Math.round(this.baseStats.strength * f),
-      agility: Math.round(this.baseStats.agility * f),
-      intelligence: Math.round(this.baseStats.intelligence * f),
-      endurance: Math.round(this.baseStats.endurance * f),
+      strength:     Math.max(1, Math.round(this.baseStats.strength     * f)),
+      agility:      Math.max(1, Math.round(this.baseStats.agility      * f)),
+      intelligence: Math.max(1, Math.round(this.baseStats.intelligence * f)),
+      endurance:    Math.max(1, Math.round(this.baseStats.endurance    * f)),
     };
   }
 

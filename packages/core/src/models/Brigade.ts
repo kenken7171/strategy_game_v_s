@@ -13,11 +13,13 @@ export interface AdvanceResult {
 
 export class Brigade {
   readonly units: ReadonlyArray<Unit>;
+  readonly currentYear: number;
   private _squads: Squad[];
 
-  constructor(units: ReadonlyArray<Unit>, squads: Squad[] = []) {
+  constructor(units: ReadonlyArray<Unit>, squads: Squad[] = [], currentYear = 1) {
     this.units = units;
     this._squads = [...squads];
+    this.currentYear = currentYear;
   }
 
   get squads(): ReadonlyArray<Squad> {
@@ -44,6 +46,17 @@ export class Brigade {
     return Math.round((total / this.units.length) * 10) / 10;
   }
 
+  /**
+   * 大隊選出: 現在のステータスで上位 n 体を返す（大隊編成時に呼ぶ）。
+   * ここで stats が確定するため、選出後のバフ等は別途 Squad に適用する。
+   */
+  selectBattalion(size: number): ReadonlyArray<Unit> {
+    return [...this.units]
+      .filter((u) => !u.isRetired)
+      .sort((a, b) => b.stats.strength - a.stats.strength)
+      .slice(0, size);
+  }
+
   advance(recruits: ReadonlyArray<Unit> = []): AdvanceResult {
     const events: YearEvent[] = [];
 
@@ -61,7 +74,7 @@ export class Brigade {
     }
 
     return {
-      brigade: new Brigade([...active, ...recruits]),
+      brigade: new Brigade([...active, ...recruits], [], this.currentYear + 1),
       events,
     };
   }
