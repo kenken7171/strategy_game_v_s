@@ -5,6 +5,8 @@
   "scripts": {
     "simulate:unit": "bun run src/simulate_unit.ts",
     "simulate": "bun run src/simulate_history.ts",
+    "simulate:brigade": "bun run src/simulate_brigade_battle.ts",
+    "sim": "bun run ../../scripts/run-sim.ts",
     "report": "bun run src/generate_report.ts",
     "full-cycle": "bun run simulate && bun run report"
   }

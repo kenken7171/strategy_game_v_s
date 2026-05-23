@@ -16,4 +16,10 @@ export type {
   HealLog,
   IntegratedTurnResult,
 } from "./BattleManager";
+export { BattleSimulator, printBattleReport } from "./BattleSimulator";
+export type {
+  BattleStatistics,
+  SurvivorRecord,
+  SimulationResult,
+} from "./BattleSimulator";
 export { MAX_UNITS_PER_SQUAD, MAX_ENEMY_ACTION_LOOP } from "./config";
