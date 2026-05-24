@@ -95,6 +95,7 @@ function makeRecruit(job: JobType, age: number, currentYear: number): Unit {
     peakEndAge,
     maxAge,
     baseStats: { strength: ri(70, 130), agility: 0, intelligence: 0, endurance: 0 },
+    gender: rand() < 0.5 ? "Male" : "Female",
   });
 }
 
