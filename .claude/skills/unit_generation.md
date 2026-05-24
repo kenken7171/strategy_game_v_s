@@ -18,6 +18,31 @@ description: Unit インスタンス生成時の規約（性別・継承・年�
 - DI された RNG（mulberry32 等）を使うことで再現性を確保する（`project_conventions` の「乱数」ルールに従う）。
 - 既存のバトルデモ・テスト用ユニットで性別が無意味な場合のみ省略可。シミュレーション系では必須。
 
+## 文化圏（origin） & 命名
+
+- `Origin` は `'Japanese' | 'European' | 'Classical'`。命名プールを選ぶキー。
+- `UnitProps.origin` はオプショナル。未指定時のデフォルトは `'European'`（互換）。**シミュレーション系では必ず `pickRandomOrigin(rand)` で渡すこと**。
+- 名前は **絶対に手動文字列で渡さない**。`NameGenerator.pick(origin, gender, historical)` を経由して `historical` Set に対するユニーク性を保証すること:
+
+  ```typescript
+  import { NameGenerator, pickRandomOrigin } from "packages/core/src/data/names";
+  const gen = new NameGenerator(rand);
+  const origin = pickRandomOrigin(rand);
+  const gender = rand() < 0.5 ? "Male" : "Female";
+  const name = gen.pick(origin, gender, brigade.historicalNames);
+  ```
+
+- 同じ年に複数ユニットを生成する場合、**ローカル累積 Set を渡す**（`brigade.historicalNames` に直接 add してはいけない — readonly）:
+
+  ```typescript
+  const local = new Set(brigade.historicalNames);
+  const r1 = makeRecruit(local); local.add(r1.name);
+  const r2 = makeRecruit(local); local.add(r2.name);
+  ```
+
+- **「Jr.」「II世」「(2)」式の記号的重複回避は厳禁**。プール枯渇時は `NameGenerator` が自動で称号（「暁の」「古の」等）を付与する。
+- 子供（継承者）の名前は `Brigade.advance({ nameGenerator })` を渡すと内部で自動採番される。両親の `origin` から 50% で継承される。
+
 ## 三段階モデルの年齢パラメータ
 
 | パラメータ | 推奨レンジ（成人新人） | 用途 |

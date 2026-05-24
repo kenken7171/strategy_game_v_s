@@ -168,6 +168,56 @@ type YearEvent =
 
 ---
 
+## 命名システム
+
+旅団 100年史で全ユニットが固有の存在感を持てるよう、多文化ネーミングデータと「歴史的に重複しない」ユニーク制約を実装している。
+
+### 文化圏 (Origin)
+
+| Origin | 雰囲気 | 含まれる名前の系統 |
+|---|---|---|
+| `Japanese` | 古風・力強い和風 | 戦国武将・古典文学・神話・公家武家の名乗り・幕末志士・自然/神獣 |
+| `European` | 叙事詩的・中世風 | ニーベルンゲン・アーサー王・シャルルマーニュ・神聖ローマ・北欧ヴァイキング |
+| `Classical` | 神話・星・幻想 | ギリシャ/ローマ・メソポタミア・エジプト・ケルト・天体・カバラ・ヒンドゥー |
+
+### データ規模
+
+`packages/core/src/data/names.ts` に各 Origin × Gender = 6 プール、各 150 名以上、合計 **910名** を収録。プール定義時に内部重複と件数下限（150）をモジュール読み込み時にアサートしており、欠落は即座に throw する。
+
+### 重複回避の仕様
+
+1. **Brigade.historicalNames: ReadonlySet<string>** — 過去に旅団に所属した全ユニット（新人・子供・引退者含む）の名前を永続記録。
+   - Brigade コンストラクタが現 `units` の名前を自動登録する。
+   - `advance()` が新規追加（recruits + 子供）の名前も追記して新 Brigade に引き継ぐ。
+   - `applyBattleAffinity()` など他のメソッドも `historicalNames` を引き継いで返す。
+
+2. **NameGenerator.pick(origin, gender, historical)** — `historical` Set を参照し、未登場の候補名を返す。
+   - プール内の使用済みを除外して残候補からランダム抽出
+   - プール枯渇時は称号（`TITLES`: 「暁の」「古の」「不屈の」など32種）を接頭辞として付与
+   - 称号付き名も `historical` と照合してユニーク性を保証
+
+3. **「Jr.」「II世」「(2)」式の記号的重複回避は厳禁**（仕様）。回避手段は称号付与のみ。
+
+### 命名の継承ロジック
+
+- **新人の命名**: ランダムな `Origin` + `Gender` から未登場名を選択。
+- **子供の命名**（出産予約時）: 両親のいずれかの `Origin` を **50% で継承**。出産予約 `BirthRegistry.origin` に記録され、15歳入団時に `NameGenerator.pick(reg.origin, gender, historical)` で名前を決定する。
+- `Brigade.advance({ nameGenerator })` に NameGenerator を渡さない場合は旧挙動（`継承者child-<year>-<n>`）にフォールバックする（後方互換）。
+
+### Unit.origin
+
+`Origin` を Unit のフィールドとして保持し、子供の文化圏継承に使う。`UnitProps.origin` はオプショナル、未指定時のデフォルトは `"European"`（既存テスト互換）。新規生成箇所では NameGenerator と合わせて明示指定すること（[`unit_generation` skill](../.claude/skills/unit_generation.md) 参照）。
+
+### 検証
+
+`scripts/verify-naming.ts` で以下を確認できる:
+
+1. 300名連続生成で全員ユニーク + 3文化圏バランス分布（各 60〜140 範囲）
+2. プール枯渇テスト（European/Male を 200連続 → 151番目から称号付与に切替）
+3. Brigade.historicalNames の自動蓄積（50年経過 → 投入名全件保持）
+
+---
+
 ## ファイル構成
 
 ```
@@ -191,6 +241,10 @@ scripts/
   run-grand-chronicle.ts   ← 100年旅団変遷シミュレーター
   age_progression_test.ts  ← 経年変化の動作確認
   verify-bloodline.ts      ← 血統継承システムのE2E検証
+  verify-naming.ts         ← 命名重複回避システムのE2E検証
+
+packages/core/src/data/
+  names.ts                 ← 多文化名前データ(910名) + NameGenerator
 
 config/
   jobs.json           ← ジョブデフォルト値
