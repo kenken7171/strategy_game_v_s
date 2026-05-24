@@ -46,7 +46,9 @@ function mulberry32(seed: number): () => number {
 
 // ─── ユニット生成ヘルパー ─────────────────────────────────────────────────────
 
-type JobType = "iron_wall_knight" | "tactician" | "medic" | "sniper";
+type JobType =
+  | "iron_wall_knight" | "tactician" | "medic" | "sniper"
+  | "sorcerer" | "standard_bearer" | "heavy_infantry" | "scout";
 
 interface JobDefaults {
   maxHp: number; speed: number;
@@ -55,10 +57,14 @@ interface JobDefaults {
 }
 
 const JOB_DEFAULTS: Record<JobType, JobDefaults> = {
-  iron_wall_knight: { maxHp: 250, speed: 10, frontAttack: 50, rearAttack: 10, bdf: 10, sdf: 15, ab: 0, hl: 0 },
-  tactician:        { maxHp: 120, speed: 35, frontAttack: 20, rearAttack: 20, bdf: 0,  sdf: 0,  ab: 20, hl: 0 },
-  medic:            { maxHp: 100, speed: 25, frontAttack: 10, rearAttack: 10, bdf: 0,  sdf: 0,  ab: 0,  hl: 30 },
-  sniper:           { maxHp:  80, speed: 40, frontAttack: 20, rearAttack: 90, bdf: 0,  sdf: 0,  ab: 0,  hl: 0 },
+  iron_wall_knight: { maxHp: 250, speed: 10, frontAttack: 50, rearAttack:  10, bdf: 10, sdf: 15, ab:  0, hl:  0 },
+  tactician:        { maxHp: 120, speed: 35, frontAttack: 20, rearAttack:  20, bdf:  0, sdf:  0, ab: 20, hl:  0 },
+  medic:            { maxHp: 100, speed: 25, frontAttack: 10, rearAttack:  10, bdf:  0, sdf:  0, ab:  0, hl: 30 },
+  sniper:           { maxHp:  80, speed: 40, frontAttack: 20, rearAttack:  90, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  sorcerer:         { maxHp:  40, speed: 15, frontAttack: 10, rearAttack: 120, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  standard_bearer:  { maxHp: 150, speed: 20, frontAttack: 30, rearAttack:  30, bdf:  0, sdf:  5, ab: 40, hl:  0 },
+  heavy_infantry:   { maxHp: 300, speed: 15, frontAttack: 70, rearAttack:  20, bdf:  0, sdf: 10, ab:  0, hl:  0 },
+  scout:            { maxHp:  90, speed: 60, frontAttack: 40, rearAttack:  40, bdf:  0, sdf:  0, ab:  0, hl:  0 },
 };
 
 let _uid = 0;
@@ -160,10 +166,91 @@ function makeBrigade_defensive(prefix: string): Squad[] {
   ];
 }
 
+/**
+ * 重装+斥候 大隊: 重装歩兵で受け、斥候で先制削り、旗手で全体火力ブースト
+ *   FRONT  : 重装歩兵×2 + 旗手
+ *   REAR-L : 斥候×3
+ *   REAR-R : 斥候×2 + 衛生兵
+ */
+function makeBrigade_vanguard(prefix: string): Squad[] {
+  return [
+    new Squad("FRONT",  [
+      makeUnit(prefix, `${prefix}重甲A`,   "heavy_infantry"),
+      makeUnit(prefix, `${prefix}重甲B`,   "heavy_infantry"),
+      makeUnit(prefix, `${prefix}旗手`,    "standard_bearer"),
+    ]),
+    new Squad("REAR-L", [
+      makeUnit(prefix, `${prefix}斥候A`, "scout"),
+      makeUnit(prefix, `${prefix}斥候B`, "scout"),
+      makeUnit(prefix, `${prefix}斥候C`, "scout"),
+    ]),
+    new Squad("REAR-R", [
+      makeUnit(prefix, `${prefix}斥候D`, "scout"),
+      makeUnit(prefix, `${prefix}斥候E`, "scout"),
+      makeUnit(prefix, `${prefix}衛生兵`, "medic"),
+    ]),
+  ];
+}
+
+/**
+ * 砲台大隊（呪術師の理想運用）: 前衛厚く・後衛で呪術師を守る
+ *   FRONT  : 鉄壁騎士 + 重装歩兵 + 旗手
+ *   REAR-L : 呪術師×3
+ *   REAR-R : 呪術師×2 + 衛生兵
+ */
+function makeBrigade_arcane(prefix: string): Squad[] {
+  return [
+    new Squad("FRONT",  [
+      makeUnit(prefix, `${prefix}盾騎士`,   "iron_wall_knight"),
+      makeUnit(prefix, `${prefix}重装`,     "heavy_infantry"),
+      makeUnit(prefix, `${prefix}旗手`,     "standard_bearer"),
+    ]),
+    new Squad("REAR-L", [
+      makeUnit(prefix, `${prefix}呪術師A`, "sorcerer"),
+      makeUnit(prefix, `${prefix}呪術師B`, "sorcerer"),
+      makeUnit(prefix, `${prefix}呪術師C`, "sorcerer"),
+    ]),
+    new Squad("REAR-R", [
+      makeUnit(prefix, `${prefix}呪術師D`, "sorcerer"),
+      makeUnit(prefix, `${prefix}呪術師E`, "sorcerer"),
+      makeUnit(prefix, `${prefix}衛生兵`,  "medic"),
+    ]),
+  ];
+}
+
+/**
+ * 脆い砲台（呪術師の即死パターン検証用）: 呪術師を FRONT に晒す
+ *   FRONT  : 呪術師×3                 ← 1ターン目で全滅する想定
+ *   REAR-L : 呪術師×2 + 衛生兵
+ *   REAR-R : 衛生兵×2 + 旗手
+ */
+function makeBrigade_glass_cannon(prefix: string): Squad[] {
+  return [
+    new Squad("FRONT",  [
+      makeUnit(prefix, `${prefix}前衛呪術師A`, "sorcerer"),
+      makeUnit(prefix, `${prefix}前衛呪術師B`, "sorcerer"),
+      makeUnit(prefix, `${prefix}前衛呪術師C`, "sorcerer"),
+    ]),
+    new Squad("REAR-L", [
+      makeUnit(prefix, `${prefix}呪術師D`, "sorcerer"),
+      makeUnit(prefix, `${prefix}呪術師E`, "sorcerer"),
+      makeUnit(prefix, `${prefix}衛生兵α`, "medic"),
+    ]),
+    new Squad("REAR-R", [
+      makeUnit(prefix, `${prefix}衛生兵β`, "medic"),
+      makeUnit(prefix, `${prefix}衛生兵γ`, "medic"),
+      makeUnit(prefix, `${prefix}旗手`,    "standard_bearer"),
+    ]),
+  ];
+}
+
 const PRESETS: Record<string, (prefix: string) => Squad[]> = {
-  balanced:   makeBrigade_balanced,
-  aggressive: makeBrigade_aggressive,
-  defensive:  makeBrigade_defensive,
+  balanced:     makeBrigade_balanced,
+  aggressive:   makeBrigade_aggressive,
+  defensive:    makeBrigade_defensive,
+  vanguard:     makeBrigade_vanguard,
+  arcane:       makeBrigade_arcane,
+  glass_cannon: makeBrigade_glass_cannon,
 };
 
 function loadPreset(name: string, prefix: string): Squad[] {

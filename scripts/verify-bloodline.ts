@@ -43,10 +43,14 @@ interface JobDefaults {
   bdf: number; sdf: number; ab: number; hl: number;
 }
 const JOB_DEFAULTS: Record<JobType, JobDefaults> = {
-  iron_wall_knight: { maxHp: 250, speed: 10, frontAttack: 50, rearAttack: 10, bdf: 10, sdf: 15, ab: 0,  hl: 0  },
-  tactician:        { maxHp: 120, speed: 35, frontAttack: 20, rearAttack: 20, bdf: 0,  sdf: 0,  ab: 20, hl: 0  },
-  medic:            { maxHp: 100, speed: 25, frontAttack: 10, rearAttack: 10, bdf: 0,  sdf: 0,  ab: 0,  hl: 30 },
-  sniper:           { maxHp:  80, speed: 40, frontAttack: 20, rearAttack: 90, bdf: 0,  sdf: 0,  ab: 0,  hl: 0  },
+  iron_wall_knight: { maxHp: 250, speed: 10, frontAttack: 50, rearAttack:  10, bdf: 10, sdf: 15, ab:  0, hl:  0 },
+  tactician:        { maxHp: 120, speed: 35, frontAttack: 20, rearAttack:  20, bdf:  0, sdf:  0, ab: 20, hl:  0 },
+  medic:            { maxHp: 100, speed: 25, frontAttack: 10, rearAttack:  10, bdf:  0, sdf:  0, ab:  0, hl: 30 },
+  sniper:           { maxHp:  80, speed: 40, frontAttack: 20, rearAttack:  90, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  sorcerer:         { maxHp:  40, speed: 15, frontAttack: 10, rearAttack: 120, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  standard_bearer:  { maxHp: 150, speed: 20, frontAttack: 30, rearAttack:  30, bdf:  0, sdf:  5, ab: 40, hl:  0 },
+  heavy_infantry:   { maxHp: 300, speed: 15, frontAttack: 70, rearAttack:  20, bdf:  0, sdf: 10, ab:  0, hl:  0 },
+  scout:            { maxHp:  90, speed: 60, frontAttack: 40, rearAttack:  40, bdf:  0, sdf:  0, ab:  0, hl:  0 },
 };
 
 function makeKnight(
