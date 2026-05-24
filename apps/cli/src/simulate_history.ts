@@ -1,4 +1,5 @@
-import { Unit, Brigade } from "../../../packages/core/src/index";
+import { Unit, Brigade, NameGenerator, pickRandomOrigin } from "../../../packages/core/src/index";
+import type { Gender } from "../../../packages/core/src/index";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -16,31 +17,20 @@ function mulberry32(seed: number) {
 const rand = mulberry32(2024);
 const ri = (min: number, max: number) => Math.floor(rand() * (max - min + 1)) + min;
 
-const NAMES = [
-  "Leon",      "Arthur",    "Roland",    "Siegfried", "Lancelot",
-  "Percival",  "Tristan",   "Galahad",   "Gawain",    "Bedivere",
-  "Kay",       "Geraint",   "Gareth",    "Agravain",  "Lamorak",
-  "Erec",      "Yvain",     "Bors",      "Lionel",    "Lucan",
-  "Aldric",    "Bruno",     "Conrad",    "Dietrich",  "Ernst",
-  "Friedrich", "Gustav",    "Heinrich",  "Ivan",      "Johann",
-  "Karl",      "Ludwig",    "Matthias",  "Nikolaus",  "Otto",
-  "Philipp",   "Rudolf",    "Stefan",    "Thomas",    "Ulrich",
-  "Viktor",    "Werner",    "Xavier",    "Yorick",    "Zacharias",
-  "Aldous",    "Bertram",   "Crispin",   "Dorian",    "Edmund",
-  "Fabian",    "Gilbert",   "Harold",    "Ignatius",  "Julian",
-  "Magnus",    "Nathan",    "Pascal",    "Quentin",   "Reginald",
-];
+const nameGen = new NameGenerator(rand);
 
 let unitCounter = 0;
 
-function makeRecruit(): Unit {
+function makeRecruit(historical: ReadonlySet<string>): Unit {
   const joinAge      = ri(14, 18);
   const peakStartAge = joinAge + ri(8, 15);
   const peakEndAge   = peakStartAge + ri(3, 8);
   const maxAge       = peakEndAge + ri(15, 25);
-  const name         = NAMES[unitCounter % NAMES.length];
   const id           = `u${String(unitCounter).padStart(3, "0")}`;
   unitCounter++;
+  const gender: Gender = rand() < 0.5 ? "Male" : "Female";
+  const origin       = pickRandomOrigin(rand);
+  const name         = nameGen.pick(origin, gender, historical);
   return new Unit({
     id,
     name,
@@ -50,7 +40,8 @@ function makeRecruit(): Unit {
     peakEndAge,
     maxAge,
     baseStats: { strength: ri(70, 130), agility: 0, intelligence: 0, endurance: 0 },
-    gender: rand() < 0.5 ? "Male" : "Female",
+    gender,
+    origin,
   });
 }
 
@@ -118,10 +109,14 @@ function updatePeak(u: Unit) {
 // ---- 初期ロスター ----
 
 const startingUnits: Unit[] = [];
-for (let i = 0; i < ri(5, 8); i++) {
-  const u = makeRecruit();
-  startingUnits.push(u);
-  registerUnit(u, 1);
+{
+  const local = new Set<string>();
+  for (let i = 0; i < ri(5, 8); i++) {
+    const u = makeRecruit(local);
+    local.add(u.name);
+    startingUnits.push(u);
+    registerUnit(u, 1);
+  }
 }
 
 let brigade = new Brigade(startingUnits);
@@ -134,16 +129,18 @@ for (let y = 1; y <= TOTAL_YEARS; y++) {
   // 年初の戦力ピーク更新
   for (const u of brigade.units) updatePeak(u);
 
-  // 新規入団
+  // 新規入団（命名重複回避: brigade.historicalNames を参照）
   const recruits: Unit[] = [];
+  const recruitLocal = new Set(brigade.historicalNames);
   for (let i = 0; i < ri(1, 3); i++) {
-    const r = makeRecruit();
+    const r = makeRecruit(recruitLocal);
+    recruitLocal.add(r.name);
     recruits.push(r);
     registerUnit(r, y);
   }
 
   // 年を進める（既存ユニット加齢・引退処理・新兵追加）
-  const { brigade: next, events } = brigade.advance(recruits);
+  const { brigade: next, events } = brigade.advance(recruits, { nameGenerator: nameGen });
 
   // 引退年を記録
   for (const e of events) {

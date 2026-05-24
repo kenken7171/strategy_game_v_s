@@ -15,11 +15,12 @@
  *   bun scripts/run-grand-chronicle.ts --seed 7
  */
 import { Unit } from "../packages/core/src/models/Unit";
-import type { JobType } from "../packages/core/src/models/Unit";
+import type { JobType, Gender } from "../packages/core/src/models/Unit";
 import { Brigade } from "../packages/core/src/models/Brigade";
 import { Squad } from "../packages/core/src/models/Squad";
 import { BattleSimulator } from "../packages/core/src/BattleSimulator";
 import type { SimulationResult } from "../packages/core/src/BattleSimulator";
+import { NameGenerator, pickRandomOrigin } from "../packages/core/src/data/names";
 
 // ─── CLI 引数 ────────────────────────────────────────────────────────────────
 
@@ -77,27 +78,24 @@ const JOB_JP: Record<JobType, string> = {
   scout: "斥候",
 };
 
-// ─── 名前プール ──────────────────────────────────────────────────────────────
+// ─── ユニット生成（NameGenerator + historicalNames で命名重複回避） ──────────
 
-const NAMES = [
-  "Leon", "Arthur", "Roland", "Siegfried", "Lancelot", "Percival", "Tristan",
-  "Galahad", "Gawain", "Bedivere", "Kay", "Geraint", "Gareth", "Agravain",
-  "Lamorak", "Erec", "Yvain", "Bors", "Lionel", "Lucan", "Aldric", "Bruno",
-  "Conrad", "Dietrich", "Ernst", "Friedrich", "Gustav", "Heinrich", "Ivan",
-  "Johann", "Karl", "Ludwig", "Matthias", "Nikolaus", "Otto", "Philipp",
-  "Rudolf", "Stefan", "Thomas", "Ulrich", "Viktor", "Werner", "Xavier",
-  "Yorick", "Zacharias", "Aldous", "Bertram", "Crispin", "Dorian", "Edmund",
-];
-
-// ─── ユニット生成 ────────────────────────────────────────────────────────────
+const nameGen = new NameGenerator(rand);
 
 let _uid = 0;
-function makeRecruit(job: JobType, age: number, currentYear: number): Unit {
+function makeRecruit(
+  job: JobType,
+  age: number,
+  currentYear: number,
+  historical: ReadonlySet<string>
+): Unit {
   const peakStartAge = age + ri(6, 12);                      // 24〜30 程度
   const peakEndAge   = peakStartAge + ri(3, 7);
   const maxAge       = peakEndAge + ri(15, 25);
   const id           = `u${String(_uid++).padStart(3, "0")}`;
-  const name         = NAMES[_uid % NAMES.length];
+  const gender: Gender = rand() < 0.5 ? "Male" : "Female";
+  const origin       = pickRandomOrigin(rand);
+  const name         = nameGen.pick(origin, gender, historical);
   return new Unit({
     id, name, job,
     age,
@@ -106,7 +104,8 @@ function makeRecruit(job: JobType, age: number, currentYear: number): Unit {
     peakEndAge,
     maxAge,
     baseStats: { strength: ri(70, 130), agility: 0, intelligence: 0, endurance: 0 },
-    gender: rand() < 0.5 ? "Male" : "Female",
+    gender,
+    origin,
   });
 }
 
@@ -142,7 +141,15 @@ const FOUNDING_JOBS: ReadonlyArray<JobType> = [
 ];
 
 function makeFoundingMembers(): Unit[] {
-  return FOUNDING_JOBS.map((j) => makeRecruit(j, 20, 1));
+  // 創設時は historical 空集合。各メンバーを生成しながら累積して重複回避
+  const cumulative = new Set<string>();
+  const founders: Unit[] = [];
+  for (const j of FOUNDING_JOBS) {
+    const u = makeRecruit(j, 20, 1, cumulative);
+    cumulative.add(u.name);
+    founders.push(u);
+  }
+  return founders;
 }
 
 // ─── 大隊編成（上位9名を slot に配置） ────────────────────────────────────────
@@ -283,7 +290,9 @@ function removeOldestDecliningUnit(brigade: Brigade): { brigade: Brigade; remove
   const next = new Brigade(
     brigade.units.filter((u) => u.id !== oldest.id),
     [...brigade.squads],
-    brigade.currentYear
+    brigade.currentYear,
+    brigade.pendingBirths,
+    brigade.historicalNames // 引退者の名前も永続記録（コンストラクタで自動保持）
   );
   return { brigade: next, removed: oldest };
 }
@@ -306,15 +315,18 @@ let joinsInWindow = 0;
 let retiresInWindow = 0;
 
 for (let year = 1; year <= 100; year++) {
-  // 1) 2年ごとに新人2名（18歳・ランダムジョブ）
-  const recruits: Unit[] =
-    year % 2 === 0
-      ? [makeRecruit(pick(JOB_LIST), 18, brigade.currentYear),
-         makeRecruit(pick(JOB_LIST), 18, brigade.currentYear)]
-      : [];
+  // 1) 2年ごとに新人2名（18歳・ランダムジョブ・命名重複回避）
+  let recruits: Unit[] = [];
+  if (year % 2 === 0) {
+    const local = new Set(brigade.historicalNames);
+    const r1 = makeRecruit(pick(JOB_LIST), 18, brigade.currentYear, local);
+    local.add(r1.name);
+    const r2 = makeRecruit(pick(JOB_LIST), 18, brigade.currentYear, local);
+    recruits = [r1, r2];
+  }
 
-  // 2) advance: 加齢 → 引退判定 → recruits 追加
-  const { brigade: advanced, events } = brigade.advance(recruits);
+  // 2) advance: 加齢 → 引退判定 → recruits 追加（子供の命名にも NameGen を使用）
+  const { brigade: advanced, events } = brigade.advance(recruits, { nameGenerator: nameGen });
   brigade = advanced;
   joinsInWindow   += events.filter((e) => e.type === "join").length;
   retiresInWindow += events.filter((e) => e.type === "retire").length;
