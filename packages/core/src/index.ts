@@ -1,5 +1,7 @@
 export { Unit } from "./models/Unit";
-export type { Stats, UnitProps, JobType, Gender, Parents } from "./models/Unit";
+export type { Stats, UnitProps, JobType, Gender, Parents, Origin } from "./models/Unit";
+export { NameGenerator, NAMES, ALL_ORIGINS, TITLES, pickRandomOrigin } from "./data/names";
+export type { NamePool, NameGenerationResult } from "./data/names";
 export { Brigade } from "./models/Brigade";
 export type {
   YearEvent,

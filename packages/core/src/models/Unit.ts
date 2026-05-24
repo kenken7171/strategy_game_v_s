@@ -17,6 +17,8 @@ export type JobType =
 
 export type Gender = "Male" | "Female";
 
+export type Origin = "Japanese" | "European" | "Classical";
+
 export interface Parents {
   readonly fatherId: string;
   readonly motherId: string;
@@ -48,6 +50,8 @@ export interface UnitProps {
   readonly affinity?: ReadonlyMap<string, number>;
   readonly parents?: Parents | null;
   readonly spouseId?: string | null;
+  // ── 命名システム（文化圏） ──
+  readonly origin?: Origin;
 }
 
 export class Unit {
@@ -76,6 +80,8 @@ export class Unit {
   readonly affinity: ReadonlyMap<string, number>;
   readonly parents: Parents | null;
   readonly spouseId: string | null;
+  // ── 命名システム（文化圏） ──
+  readonly origin: Origin;
 
   constructor(props: UnitProps) {
     this.id = props.id;
@@ -104,6 +110,9 @@ export class Unit {
     this.affinity = props.affinity ?? new Map();
     this.parents = props.parents ?? null;
     this.spouseId = props.spouseId ?? null;
+    // origin 未指定時のデフォルトは "European"（既存コード互換）。
+    // 新規生成箇所では NameGenerator と合わせて明示的に渡すこと。
+    this.origin = props.origin ?? "European";
   }
 
   /**

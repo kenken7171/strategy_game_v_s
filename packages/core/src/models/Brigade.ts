@@ -1,5 +1,6 @@
-import { Unit, Stats, JobType, Gender } from "./Unit";
+import { Unit, Stats, JobType, Gender, Origin } from "./Unit";
 import { Squad } from "./Squad";
+import { NameGenerator, ALL_ORIGINS } from "../data/names";
 
 // ─── 出生予約 ────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,8 @@ export interface BirthRegistry {
   readonly job: JobType | null;
   /** birthYear + 15。この年に達したら Unit を実体化する */
   readonly plannedJoinYear: number;
+  /** 親のいずれかから 50% 確率で継承される文化圏（子の名前選択に使う） */
+  readonly origin: Origin;
 }
 
 // ─── 年次イベント ─────────────────────────────────────────────────────────────
@@ -51,6 +54,12 @@ export interface AdvanceOptions {
   readonly childPeakEndAge?: number;
   /** 子の maxAge（既定 55） */
   readonly childMaxAge?: number;
+  /**
+   * 子供の命名に使う Generator。指定がない場合は機械的命名
+   * （`継承者child-<year>-<n>`）にフォールバックする（旧挙動）。
+   * historicalNames を参照して重複回避する。
+   */
+  readonly nameGenerator?: NameGenerator;
 }
 
 // ─── Brigade ──────────────────────────────────────────────────────────────────
@@ -59,18 +68,29 @@ export class Brigade {
   readonly units: ReadonlyArray<Unit>;
   readonly currentYear: number;
   readonly pendingBirths: ReadonlyArray<BirthRegistry>;
+  /**
+   * 過去に旅団に所属した全ユニット（新人・子供・引退者含む）の名前 Set。
+   * 命名重複回避のために永続記録される。
+   * コンストラクタで現 units の名前を自動登録、advance() で新規追加ユニットも追記する。
+   */
+  readonly historicalNames: ReadonlySet<string>;
   private _squads: Squad[];
 
   constructor(
     units: ReadonlyArray<Unit>,
     squads: Squad[] = [],
     currentYear = 1,
-    pendingBirths: ReadonlyArray<BirthRegistry> = []
+    pendingBirths: ReadonlyArray<BirthRegistry> = [],
+    historicalNames: ReadonlySet<string> = new Set()
   ) {
     this.units = units;
     this._squads = [...squads];
     this.currentYear = currentYear;
     this.pendingBirths = pendingBirths;
+    // 渡された名前 + 現 units の名前を全て登録（外部の Set を変更しない）
+    const history = new Set(historicalNames);
+    for (const u of units) history.add(u.name);
+    this.historicalNames = history;
   }
 
   get squads(): ReadonlyArray<Squad> {
@@ -129,7 +149,8 @@ export class Brigade {
       [...map.values()],
       [...this._squads],
       this.currentYear,
-      this.pendingBirths
+      this.pendingBirths,
+      this.historicalNames
     );
   }
 
@@ -231,6 +252,8 @@ export class Brigade {
         endurance:    Math.round((father.baseStats.endurance    + mother.baseStats.endurance)    / 2),
       };
       const job: JobType | null = rng() < 0.5 ? father.job : mother.job;
+      // 仕様: 子は両親のいずれかの文化圏を 50% で継承
+      const origin: Origin = rng() < 0.5 ? father.origin : mother.origin;
       const registry: BirthRegistry = {
         fatherId: father.id,
         motherId: mother.id,
@@ -238,6 +261,7 @@ export class Brigade {
         potentialStats,
         job,
         plannedJoinYear: newYear + 15,
+        origin,
       };
       newPending.push(registry);
       events.push({ type: "birth_planned", registry });
@@ -246,6 +270,10 @@ export class Brigade {
     // ── 5) 15歳入団 ──────────────────────────────────────────────────────────
     // baseStats = potentialStats を渡すことで、stats ゲッターが自動的に
     // growthFactor = 15 / peakStartAge を掛ける（仕様通り）
+    // 名前は NameGenerator を使い、historicalNames を見て重複回避する。
+    // 重複回避のため、生成順に「ローカル累積 Set」へ追加していく
+    // （this.historicalNames は readonly なので、その上に重ねた一時 Set を渡す）
+    const cumulative = new Set(this.historicalNames);
     const remainingPending: BirthRegistry[] = [];
     let childCounter = 0;
     for (const reg of newPending) {
@@ -255,9 +283,13 @@ export class Brigade {
       }
       const childId = `child-${newYear}-${childCounter++}`;
       const gender: Gender = rng() < 0.5 ? "Male" : "Female";
+      const childName = options.nameGenerator
+        ? options.nameGenerator.pick(reg.origin, gender, cumulative)
+        : `継承者${childId}`;
+      cumulative.add(childName);
       const child = new Unit({
         id: childId,
-        name: `継承者${childId}`,
+        name: childName,
         age: 15,
         birthYear: reg.birthYear,
         peakStartAge: childPeakStartAge,
@@ -265,6 +297,7 @@ export class Brigade {
         maxAge: childMaxAge,
         baseStats: reg.potentialStats,
         gender,
+        origin: reg.origin,
         job: reg.job,
         parents: { fatherId: reg.fatherId, motherId: reg.motherId },
       });
@@ -275,11 +308,12 @@ export class Brigade {
     // ── 6) recruits 追加 ────────────────────────────────────────────────────
     for (const r of recruits) {
       working.push(r);
+      cumulative.add(r.name);
       events.push({ type: "join", unit: r });
     }
 
     return {
-      brigade: new Brigade(working, [], newYear, remainingPending),
+      brigade: new Brigade(working, [], newYear, remainingPending, cumulative),
       events,
     };
   }
