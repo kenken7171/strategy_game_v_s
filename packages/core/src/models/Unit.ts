@@ -7,6 +7,13 @@ export interface Stats {
 
 export type JobType = "iron_wall_knight" | "tactician" | "medic" | "sniper";
 
+export type Gender = "Male" | "Female";
+
+export interface Parents {
+  readonly fatherId: string;
+  readonly motherId: string;
+}
+
 export interface UnitProps {
   readonly id: string;
   readonly name: string;
@@ -28,6 +35,11 @@ export interface UnitProps {
   readonly hl?: number;
   readonly speedBuff?: number;
   readonly attackBuff?: number;
+  // ── 血統継承システム ──
+  readonly gender?: Gender;
+  readonly affinity?: ReadonlyMap<string, number>;
+  readonly parents?: Parents | null;
+  readonly spouseId?: string | null;
 }
 
 export class Unit {
@@ -51,6 +63,11 @@ export class Unit {
   readonly hl: number;
   readonly speedBuff: number;
   readonly attackBuff: number;
+  // ── 血統継承システム ──
+  readonly gender: Gender;
+  readonly affinity: ReadonlyMap<string, number>;
+  readonly parents: Parents | null;
+  readonly spouseId: string | null;
 
   constructor(props: UnitProps) {
     this.id = props.id;
@@ -73,6 +90,12 @@ export class Unit {
     this.hl = props.hl ?? 0;
     this.speedBuff = props.speedBuff ?? 0;
     this.attackBuff = props.attackBuff ?? 0;
+    // 性別未指定時のデフォルトは "Male"。既存コード互換のため。
+    // 新規生成箇所では呼び出し側で乱数50:50を設定すること（unit_generation skill 参照）
+    this.gender = props.gender ?? "Male";
+    this.affinity = props.affinity ?? new Map();
+    this.parents = props.parents ?? null;
+    this.spouseId = props.spouseId ?? null;
   }
 
   /**
@@ -109,6 +132,10 @@ export class Unit {
     return this.hp > 0;
   }
 
+  get isMarried(): boolean {
+    return this.spouseId !== null;
+  }
+
   get finalSpeed(): number {
     return this.speed + this.speedBuff;
   }
@@ -123,6 +150,11 @@ export class Unit {
 
   get finalAttack(): number {
     return this.frontAttack + this.attackBuff;
+  }
+
+  /** 特定相手との好感度（未記録なら 0） */
+  getAffinity(otherId: string): number {
+    return this.affinity.get(otherId) ?? 0;
   }
 
   grow(): Unit {
@@ -147,5 +179,17 @@ export class Unit {
 
   resetBuffs(): Unit {
     return new Unit({ ...this, speedBuff: 0, attackBuff: 0 });
+  }
+
+  /** 指定相手との好感度を delta だけ増やした新インスタンスを返す */
+  withIncreasedAffinity(otherId: string, delta: number): Unit {
+    const next = new Map(this.affinity);
+    next.set(otherId, this.getAffinity(otherId) + delta);
+    return new Unit({ ...this, affinity: next });
+  }
+
+  /** 配偶者ID を設定した新インスタンスを返す */
+  withSpouse(spouseId: string): Unit {
+    return new Unit({ ...this, spouseId });
   }
 }

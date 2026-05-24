@@ -121,6 +121,12 @@ export interface SimulationResult {
   readonly statistics: BattleStatistics;
   readonly allySurvivors: ReadonlyArray<SurvivorRecord>;
   readonly enemySurvivors: ReadonlyArray<SurvivorRecord>;
+  /**
+   * このバトルで同じ Squad に同居していた ally ユニットの ID ペア。
+   * Brigade.advance({ battlePairs }) にそのまま渡せる形式。
+   * 各ペアは [a, b] の片方向のみ（[b, a] は重複しない）。
+   */
+  readonly squadmatePairs: ReadonlyArray<readonly [string, string]>;
 }
 
 // ─── BattleSimulator ─────────────────────────────────────────────────────────
@@ -314,6 +320,17 @@ export class BattleSimulator {
       .filter((r) => r.currentHp > 0)
       .map((r) => ({ name: r.name, job: r.job, hp: r.currentHp, maxHp: r.maxHp }));
 
+    // 同分隊ペア抽出（血統継承システム用）
+    const squadmatePairs: [string, string][] = [];
+    for (const sq of this.allies) {
+      const ids = sq.units.map((u) => u.id);
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          squadmatePairs.push([ids[i], ids[j]]);
+        }
+      }
+    }
+
     return {
       winner,
       turns: totalTurns,
@@ -325,6 +342,7 @@ export class BattleSimulator {
       },
       allySurvivors,
       enemySurvivors,
+      squadmatePairs,
     };
   }
 }

@@ -1,25 +1,76 @@
-import { Unit } from "./Unit";
+import { Unit, Stats, JobType, Gender } from "./Unit";
 import { Squad } from "./Squad";
 
-export interface YearEvent {
-  readonly type: "join" | "retire";
-  readonly unit: Unit;
+// ─── 出生予約 ────────────────────────────────────────────────────────────────
+
+export interface BirthRegistry {
+  readonly fatherId: string;
+  readonly motherId: string;
+  /** 子が予約された旅団暦（仕様: 「誕生した年の旅団暦」） */
+  readonly birthYear: number;
+  /** 両親の baseStats を平均した「全盛期予想値」 */
+  readonly potentialStats: Stats;
+  /** 親のいずれかから 50:50 で継承 */
+  readonly job: JobType | null;
+  /** birthYear + 15。この年に達したら Unit を実体化する */
+  readonly plannedJoinYear: number;
 }
+
+// ─── 年次イベント ─────────────────────────────────────────────────────────────
+
+export type YearEvent =
+  | { readonly type: "join"; readonly unit: Unit }
+  | { readonly type: "retire"; readonly unit: Unit }
+  | { readonly type: "marriage"; readonly husband: Unit; readonly wife: Unit }
+  | { readonly type: "birth_planned"; readonly registry: BirthRegistry }
+  | { readonly type: "birth"; readonly unit: Unit };
 
 export interface AdvanceResult {
   readonly brigade: Brigade;
   readonly events: ReadonlyArray<YearEvent>;
 }
 
+// ─── advance のオプション ─────────────────────────────────────────────────────
+
+export interface AdvanceOptions {
+  /** 直前のバトルで同一分隊だったユニットID組（双方向の重複は不要、片方向1組でよい） */
+  readonly battlePairs?: ReadonlyArray<readonly [string, string]>;
+  /** 確率判定に使う RNG（テスト・再現性のためDI） */
+  readonly rng?: () => number;
+  /** 結婚成立確率（条件成立ペアに対して）。デフォルト 0.3 */
+  readonly marriageProb?: number;
+  /** 出産予約確率（結婚済みカップル毎年）。デフォルト 0.2 */
+  readonly birthProb?: number;
+  /** バトル1回あたり同分隊ペアに加算される好感度。デフォルト 10 */
+  readonly affinityPerBattle?: number;
+  /** 結婚条件の好感度閾値。デフォルト 100 */
+  readonly affinityThreshold?: number;
+  /** 子の peakStartAge（既定 25）。仕様の `15 / peakStartAge` で使う */
+  readonly childPeakStartAge?: number;
+  /** 子の peakEndAge（既定 32） */
+  readonly childPeakEndAge?: number;
+  /** 子の maxAge（既定 55） */
+  readonly childMaxAge?: number;
+}
+
+// ─── Brigade ──────────────────────────────────────────────────────────────────
+
 export class Brigade {
   readonly units: ReadonlyArray<Unit>;
   readonly currentYear: number;
+  readonly pendingBirths: ReadonlyArray<BirthRegistry>;
   private _squads: Squad[];
 
-  constructor(units: ReadonlyArray<Unit>, squads: Squad[] = [], currentYear = 1) {
+  constructor(
+    units: ReadonlyArray<Unit>,
+    squads: Squad[] = [],
+    currentYear = 1,
+    pendingBirths: ReadonlyArray<BirthRegistry> = []
+  ) {
     this.units = units;
     this._squads = [...squads];
     this.currentYear = currentYear;
+    this.pendingBirths = pendingBirths;
   }
 
   get squads(): ReadonlyArray<Squad> {
@@ -57,24 +108,178 @@ export class Brigade {
       .slice(0, size);
   }
 
-  advance(recruits: ReadonlyArray<Unit> = []): AdvanceResult {
-    const events: YearEvent[] = [];
+  /**
+   * バトル後に同分隊だったペアの好感度を加算した新 Brigade を返す。
+   * 通常は advance() に battlePairs を渡せばまとめて処理される。
+   * 検証用に単独でも呼べるようにしてある。
+   */
+  applyBattleAffinity(
+    pairs: ReadonlyArray<readonly [string, string]>,
+    delta: number = 10
+  ): Brigade {
+    const map = new Map(this.units.map((u) => [u.id, u]));
+    for (const [aId, bId] of pairs) {
+      const a = map.get(aId);
+      const b = map.get(bId);
+      if (!a || !b) continue;
+      map.set(aId, a.withIncreasedAffinity(bId, delta));
+      map.set(bId, b.withIncreasedAffinity(aId, delta));
+    }
+    return new Brigade(
+      [...map.values()],
+      [...this._squads],
+      this.currentYear,
+      this.pendingBirths
+    );
+  }
 
-    const aged = this.units.map((u) => u.grow());
-    const active: Unit[] = [];
-    for (const u of aged) {
+  /**
+   * 1年進める。年次処理順序:
+   *   1) 好感度更新（直前バトルで同分隊だったペアに +delta）
+   *   2) 加齢 → 引退判定
+   *   3) 結婚判定（未婚男女・互いに閾値以上・確率で成立）
+   *   4) 出産予約判定（結婚カップル毎年・確率で予約）
+   *   5) 15歳入団（pendingBirths のうち plannedJoinYear = newYear のものを Unit 化）
+   *   6) recruits 追加
+   */
+  advance(
+    recruits: ReadonlyArray<Unit> = [],
+    options: AdvanceOptions = {}
+  ): AdvanceResult {
+    const rng              = options.rng              ?? Math.random;
+    const marriageProb     = options.marriageProb     ?? 0.3;
+    const birthProb        = options.birthProb        ?? 0.2;
+    const affinityPerBattle = options.affinityPerBattle ?? 10;
+    const affinityThreshold = options.affinityThreshold ?? 100;
+    const childPeakStartAge = options.childPeakStartAge ?? 25;
+    const childPeakEndAge   = options.childPeakEndAge   ?? 32;
+    const childMaxAge       = options.childMaxAge       ?? 55;
+    const battlePairs      = options.battlePairs      ?? [];
+
+    const events: YearEvent[] = [];
+    const newYear = this.currentYear + 1;
+
+    // ── 1) 好感度更新 ────────────────────────────────────────────────────────
+    const unitMap = new Map(this.units.map((u) => [u.id, u]));
+    for (const [aId, bId] of battlePairs) {
+      const a = unitMap.get(aId);
+      const b = unitMap.get(bId);
+      if (!a || !b) continue;
+      unitMap.set(aId, a.withIncreasedAffinity(bId, affinityPerBattle));
+      unitMap.set(bId, b.withIncreasedAffinity(aId, affinityPerBattle));
+    }
+
+    // ── 2) 加齢 → 引退判定 ──────────────────────────────────────────────────
+    let working: Unit[] = [...unitMap.values()].map((u) => u.grow());
+    const survivors: Unit[] = [];
+    for (const u of working) {
       if (u.isRetired) {
         events.push({ type: "retire", unit: u });
       } else {
-        active.push(u);
+        survivors.push(u);
       }
     }
+    working = survivors;
+
+    // ── 3) 結婚判定 ──────────────────────────────────────────────────────────
+    // 各人は1年で最大1ペアまで成立。idで添字を管理して、書き換える。
+    const idxOf = new Map<string, number>();
+    working.forEach((u, i) => idxOf.set(u.id, i));
+    const consumed = new Set<string>();
+    for (let i = 0; i < working.length; i++) {
+      const a = working[i];
+      if (consumed.has(a.id) || a.isMarried) continue;
+      for (let j = i + 1; j < working.length; j++) {
+        const b = working[j];
+        if (consumed.has(b.id) || b.isMarried) continue;
+        if (a.gender === b.gender) continue;
+        if (a.getAffinity(b.id) < affinityThreshold) continue;
+        if (b.getAffinity(a.id) < affinityThreshold) continue;
+        if (rng() >= marriageProb) continue;
+
+        const husband = a.gender === "Male" ? a : b;
+        const wife    = a.gender === "Female" ? a : b;
+        const newHusband = husband.withSpouse(wife.id);
+        const newWife    = wife.withSpouse(husband.id);
+        working[idxOf.get(husband.id)!] = newHusband;
+        working[idxOf.get(wife.id)!]    = newWife;
+        consumed.add(a.id);
+        consumed.add(b.id);
+        events.push({ type: "marriage", husband: newHusband, wife: newWife });
+        break;
+      }
+    }
+
+    // ── 4) 出産予約 ──────────────────────────────────────────────────────────
+    const newPending: BirthRegistry[] = [...this.pendingBirths];
+    const handledCouples = new Set<string>();
+    for (const u of working) {
+      if (!u.isMarried || !u.spouseId) continue;
+      const coupleKey = [u.id, u.spouseId].sort().join("|");
+      if (handledCouples.has(coupleKey)) continue;
+      handledCouples.add(coupleKey);
+      const spouse = working.find((x) => x.id === u.spouseId);
+      if (!spouse) continue;
+      if (rng() >= birthProb) continue;
+
+      const father = u.gender === "Male" ? u : spouse;
+      const mother = u.gender === "Female" ? u : spouse;
+      const potentialStats: Stats = {
+        strength:     Math.round((father.baseStats.strength     + mother.baseStats.strength)     / 2),
+        agility:      Math.round((father.baseStats.agility      + mother.baseStats.agility)      / 2),
+        intelligence: Math.round((father.baseStats.intelligence + mother.baseStats.intelligence) / 2),
+        endurance:    Math.round((father.baseStats.endurance    + mother.baseStats.endurance)    / 2),
+      };
+      const job: JobType | null = rng() < 0.5 ? father.job : mother.job;
+      const registry: BirthRegistry = {
+        fatherId: father.id,
+        motherId: mother.id,
+        birthYear: newYear,
+        potentialStats,
+        job,
+        plannedJoinYear: newYear + 15,
+      };
+      newPending.push(registry);
+      events.push({ type: "birth_planned", registry });
+    }
+
+    // ── 5) 15歳入団 ──────────────────────────────────────────────────────────
+    // baseStats = potentialStats を渡すことで、stats ゲッターが自動的に
+    // growthFactor = 15 / peakStartAge を掛ける（仕様通り）
+    const remainingPending: BirthRegistry[] = [];
+    let childCounter = 0;
+    for (const reg of newPending) {
+      if (reg.plannedJoinYear !== newYear) {
+        remainingPending.push(reg);
+        continue;
+      }
+      const childId = `child-${newYear}-${childCounter++}`;
+      const gender: Gender = rng() < 0.5 ? "Male" : "Female";
+      const child = new Unit({
+        id: childId,
+        name: `継承者${childId}`,
+        age: 15,
+        birthYear: reg.birthYear,
+        peakStartAge: childPeakStartAge,
+        peakEndAge: childPeakEndAge,
+        maxAge: childMaxAge,
+        baseStats: reg.potentialStats,
+        gender,
+        job: reg.job,
+        parents: { fatherId: reg.fatherId, motherId: reg.motherId },
+      });
+      working.push(child);
+      events.push({ type: "birth", unit: child });
+    }
+
+    // ── 6) recruits 追加 ────────────────────────────────────────────────────
     for (const r of recruits) {
+      working.push(r);
       events.push({ type: "join", unit: r });
     }
 
     return {
-      brigade: new Brigade([...active, ...recruits], [], this.currentYear + 1),
+      brigade: new Brigade(working, [], newYear, remainingPending),
       events,
     };
   }

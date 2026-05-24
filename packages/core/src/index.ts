@@ -1,7 +1,12 @@
 export { Unit } from "./models/Unit";
-export type { Stats, UnitProps, JobType } from "./models/Unit";
+export type { Stats, UnitProps, JobType, Gender, Parents } from "./models/Unit";
 export { Brigade } from "./models/Brigade";
-export type { YearEvent, AdvanceResult } from "./models/Brigade";
+export type {
+  YearEvent,
+  AdvanceResult,
+  AdvanceOptions,
+  BirthRegistry,
+} from "./models/Brigade";
 export { Squad } from "./models/Squad";
 export { Enemy } from "./models/Enemy";
 export type { EnemyAction } from "./models/Enemy";
