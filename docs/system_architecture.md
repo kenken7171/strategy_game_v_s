@@ -74,6 +74,100 @@ stats[key] = Math.max(1, Math.round(baseStats[key] * growthFactor))
 
 ---
 
+## 血統継承システム
+
+ユニットに性別・好感度・配偶者・親情報を持たせ、戦闘経験から結婚 → 出産予約 → 15年後に「継承者」が旅団に加入する世代交代モデル。
+
+### Unit 拡張フィールド
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `gender` | `'Male' \| 'Female'` | 性別。コンストラクタ未指定時のデフォルトは `'Male'`（既存コード互換）。新規生成箇所では呼び出し側で乱数 50:50 を渡すこと |
+| `affinity` | `ReadonlyMap<string, number>` | 他ユニットIDをキーとする好感度マップ。`getAffinity(otherId)` で取得（未記録は 0） |
+| `parents` | `{ fatherId, motherId } \| null` | 親の ID 記録（継承者にのみ設定される） |
+| `spouseId` | `string \| null` | 配偶者ID。`isMarried` ゲッターで未婚判定 |
+
+### Brigade.pendingBirths
+
+`BirthRegistry[]` を旅団に保持。これは「結婚カップルが子を授かったが、Unit インスタンスはまだ生成されていない」予約状態。
+
+```ts
+interface BirthRegistry {
+  fatherId: string;
+  motherId: string;
+  birthYear: number;          // 予約された年（旅団暦）
+  potentialStats: Stats;      // 父母の baseStats 平均（子の全盛期予想値）
+  job: JobType | null;        // 両親のいずれかから 50:50 で継承
+  plannedJoinYear: number;    // = birthYear + 15
+}
+```
+
+### advance() の年次処理順序
+
+```
+1) 好感度更新     — battlePairs に渡された ally 同分隊ペアに +affinityPerBattle
+2) 加齢 → 引退判定 — 全ユニット grow()、age >= maxAge を retire イベント
+3) 結婚判定        — 未婚男女・互いに >= affinityThreshold・marriageProb で成立
+                    各ユニットは1年で最大1組まで成立。spouseId を双方向に記録
+4) 出産予約        — 結婚済みカップル毎年 birthProb で BirthRegistry を作成
+                    pendingBirths に push（カップル単位、双方向重複を排除）
+5) 15歳入団        — pendingBirths のうち plannedJoinYear = newYear のものを Unit 化
+                    baseStats に potentialStats を入れ、age=15 とすることで
+                    stats ゲッターが自動的に growthFactor = 15/peakStartAge を適用
+6) recruits 追加  — 既存の入団ロジック（外部から渡されたユニット）
+```
+
+### 継承者ステータス計算
+
+子の baseStats（全盛期最大値）は両親の baseStats を整数平均:
+
+```
+potentialStats[k] = round((father.baseStats[k] + mother.baseStats[k]) / 2)
+```
+
+15歳入団時の実効ステータスは三段階モデルの修業期式そのもの:
+
+```
+stats[k] = max(1, round(potentialStats[k] * (15 / peakStartAge)))
+```
+
+例: peakStartAge=25 なら growthFactor = 0.6、potentialStats.strength=110 → stats.strength=66。
+
+### AdvanceOptions
+
+| オプション | 既定 | 用途 |
+|---|---|---|
+| `battlePairs` | `[]` | バトル直後に渡す `[allyId, allyId]` 配列。`BattleSimulator.run()` の `squadmatePairs` をそのまま渡せる |
+| `rng` | `Math.random` | DI された乱数生成器（再現性のため） |
+| `marriageProb` | `0.3` | 条件成立ペアの結婚成立確率 |
+| `birthProb` | `0.2` | 結婚済みカップル毎年の出産予約確率 |
+| `affinityPerBattle` | `10` | バトル1回で同分隊ペアに加算される好感度 |
+| `affinityThreshold` | `100` | 結婚条件の好感度閾値 |
+| `childPeakStartAge` | `25` | 子の全盛期開始年齢（実ステータス算出にも使用） |
+| `childPeakEndAge` | `32` | 子の全盛期終了年齢 |
+| `childMaxAge` | `55` | 子の引退年齢 |
+
+### YearEvent 拡張
+
+```ts
+type YearEvent =
+  | { type: 'join'; unit }
+  | { type: 'retire'; unit }
+  | { type: 'marriage'; husband; wife }
+  | { type: 'birth_planned'; registry }
+  | { type: 'birth'; unit };          // 15歳入団した継承者
+```
+
+### BattleSimulator 連携
+
+`SimulationResult.squadmatePairs: ReadonlyArray<[string, string]>` に、そのバトルで同一 Squad に同居していた ally ユニットの ID 組が片方向で格納される。これを `brigade.advance({ battlePairs: result.squadmatePairs })` または `brigade.applyBattleAffinity(result.squadmatePairs)` に渡すと好感度が更新される。
+
+### 検証スクリプト
+
+`scripts/verify-bloodline.ts` で「同分隊10戦 → 結婚 → 出産 → 15年後継承者加入」の一連流れを決定的シード + 確率100%設定で検証できる。
+
+---
+
 ## ファイル構成
 
 ```
@@ -94,7 +188,9 @@ apps/cli/src/
 
 scripts/
   run-sim.ts               ← 大隊間バトルCLI
+  run-grand-chronicle.ts   ← 100年旅団変遷シミュレーター
   age_progression_test.ts  ← 経年変化の動作確認
+  verify-bloodline.ts      ← 血統継承システムのE2E検証
 
 config/
   jobs.json           ← ジョブデフォルト値
