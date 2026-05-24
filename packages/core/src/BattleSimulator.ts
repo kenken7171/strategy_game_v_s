@@ -354,6 +354,10 @@ const JOB_JP: Record<string, string> = {
   tactician: "戦術官",
   medic: "衛生兵",
   sniper: "狙撃兵",
+  sorcerer: "呪術師",
+  standard_bearer: "旗手",
+  heavy_infantry: "重装歩兵",
+  scout: "斥候",
   unknown: "不明",
 };
 

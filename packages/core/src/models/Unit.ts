@@ -5,7 +5,15 @@ export interface Stats {
   readonly endurance: number;
 }
 
-export type JobType = "iron_wall_knight" | "tactician" | "medic" | "sniper";
+export type JobType =
+  | "iron_wall_knight"
+  | "tactician"
+  | "medic"
+  | "sniper"
+  | "sorcerer"
+  | "standard_bearer"
+  | "heavy_infantry"
+  | "scout";
 
 export type Gender = "Male" | "Female";
 

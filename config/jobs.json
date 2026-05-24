@@ -23,6 +23,30 @@
       "name": "狙撃兵",
       "description": "ターン開始1番手の時に2回攻撃する後衛特化型",
       "defaults": { "frontAttack": 20, "rearAttack": 90, "speed": 40, "maxHp": 80, "sdf": 0, "bdf": 0, "ab": 0, "hl": 0 }
+    },
+    {
+      "id": "sorcerer",
+      "name": "呪術師",
+      "description": "極めて高い攻撃力を持つがHPが非常に低い。守られることで真価を発揮する砲台",
+      "defaults": { "frontAttack": 10, "rearAttack": 120, "speed": 15, "maxHp": 40, "sdf": 0, "bdf": 0, "ab": 0, "hl": 0 }
+    },
+    {
+      "id": "standard_bearer",
+      "name": "旗手",
+      "description": "戦術官よりもAB（攻撃バフ）に特化し、大隊の火力を底上げする精神的支柱",
+      "defaults": { "frontAttack": 30, "rearAttack": 30, "speed": 20, "maxHp": 150, "sdf": 5, "bdf": 0, "ab": 40, "hl": 0 }
+    },
+    {
+      "id": "heavy_infantry",
+      "name": "重装歩兵",
+      "description": "騎士ほどの防御バフはないが、単体としてのHPと攻撃力が高く粘り強く戦う",
+      "defaults": { "frontAttack": 70, "rearAttack": 20, "speed": 15, "maxHp": 300, "sdf": 10, "bdf": 0, "ab": 0, "hl": 0 }
+    },
+    {
+      "id": "scout",
+      "name": "斥候",
+      "description": "全ジョブ最速。ダメージ効率は低いが、確実に先制して敵のHPを削る",
+      "defaults": { "frontAttack": 40, "rearAttack": 40, "speed": 60, "maxHp": 90, "sdf": 0, "bdf": 0, "ab": 0, "hl": 0 }
     }
   ]
 }
