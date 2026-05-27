@@ -6,6 +6,7 @@
  * プール内の未登場名を返す。プール枯渇時は称号を付与して新名を作る。
  */
 import type { Gender } from "../models/Unit";
+import { CHRONICLE_CONFIG } from "../config/ChronicleConfig";
 
 export type Origin = "Japanese" | "European" | "Classical";
 export const ALL_ORIGINS: ReadonlyArray<Origin> = ["Japanese", "European", "Classical"];
@@ -197,8 +198,9 @@ function validatePool(origin: Origin, gender: Gender, pool: ReadonlyArray<string
     const dupes = pool.filter((n, i) => pool.indexOf(n) !== i);
     throw new Error(`[names.ts] ${origin}/${gender} に内部重複あり: ${[...new Set(dupes)].join(", ")}`);
   }
-  if (pool.length < 150) {
-    throw new Error(`[names.ts] ${origin}/${gender} は ${pool.length}名（150未満）`);
+  const minSize = CHRONICLE_CONFIG.NAMING.POOL_MIN_SIZE;
+  if (pool.length < minSize) {
+    throw new Error(`[names.ts] ${origin}/${gender} は ${pool.length}名（${minSize}未満）`);
   }
 }
 for (const o of ALL_ORIGINS) {

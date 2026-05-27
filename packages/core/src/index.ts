@@ -30,3 +30,7 @@ export type {
   SimulationResult,
 } from "./BattleSimulator";
 export { MAX_UNITS_PER_SQUAD, MAX_ENEMY_ACTION_LOOP } from "./config";
+export { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
+export type { ChronicleConfigType } from "./config/ChronicleConfig";
+export { rollPeakAges, rollChildPeakAges } from "./utils/age";
+export type { PeakAges } from "./utils/age";

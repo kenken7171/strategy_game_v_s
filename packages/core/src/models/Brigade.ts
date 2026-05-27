@@ -1,6 +1,8 @@
 import { Unit, Stats, JobType, Gender, Origin } from "./Unit";
 import { Squad } from "./Squad";
 import { NameGenerator, ALL_ORIGINS } from "../data/names";
+import { CHRONICLE_CONFIG } from "../config/ChronicleConfig";
+import { rollChildPeakAges } from "../utils/age";
 
 // ─── 出生予約 ────────────────────────────────────────────────────────────────
 
@@ -13,10 +15,18 @@ export interface BirthRegistry {
   readonly potentialStats: Stats;
   /** 親のいずれかから 50:50 で継承 */
   readonly job: JobType | null;
-  /** birthYear + 15。この年に達したら Unit を実体化する */
+  /** birthYear + INDUCTION_AGE。この年に達したら Unit を実体化する */
   readonly plannedJoinYear: number;
-  /** 親のいずれかから 50% 確率で継承される文化圏（子の名前選択に使う） */
+  /** 親のいずれかから CULTURE_INHERIT_PROB の確率で継承される文化圏 */
   readonly origin: Origin;
+  /**
+   * 出産予約時にロールされた子の peakStartAge / peakEndAge。
+   * rollChildPeakAges で「両親平均±1」の遺伝性を持たせている。
+   * 15年後の入団時にこの値が使われるので、親が老いたり死んだりしても
+   * 出産時の親の能力ピークが子に反映される。
+   */
+  readonly childPeakStartAge: number;
+  readonly childPeakEndAge: number;
 }
 
 // ─── 年次イベント ─────────────────────────────────────────────────────────────
@@ -48,11 +58,11 @@ export interface AdvanceOptions {
   readonly affinityPerBattle?: number;
   /** 結婚条件の好感度閾値。デフォルト 100 */
   readonly affinityThreshold?: number;
-  /** 子の peakStartAge（既定 25）。仕様の `15 / peakStartAge` で使う */
-  readonly childPeakStartAge?: number;
-  /** 子の peakEndAge（既定 32） */
-  readonly childPeakEndAge?: number;
-  /** 子の maxAge（既定 55） */
+  /**
+   * 子の maxAge（既定 55）。
+   * 子の peakStart/EndAge は親から「両親平均±1」で自動継承されるため
+   * オプションで上書きできない（CHRONICLE_CONFIG.TIME と utils/age 参照）。
+   */
   readonly childMaxAge?: number;
   /**
    * 子供の命名に使う Generator。指定がない場合は機械的命名
@@ -167,15 +177,16 @@ export class Brigade {
     recruits: ReadonlyArray<Unit> = [],
     options: AdvanceOptions = {}
   ): AdvanceResult {
-    const rng              = options.rng              ?? Math.random;
-    const marriageProb     = options.marriageProb     ?? 0.3;
-    const birthProb        = options.birthProb        ?? 0.2;
-    const affinityPerBattle = options.affinityPerBattle ?? 10;
-    const affinityThreshold = options.affinityThreshold ?? 100;
-    const childPeakStartAge = options.childPeakStartAge ?? 25;
-    const childPeakEndAge   = options.childPeakEndAge   ?? 32;
+    const rng               = options.rng               ?? Math.random;
+    const marriageProb      = options.marriageProb      ?? CHRONICLE_CONFIG.LINEAGE.MARRIAGE_PROBABILITY;
+    const birthProb         = options.birthProb         ?? CHRONICLE_CONFIG.LINEAGE.BIRTH_PROBABILITY;
+    const affinityPerBattle = options.affinityPerBattle ?? CHRONICLE_CONFIG.LINEAGE.AFFINITY_PER_BATTLE;
+    const affinityThreshold = options.affinityThreshold ?? CHRONICLE_CONFIG.LINEAGE.MARRIAGE_THRESHOLD;
+    // childMaxAge は CHRONICLE_CONFIG に直接対応がないため独自既定値
     const childMaxAge       = options.childMaxAge       ?? 55;
-    const battlePairs      = options.battlePairs      ?? [];
+    const cultureInheritProb = CHRONICLE_CONFIG.LINEAGE.CULTURE_INHERIT_PROB;
+    const inductionAge      = CHRONICLE_CONFIG.TIME.INDUCTION_AGE;
+    const battlePairs       = options.battlePairs      ?? [];
 
     const events: YearEvent[] = [];
     const newYear = this.currentYear + 1;
@@ -252,16 +263,24 @@ export class Brigade {
         endurance:    Math.round((father.baseStats.endurance    + mother.baseStats.endurance)    / 2),
       };
       const job: JobType | null = rng() < 0.5 ? father.job : mother.job;
-      // 仕様: 子は両親のいずれかの文化圏を 50% で継承
-      const origin: Origin = rng() < 0.5 ? father.origin : mother.origin;
+      // 仕様: 子は両親のいずれかの文化圏を CULTURE_INHERIT_PROB で継承
+      const origin: Origin = rng() < cultureInheritProb ? father.origin : mother.origin;
+      // 子の peakStart/End は「両親の平均±1」でロール（成長タイプの遺伝性）
+      const childAges = rollChildPeakAges(
+        father.peakStartAge, father.peakEndAge,
+        mother.peakStartAge, mother.peakEndAge,
+        rng
+      );
       const registry: BirthRegistry = {
         fatherId: father.id,
         motherId: mother.id,
         birthYear: newYear,
         potentialStats,
         job,
-        plannedJoinYear: newYear + 15,
+        plannedJoinYear: newYear + inductionAge,
         origin,
+        childPeakStartAge: childAges.peakStartAge,
+        childPeakEndAge:   childAges.peakEndAge,
       };
       newPending.push(registry);
       events.push({ type: "birth_planned", registry });
@@ -290,10 +309,11 @@ export class Brigade {
       const child = new Unit({
         id: childId,
         name: childName,
-        age: 15,
+        age: inductionAge,
         birthYear: reg.birthYear,
-        peakStartAge: childPeakStartAge,
-        peakEndAge: childPeakEndAge,
+        // 出産予約時にロール済みの「両親平均±1」を使う（遺伝性）
+        peakStartAge: reg.childPeakStartAge,
+        peakEndAge:   reg.childPeakEndAge,
         maxAge: childMaxAge,
         baseStats: reg.potentialStats,
         gender,

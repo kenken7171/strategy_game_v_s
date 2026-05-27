@@ -1,6 +1,7 @@
 import { BattleManager, IntegratedTurnResult } from "./BattleManager";
 import { Enemy, EnemyAction } from "./models/Enemy";
 import { Squad } from "./models/Squad";
+import { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
 
 // ─── DynamicEnemy ─────────────────────────────────────────────────────────────
 // Wraps an enemy-brigade's Squad[] as a single Enemy object so BattleManager
@@ -155,7 +156,7 @@ export class BattleSimulator {
     this.allies = allies;
     this.dynamicEnemy = new DynamicEnemy(enemies);
     this.manager = new BattleManager(allies, this.dynamicEnemy, options.rng ?? Math.random);
-    this.maxTurns = options.maxTurns ?? 30;
+    this.maxTurns = options.maxTurns ?? CHRONICLE_CONFIG.BATTLE.MAX_TURNS;
     this.verbose = options.verbose ?? true;
 
     for (const sq of allies) {

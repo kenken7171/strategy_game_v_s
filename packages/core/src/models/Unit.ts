@@ -1,3 +1,5 @@
+import { CHRONICLE_CONFIG } from "../config/ChronicleConfig";
+
 export interface Stats {
   readonly strength: number;
   readonly agility: number;
@@ -128,16 +130,17 @@ export class Unit {
       return this.age / this.peakStartAge;
     }
     const yearsDeclined = this.age - this.peakEndAge;
-    return Math.pow(1 - 0.03, yearsDeclined);
+    return Math.pow(1 - CHRONICLE_CONFIG.TIME.DECAY_RATE, yearsDeclined);
   }
 
   get stats(): Stats {
     const f = this.growthFactor;
+    const min = CHRONICLE_CONFIG.TIME.MIN_STAT_VALUE;
     return {
-      strength:     Math.max(1, Math.round(this.baseStats.strength     * f)),
-      agility:      Math.max(1, Math.round(this.baseStats.agility      * f)),
-      intelligence: Math.max(1, Math.round(this.baseStats.intelligence * f)),
-      endurance:    Math.max(1, Math.round(this.baseStats.endurance    * f)),
+      strength:     Math.max(min, Math.round(this.baseStats.strength     * f)),
+      agility:      Math.max(min, Math.round(this.baseStats.agility      * f)),
+      intelligence: Math.max(min, Math.round(this.baseStats.intelligence * f)),
+      endurance:    Math.max(min, Math.round(this.baseStats.endurance    * f)),
     };
   }
 
