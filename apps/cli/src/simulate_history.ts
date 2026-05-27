@@ -1,4 +1,7 @@
-import { Unit, Brigade, NameGenerator, pickRandomOrigin } from "../../../packages/core/src/index";
+import {
+  Unit, Brigade, NameGenerator, pickRandomOrigin,
+  CHRONICLE_CONFIG, rollPeakAges,
+} from "../../../packages/core/src/index";
 import type { Gender } from "../../../packages/core/src/index";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -22,15 +25,15 @@ const nameGen = new NameGenerator(rand);
 let unitCounter = 0;
 
 function makeRecruit(historical: ReadonlySet<string>): Unit {
-  const joinAge      = ri(14, 18);
-  const peakStartAge = joinAge + ri(8, 15);
-  const peakEndAge   = peakStartAge + ri(3, 8);
-  const maxAge       = peakEndAge + ri(15, 25);
-  const id           = `u${String(unitCounter).padStart(3, "0")}`;
+  const joinAge        = ri(14, 18);
+  // peakStart/End は CHRONICLE_CONFIG.TIME を基準に ±3 でロール（個体差）
+  const { peakStartAge, peakEndAge } = rollPeakAges(rand);
+  const maxAge         = peakEndAge + ri(15, 25);
+  const id             = `u${String(unitCounter).padStart(3, "0")}`;
   unitCounter++;
   const gender: Gender = rand() < 0.5 ? "Male" : "Female";
-  const origin       = pickRandomOrigin(rand);
-  const name         = nameGen.pick(origin, gender, historical);
+  const origin         = pickRandomOrigin(rand);
+  const name           = nameGen.pick(origin, gender, historical);
   return new Unit({
     id,
     name,
@@ -121,7 +124,7 @@ const startingUnits: Unit[] = [];
 
 let brigade = new Brigade(startingUnits);
 const yearRecords: YearRecord[] = [];
-const TOTAL_YEARS = 100;
+const TOTAL_YEARS = CHRONICLE_CONFIG.SCHEDULE.CHRONICLE_YEARS;
 
 // ---- 100年シミュレーション ----
 

@@ -13,6 +13,7 @@
 import { Unit } from "../packages/core/src/models/Unit";
 import { Squad } from "../packages/core/src/models/Squad";
 import { BattleSimulator, printBattleReport } from "../packages/core/src/BattleSimulator";
+import { CHRONICLE_CONFIG } from "../packages/core/src/config/ChronicleConfig";
 
 // ─── CLI 引数パース ───────────────────────────────────────────────────────────
 
@@ -24,7 +25,10 @@ function argValue(flag: string): string | undefined {
 }
 
 const SEED     = parseInt(argValue("--seed")  ?? "42",  10);
-const MAX_TURN = parseInt(argValue("--turns") ?? "30",  10);
+const MAX_TURN = parseInt(
+  argValue("--turns") ?? String(CHRONICLE_CONFIG.BATTLE.MAX_TURNS),
+  10
+);
 const QUIET    = args.includes("--quiet");
 const PRESET_A = argValue("--preset") ?? "balanced";
 const PRESET_B = (() => {

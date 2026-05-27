@@ -21,6 +21,8 @@ import { Squad } from "../packages/core/src/models/Squad";
 import { BattleSimulator } from "../packages/core/src/BattleSimulator";
 import type { SimulationResult } from "../packages/core/src/BattleSimulator";
 import { NameGenerator, pickRandomOrigin } from "../packages/core/src/data/names";
+import { CHRONICLE_CONFIG } from "../packages/core/src/config/ChronicleConfig";
+import { rollPeakAges } from "../packages/core/src/utils/age";
 
 // ─── CLI 引数 ────────────────────────────────────────────────────────────────
 
@@ -89,8 +91,8 @@ function makeRecruit(
   currentYear: number,
   historical: ReadonlySet<string>
 ): Unit {
-  const peakStartAge = age + ri(6, 12);                      // 24〜30 程度
-  const peakEndAge   = peakStartAge + ri(3, 7);
+  // peakStart/End は CHRONICLE_CONFIG.TIME 基準で ±3 ロール（個体差）
+  const { peakStartAge, peakEndAge } = rollPeakAges(rand);
   const maxAge       = peakEndAge + ri(15, 25);
   const id           = `u${String(_uid++).padStart(3, "0")}`;
   const gender: Gender = rand() < 0.5 ? "Male" : "Female";
@@ -246,12 +248,12 @@ function runTrialBattle(
   retiresInWindow: number,
   rng: () => number
 ): BattleSummary {
-  const picks = brigade.selectBattalion(9);
+  const picks = brigade.selectBattalion(CHRONICLE_CONFIG.SCHEDULE.BATTALION_SIZE);
   const { squads, averageAge, peakCount } = formBattalion(picks);
   const enemy = makeTrialEnemy();
 
   const sim = new BattleSimulator(squads, enemy, {
-    maxTurns: 30,
+    maxTurns: CHRONICLE_CONFIG.BATTLE.MAX_TURNS,
     rng,
     verbose: false,
   });
@@ -314,15 +316,21 @@ const summaries: BattleSummary[] = [];
 let joinsInWindow = 0;
 let retiresInWindow = 0;
 
-for (let year = 1; year <= 100; year++) {
-  // 1) 2年ごとに新人2名（18歳・ランダムジョブ・命名重複回避）
+const TOTAL_YEARS      = CHRONICLE_CONFIG.SCHEDULE.CHRONICLE_YEARS;
+const RECRUIT_INTERVAL = CHRONICLE_CONFIG.SCHEDULE.RECRUIT_INTERVAL;
+const RECRUIT_COUNT    = CHRONICLE_CONFIG.SCHEDULE.RECRUIT_COUNT;
+const BATTLE_INTERVAL  = CHRONICLE_CONFIG.SCHEDULE.BATTLE_INTERVAL;
+
+for (let year = 1; year <= TOTAL_YEARS; year++) {
+  // 1) RECRUIT_INTERVAL 年ごとに RECRUIT_COUNT 名（18歳・ランダムジョブ）
   let recruits: Unit[] = [];
-  if (year % 2 === 0) {
+  if (year % RECRUIT_INTERVAL === 0) {
     const local = new Set(brigade.historicalNames);
-    const r1 = makeRecruit(pick(JOB_LIST), 18, brigade.currentYear, local);
-    local.add(r1.name);
-    const r2 = makeRecruit(pick(JOB_LIST), 18, brigade.currentYear, local);
-    recruits = [r1, r2];
+    for (let i = 0; i < RECRUIT_COUNT; i++) {
+      const r = makeRecruit(pick(JOB_LIST), 18, brigade.currentYear, local);
+      local.add(r.name);
+      recruits.push(r);
+    }
   }
 
   // 2) advance: 加齢 → 引退判定 → recruits 追加（子供の命名にも NameGen を使用）
@@ -336,8 +344,8 @@ for (let year = 1; year <= 100; year++) {
   brigade = pruned;
   if (removed) retiresInWindow++;
 
-  // 4) 5年ごとに試練戦
-  if (year % 5 === 0) {
+  // 4) BATTLE_INTERVAL 年ごとに試練戦
+  if (year % BATTLE_INTERVAL === 0) {
     const summary = runTrialBattle(brigade, year, joinsInWindow, retiresInWindow, battleRng);
     summaries.push(summary);
     printBattleSummary(summary);
