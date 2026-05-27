@@ -6,6 +6,56 @@ Chronicle Knights はターン制ストラテジーゲームのコアロジッ�
 
 ---
 
+## 統合 Config（CHRONICLE_CONFIG）
+
+すべてのチューニングパラメータは `packages/core/src/config/ChronicleConfig.ts` の `CHRONICLE_CONFIG`（`as const` Readonly オブジェクト）に集約されている。**各モジュールは数値をハードコードせず、必ず参照すること**（[chronicle_config skill](../.claude/skills/chronicle_config.md) で禁止ルール明示）。
+
+### セクション
+
+| Section | 主要キー | 意図 |
+|---|---|---|
+| `TIME` | `BASE_PEAK_START_AGE` (24), `BASE_PEAK_END_AGE` (28), `INDUCTION_AGE` (15), `DECAY_RATE` (0.03), `MIN_STAT_VALUE` (1) | 経年変化モデルの根本パラメータ |
+| `SCHEDULE` | `CHRONICLE_YEARS` (100), `RECRUIT_INTERVAL` (2), `RECRUIT_COUNT` (2), `BATTLE_INTERVAL` (5), `INITIAL_MEMBER_COUNT` (5), `BATTALION_SIZE` (9) | 旅団運営とイベント周期 |
+| `LINEAGE` | `AFFINITY_PER_BATTLE` (10), `MARRIAGE_THRESHOLD` (100), `MARRIAGE_PROBABILITY` (0.3), `BIRTH_PROBABILITY` (0.2), `CULTURE_INHERIT_PROB` (0.5) | 好感度・結婚・血統 |
+| `BATTLE` | `MAX_TURNS` (30), `SQUAD_SIZE` (3), `FRONT_ROW_COUNT` (3) | バトルロジック係数 |
+| `NAMING` | `POOL_MIN_SIZE` (150) | 各名前プールの最低保証件数 |
+
+### バランス調整方針
+
+仕様変更時は **本ファイル1箇所の編集で完結する**ことを目標とする。例:
+- 「100年→200年に拡張」→ `SCHEDULE.CHRONICLE_YEARS = 200` だけ変更
+- 「衰退を緩やかに（5%→3%）」→ `TIME.DECAY_RATE = 0.05` だけ変更
+- 「大隊を12名に」→ `SCHEDULE.BATTALION_SIZE = 12` だけ変更
+
+---
+
+## 個体差システム（peakStartAge / peakEndAge のランダム化）
+
+`packages/core/src/utils/age.ts` の `rollPeakAges` / `rollChildPeakAges` ヘルパーで決定する。Unit のコンストラクタは純粋（RNG 非依存）に保つため、個体差の決定は呼び出し側が行う方針。
+
+### 新人（rollPeakAges）
+
+- `peakStartAge = BASE_PEAK_START_AGE + offset(-3..+3)` → **21〜27** の範囲
+- `peakEndAge = BASE_PEAK_END_AGE + offset(-3..+3)` → **25〜31** の範囲
+- start/end は独立ロール後に `start < end` ガード（違反時は `start = end - 1` に補正）
+
+### 子供（rollChildPeakAges）
+
+- `peakStartAge = round(avg(father.peakStartAge, mother.peakStartAge) + offset(-1..+1))`
+- `peakEndAge = round(avg(father.peakEndAge, mother.peakEndAge) + offset(-1..+1))`
+- 「両親平均±1」の狭めレンジで成長タイプの遺伝性を表現
+- `BirthRegistry.childPeakStartAge` / `childPeakEndAge` に出産予約時点でロール・記録され、15年後の入団時にそのまま使われる（親が老いても／死んでも出産時の能力ピークが子に反映される）
+
+### 効果
+
+- 100名生成時に peakStartAge は 21〜27 の **7値すべて**が出現
+- 入団(15歳)から全盛期入りまでの年数が **6〜12年**でバラつく
+- 標準型(24/28) × 晩成型(30/34) の親 → 子は確実に 26〜28 / 30〜32 範囲（平均27/31 ±1）
+
+検証: `bun scripts/verify-individuality.ts`
+
+---
+
 ## Battle Logic
 
 ### 構成要素
@@ -242,9 +292,16 @@ scripts/
   age_progression_test.ts  ← 経年変化の動作確認
   verify-bloodline.ts      ← 血統継承システムのE2E検証
   verify-naming.ts         ← 命名重複回避システムのE2E検証
+  verify-individuality.ts  ← peak年齢の個体差・遺伝性 E2E検証
+
+packages/core/src/config/
+  ChronicleConfig.ts       ← 統合Config（全チューニングパラメータの単一SoT）
 
 packages/core/src/data/
   names.ts                 ← 多文化名前データ(910名) + NameGenerator
+
+packages/core/src/utils/
+  age.ts                   ← rollPeakAges / rollChildPeakAges
 
 config/
   jobs.json           ← ジョブデフォルト値
