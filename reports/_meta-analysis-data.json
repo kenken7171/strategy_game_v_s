@@ -1,0 +1,2290 @@
+{
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "summary": {
+    "avgWinRate": 0.79,
+    "avgFinalPop": 13.9,
+    "avgMaxPop": 13.9,
+    "avgMinPop": 5,
+    "avgMarriages": 0,
+    "avgPlannedBirths": 0,
+    "avgActualBirths": 0,
+    "avgTitled": 0,
+    "avgDescendantRatio": 0,
+    "avgStrengthY100": 88.33336996336996,
+    "totalDraws": 1,
+    "brigadeDeaths": 0
+  },
+  "results": [
+    {
+      "seed": 1,
+      "wins": 14,
+      "losses": 6,
+      "draws": 0,
+      "bestVictoryYear": 5,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 86.21428571428571,
+      "originDistY100": {
+        "Japanese": 4,
+        "European": 5,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 22.444444444444443,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 898
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 22.77777777777778,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.22222222222222,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1026
+        },
+        {
+          "year": 40,
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 25.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1165
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.88888888888889,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25.11111111111111,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.22222222222222,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.88888888888889,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 26.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 961
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.22222222222222,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 85,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 23.666666666666668,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 699
+        },
+        {
+          "year": 90,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 24.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1104
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.22222222222222,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.333333333333332,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 2,
+      "wins": 17,
+      "losses": 3,
+      "draws": 0,
+      "bestVictoryYear": 5,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 93.07142857142857,
+      "originDistY100": {
+        "Japanese": 6,
+        "European": 4,
+        "Classical": 4
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 22.22222222222222,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 23.22222222222222,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 8,
+          "avgAge": 23.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.444444444444443,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.666666666666668,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 772
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 23.88888888888889,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 9,
+          "avgAge": 23.77777777777778,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Loss",
+          "turns": 10,
+          "avgAge": 25.22222222222222,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 953
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 24,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 10,
+          "avgAge": 24.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Loss",
+          "turns": 7,
+          "avgAge": 24.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1014
+        },
+        {
+          "year": 85,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 23.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 3,
+      "wins": 15,
+      "losses": 5,
+      "draws": 0,
+      "bestVictoryYear": 55,
+      "bestVictoryTurns": 2,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 81.42857142857143,
+      "originDistY100": {
+        "Japanese": 7,
+        "European": 2,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Loss",
+          "turns": 7,
+          "avgAge": 24.444444444444443,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 791
+        },
+        {
+          "year": 15,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 24.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1053
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 19,
+          "avgAge": 24.444444444444443,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.11111111111111,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 24.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1279
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 24,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 23.88888888888889,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 25.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Loss",
+          "turns": 9,
+          "avgAge": 25.333333333333332,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1148
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 12,
+          "avgAge": 24.88888888888889,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 24.88888888888889,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 85,
+          "result": "Loss",
+          "turns": 28,
+          "avgAge": 25.22222222222222,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1486
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 25.11111111111111,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.22222222222222,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 26.444444444444443,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 4,
+      "wins": 17,
+      "losses": 2,
+      "draws": 1,
+      "bestVictoryYear": 60,
+      "bestVictoryTurns": 2,
+      "finalPopulation": 15,
+      "maxPopulation": 15,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 95.86666666666666,
+      "originDistY100": {
+        "Japanese": 4,
+        "European": 5,
+        "Classical": 6
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 22.88888888888889,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 23.666666666666668,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 23.77777777777778,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 10,
+          "avgAge": 24.77777777777778,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 26.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.555555555555557,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.666666666666668,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 26.333333333333332,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 25.11111111111111,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25.22222222222222,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.555555555555557,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.77777777777778,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.77777777777778,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1084
+        },
+        {
+          "year": 85,
+          "result": "Draw",
+          "turns": 30,
+          "avgAge": 26.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1495
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 10,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Loss",
+          "turns": 11,
+          "avgAge": 23.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 708
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.555555555555557,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 5,
+      "wins": 17,
+      "losses": 3,
+      "draws": 0,
+      "bestVictoryYear": 5,
+      "bestVictoryTurns": 2,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 88.35714285714286,
+      "originDistY100": {
+        "Japanese": 3,
+        "European": 6,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 22.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 24.666666666666668,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.22222222222222,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 26.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24,
+          "peakCount": 0,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.22222222222222,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.444444444444443,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 24.555555555555557,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 693
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 11,
+          "avgAge": 26.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 9,
+          "avgAge": 25.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 23.88888888888889,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.555555555555557,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1177
+        },
+        {
+          "year": 85,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 25,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 835
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 9,
+          "avgAge": 24.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 15,
+          "avgAge": 26,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 6,
+      "wins": 13,
+      "losses": 7,
+      "draws": 0,
+      "bestVictoryYear": 5,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 13,
+      "maxPopulation": 13,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 80.92307692307692,
+      "originDistY100": {
+        "Japanese": 2,
+        "European": 6,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.22222222222222,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.444444444444443,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.555555555555557,
+          "peakCount": 8,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 8,
+          "avgAge": 25.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 23.77777777777778,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 25.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 948
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.444444444444443,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.333333333333332,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Loss",
+          "turns": 16,
+          "avgAge": 23.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "medic",
+          "totalAllyDamage": 980
+        },
+        {
+          "year": 65,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 23.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 678
+        },
+        {
+          "year": 70,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1055
+        },
+        {
+          "year": 75,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 24.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1172
+        },
+        {
+          "year": 80,
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 24.22222222222222,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1082
+        },
+        {
+          "year": 85,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1042
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.22222222222222,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "wins": 15,
+      "losses": 5,
+      "draws": 0,
+      "bestVictoryYear": 80,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 95.14285714285714,
+      "originDistY100": {
+        "Japanese": 6,
+        "European": 5,
+        "Classical": 3
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 22.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 22.88888888888889,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 26.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 26,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 709
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 9,
+          "avgAge": 24.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Loss",
+          "turns": 9,
+          "avgAge": 23.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1083
+        },
+        {
+          "year": 45,
+          "result": "Loss",
+          "turns": 10,
+          "avgAge": 25,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1078
+        },
+        {
+          "year": 50,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 26,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 921
+        },
+        {
+          "year": 55,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.22222222222222,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 528
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 14,
+          "avgAge": 22.88888888888889,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 26.555555555555557,
+          "peakCount": 8,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 26,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 26,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 85,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 24.11111111111111,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 25.555555555555557,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 16,
+          "avgAge": 24.555555555555557,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 23.11111111111111,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 8,
+      "wins": 19,
+      "losses": 1,
+      "draws": 0,
+      "bestVictoryYear": 55,
+      "bestVictoryTurns": 2,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 85.28571428571429,
+      "originDistY100": {
+        "Japanese": 5,
+        "European": 4,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 12,
+          "avgAge": 25.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.444444444444443,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.333333333333332,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.555555555555557,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 23.88888888888889,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.333333333333332,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.88888888888889,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.88888888888889,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 85,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 25.666666666666668,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 2,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 26.333333333333332,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 24.666666666666668,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1253
+        }
+      ]
+    },
+    {
+      "seed": 9,
+      "wins": 15,
+      "losses": 5,
+      "draws": 0,
+      "bestVictoryYear": 5,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 13,
+      "maxPopulation": 13,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 84.61538461538461,
+      "originDistY100": {
+        "Japanese": 4,
+        "European": 4,
+        "Classical": 5
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 22.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.666666666666668,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 11,
+          "avgAge": 24.11111111111111,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 8,
+          "avgAge": 24.444444444444443,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 678
+        },
+        {
+          "year": 30,
+          "result": "Loss",
+          "turns": 7,
+          "avgAge": 24,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1235
+        },
+        {
+          "year": 35,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 24.11111111111111,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "tactician",
+          "totalAllyDamage": 1242
+        },
+        {
+          "year": 40,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 23.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 579
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 23.666666666666668,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 9,
+          "avgAge": 24,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.22222222222222,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 396
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 23.333333333333332,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 8,
+          "avgAge": 25,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.88888888888889,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 24.11111111111111,
+          "peakCount": 8,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 80,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.333333333333332,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 85,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.555555555555557,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.11111111111111,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 23.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        }
+      ]
+    },
+    {
+      "seed": 10,
+      "wins": 16,
+      "losses": 4,
+      "draws": 0,
+      "bestVictoryYear": 15,
+      "bestVictoryTurns": 3,
+      "finalPopulation": 14,
+      "maxPopulation": 14,
+      "minPopulation": 5,
+      "totalMarriages": 0,
+      "totalPlannedBirths": 0,
+      "totalActualBirths": 0,
+      "titledNamesCount": 0,
+      "totalUnitsCreated": 105,
+      "descendantsAtY100": 0,
+      "descendantRatioY100": 0,
+      "avgStrengthY100": 92.42857142857143,
+      "originDistY100": {
+        "Japanese": 3,
+        "European": 4,
+        "Classical": 7
+      },
+      "battles": [
+        {
+          "year": 5,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 22.77777777777778,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "iron_wall_knight",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 10,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 22.666666666666668,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 15,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 25.444444444444443,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 20,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.88888888888889,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 25,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.333333333333332,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 30,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25.555555555555557,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 35,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.22222222222222,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 607
+        },
+        {
+          "year": 40,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.22222222222222,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "scout",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 45,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.333333333333332,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 50,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.555555555555557,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 55,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25,
+          "peakCount": 4,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 60,
+          "result": "Win",
+          "turns": 5,
+          "avgAge": 24.444444444444443,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 65,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 25.666666666666668,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "standard_bearer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 70,
+          "result": "Win",
+          "turns": 4,
+          "avgAge": 24.22222222222222,
+          "peakCount": 1,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 75,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.666666666666668,
+          "peakCount": 7,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1194
+        },
+        {
+          "year": 80,
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 25.555555555555557,
+          "peakCount": 2,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 756
+        },
+        {
+          "year": 85,
+          "result": "Win",
+          "turns": 6,
+          "avgAge": 25.444444444444443,
+          "peakCount": 6,
+          "battalionSize": 9,
+          "mvpJob": "heavy_infantry",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 90,
+          "result": "Win",
+          "turns": 3,
+          "avgAge": 24.88888888888889,
+          "peakCount": 5,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 95,
+          "result": "Win",
+          "turns": 7,
+          "avgAge": 23.666666666666668,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sorcerer",
+          "totalAllyDamage": 1500
+        },
+        {
+          "year": 100,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.555555555555557,
+          "peakCount": 3,
+          "battalionSize": 9,
+          "mvpJob": "sniper",
+          "totalAllyDamage": 1180
+        }
+      ]
+    }
+  ]
+}
