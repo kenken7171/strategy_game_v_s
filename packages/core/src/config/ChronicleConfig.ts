@@ -76,6 +76,22 @@ export const CHRONICLE_CONFIG = {
      */
     MAX_BRIGADE_SIZE: 10000,
   },
+
+  // 7. 敵スケーリング (Enemy Scaling)
+  ENEMY_SCALING: {
+    /** 試練の敵の基準HP（1体あたり） */
+    BASE_HP: 150,
+    /** 基準攻撃力 */
+    BASE_ATTACK: 30,
+    /** 基準スピード */
+    BASE_SPEED: 20,
+    /** 1年ごとのHP上昇量（デフォルトは無効化＝0） */
+    HP_GAIN_PER_YEAR: 0,
+    /** 1年ごとの攻撃力上昇量（デフォルトは無効化＝0） */
+    ATTACK_GAIN_PER_YEAR: 0,
+    /** 1年ごとのスピード上昇量（デフォルトは無効化＝0） */
+    SPEED_GAIN_PER_YEAR: 0,
+  },
 } as const;
 
 // ─── 型ヘルパー ──────────────────────────────────────────────────────────────

@@ -61,4 +61,17 @@ export const CHRONICLE_CONFIG_EXTREME = {
     /** 旅団全体の最大定員50名。超過時は自動リストラ */
     MAX_BRIGADE_SIZE: 50,
   },
+  /**
+   * 試練の敵の年代スケーリング。
+   * 計算式: stat = BASE_xxx + (year * xxx_GAIN_PER_YEAR)
+   * 例: Y100 では HP=150+500=650, ATK=30+60=90, SPD=100+150=250
+   */
+  ENEMY_SCALING: {
+    BASE_HP: 150,
+    BASE_ATTACK: 30,
+    BASE_SPEED: 100,            // 敵の初期スピード（味方の最速 scout=60 を既に超える）
+    HP_GAIN_PER_YEAR: 5,        // 100年で +500 → HP650
+    ATTACK_GAIN_PER_YEAR: 0.6,  // 100年で +60 → ATK90
+    SPEED_GAIN_PER_YEAR: 1.5,   // 100年で +150 → SPD250（味方の手数を奪う）
+  },
 } as const satisfies ChronicleConfigType;

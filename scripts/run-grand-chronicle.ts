@@ -207,10 +207,24 @@ function formBattalion(picks: ReadonlyArray<Unit>): {
 
 // ─── 強敵生成（攻撃力30 / ヒット数10） ────────────────────────────────────────
 
-function makeTrialEnemy(): Squad[] {
-  // DynamicEnemy は enemy 全ユニットの平均攻撃をダメージ、
-  // 生存数を hitCount として action を生成する。
-  // → 攻撃力30・ヒット10 を満たすため frontAttack=rearAttack=30 のユニット10体を用意。
+/**
+ * 試練の敵を生成する。year に応じて HP/攻撃/スピードがスケーリングする
+ * （CHRONICLE_CONFIG.ENEMY_SCALING 参照）。
+ *
+ * 算出式:
+ *   HP    = BASE_HP     + year * HP_GAIN_PER_YEAR
+ *   ATK   = BASE_ATTACK + year * ATTACK_GAIN_PER_YEAR
+ *   SPD   = BASE_SPEED  + year * SPEED_GAIN_PER_YEAR
+ *
+ * スピードが上がると BattleManager のイニシアチブ順で敵が味方より先に
+ * 行動するため、年代が進むほど「敵が先制し味方の手数を奪う」状態になる。
+ */
+function makeTrialEnemy(year: number): Squad[] {
+  const sc = CHRONICLE_CONFIG.ENEMY_SCALING;
+  const hp    = Math.round(sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR);
+  const atk   = Math.round(sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR);
+  const speed = Math.round(sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR);
+
   const enemyUnit = (i: number): Unit =>
     new Unit({
       id: `enemy-${i}`,
@@ -218,9 +232,9 @@ function makeTrialEnemy(): Squad[] {
       job: null,
       age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
       baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
-      maxHp: 150, hp: 150,
-      speed: 20,
-      frontAttack: 30, rearAttack: 30,
+      maxHp: hp, hp,
+      speed,
+      frontAttack: atk, rearAttack: atk,
     });
 
   const units = Array.from({ length: 10 }, (_, i) => enemyUnit(i));
@@ -262,7 +276,7 @@ function runTrialBattle(
 ): { summary: BattleSummary; squadmatePairs: ReadonlyArray<readonly [string, string]> } {
   const picks = brigade.selectBattalion(CHRONICLE_CONFIG.SCHEDULE.BATTALION_SIZE);
   const { squads, averageAge, peakCount } = formBattalion(picks);
-  const enemy = makeTrialEnemy();
+  const enemy = makeTrialEnemy(year);
 
   const sim = new BattleSimulator(squads, enemy, {
     maxTurns: CHRONICLE_CONFIG.BATTLE.MAX_TURNS,

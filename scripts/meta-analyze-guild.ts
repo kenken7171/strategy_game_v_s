@@ -170,12 +170,20 @@ function runOne(seed: number): RunResult {
     return { squads, avgAge, peakCount };
   }
 
-  function makeTrialEnemy(): Squad[] {
+  /**
+   * 試練の敵を year に応じてスケーリング生成する。
+   * CHRONICLE_CONFIG_EXTREME.ENEMY_SCALING で HP/ATK/SPD を年率上昇させる。
+   */
+  function makeTrialEnemy(year: number): Squad[] {
+    const sc = CFG.ENEMY_SCALING;
+    const hp    = Math.round(sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR);
+    const atk   = Math.round(sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR);
+    const speed = Math.round(sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR);
     const enemyUnit = (i: number): Unit => new Unit({
       id: `enemy-${i}`, name: `試練の兵${i + 1}`, job: null,
       age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
       baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
-      maxHp: 150, hp: 150, speed: 20, frontAttack: 30, rearAttack: 30,
+      maxHp: hp, hp, speed, frontAttack: atk, rearAttack: atk,
     });
     const units = Array.from({ length: 10 }, (_, i) => enemyUnit(i));
     return [
@@ -269,7 +277,7 @@ function runOne(seed: number): RunResult {
     if (year % CFG.SCHEDULE.BATTLE_INTERVAL === 0 && brigade.units.length > 0) {
       const picks = brigade.selectBattalion(CFG.SCHEDULE.BATTALION_SIZE);
       const { squads, avgAge, peakCount } = formBattalion(picks);
-      const enemy = makeTrialEnemy();
+      const enemy = makeTrialEnemy(year);
       const sim = new BattleSimulator(squads, enemy, {
         maxTurns: CFG.BATTLE.MAX_TURNS,
         rng: battleRng, verbose: false,

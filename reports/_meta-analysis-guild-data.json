@@ -13,46 +13,46 @@
     10
   ],
   "summary": {
-    "avgWinRate": 0.8329999999999999,
+    "avgWinRate": 0.211,
     "avgFinalPop": 50,
     "avgMaxPop": 50,
     "avgMinPop": 28,
-    "avgMarriages": 59.1,
-    "avgPlannedBirths": 163.8,
-    "avgActualBirths": 142.8,
+    "avgMarriages": 56.8,
+    "avgPlannedBirths": 158.3,
+    "avgActualBirths": 136,
     "avgTitled": 0,
-    "avgTotalUnits": 467,
-    "avgDescendants": 22.7,
-    "avgDescendantRatio": 0.4539999999999999,
-    "avgStrengthY100": 103.252,
-    "avgRetirements": 323.4
+    "avgTotalUnits": 459.9,
+    "avgDescendants": 22,
+    "avgDescendantRatio": 0.44000000000000006,
+    "avgStrengthY100": 103.16199999999999,
+    "avgRetirements": 316.6
   },
   "results": [
     {
       "seed": 1,
-      "wins": 93,
-      "losses": 7,
-      "draws": 0,
-      "bestVictoryYear": 2,
-      "bestVictoryTurns": 2,
+      "wins": 22,
+      "losses": 77,
+      "draws": 1,
+      "bestVictoryYear": 1,
+      "bestVictoryTurns": 3,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
       "totalMarriages": 56,
-      "totalPlannedBirths": 158,
-      "totalActualBirths": 142,
+      "totalPlannedBirths": 161,
+      "totalActualBirths": 132,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 467,
-      "descendantsAtY100": 24,
-      "descendantRatioY100": 0.48,
-      "avgStrengthY100": 102.08,
+      "totalUnitsCreated": 456,
+      "descendantsAtY100": 22,
+      "descendantRatioY100": 0.44,
+      "avgStrengthY100": 100.02,
       "originDistY100": {
-        "Japanese": 18,
-        "European": 18,
-        "Classical": 14
+        "Japanese": 8,
+        "European": 16,
+        "Classical": 26
       },
-      "totalRetirements": 324,
-      "totalNaturalRetirements": 93,
+      "totalRetirements": 312,
+      "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
@@ -61,12 +61,12 @@
           "turns": 3,
           "avgAge": 21,
           "peakCount": 5,
-          "mvpJob": "sorcerer"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 6,
           "result": "Win",
-          "turns": 2,
+          "turns": 3,
           "avgAge": 24.666666666666668,
           "peakCount": 10,
           "mvpJob": "sorcerer"
@@ -74,183 +74,183 @@
         {
           "year": 11,
           "result": "Win",
-          "turns": 2,
+          "turns": 5,
           "avgAge": 26.833333333333332,
           "peakCount": 8,
-          "mvpJob": "sorcerer"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 16,
-          "result": "Win",
-          "turns": 3,
+          "result": "Loss",
+          "turns": 9,
           "avgAge": 27.416666666666668,
           "peakCount": 6,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 21,
           "result": "Win",
-          "turns": 2,
-          "avgAge": 26.083333333333332,
+          "turns": 6,
+          "avgAge": 25.916666666666668,
           "peakCount": 8,
           "mvpJob": "sniper"
         },
         {
           "year": 26,
-          "result": "Win",
-          "turns": 6,
-          "avgAge": 23.416666666666668,
-          "peakCount": 8,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 31,
           "result": "Loss",
-          "turns": 8,
-          "avgAge": 25.5,
-          "peakCount": 12,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 36,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 25.25,
-          "peakCount": 10,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 41,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.333333333333332,
-          "peakCount": 10,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 46,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.916666666666668,
-          "peakCount": 9,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 51,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.583333333333332,
-          "peakCount": 10,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 56,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.75,
-          "peakCount": 10,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 61,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.416666666666668,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 66,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.083333333333332,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 71,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.583333333333332,
-          "peakCount": 11,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 76,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.083333333333332,
-          "peakCount": 11,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 81,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26,
-          "peakCount": 12,
-          "mvpJob": "scout"
-        },
-        {
-          "year": 86,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.583333333333332,
+          "turns": 5,
+          "avgAge": 23.583333333333332,
           "peakCount": 6,
           "mvpJob": "heavy_infantry"
         },
         {
-          "year": 91,
+          "year": 31,
           "result": "Win",
+          "turns": 13,
+          "avgAge": 24.333333333333332,
+          "peakCount": 12,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 36,
+          "result": "Loss",
           "turns": 4,
-          "avgAge": 25.833333333333332,
+          "avgAge": 26,
+          "peakCount": 11,
+          "mvpJob": "standard_bearer"
+        },
+        {
+          "year": 41,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 24.75,
+          "peakCount": 6,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 46,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.916666666666668,
           "peakCount": 12,
           "mvpJob": "heavy_infantry"
         },
         {
-          "year": 96,
-          "result": "Win",
+          "year": 51,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 56,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.583333333333332,
+          "peakCount": 11,
+          "mvpJob": "standard_bearer"
+        },
+        {
+          "year": 61,
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 25.916666666666668,
+          "avgAge": 24.833333333333332,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 66,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 27.166666666666668,
+          "peakCount": 6,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 71,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.166666666666668,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 76,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.666666666666668,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 81,
+          "result": "Loss",
+          "turns": 1,
+          "avgAge": 27.083333333333332,
+          "peakCount": 11,
+          "mvpJob": "なし"
+        },
+        {
+          "year": 86,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.416666666666668,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 91,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.416666666666668,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 96,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27.083333333333332,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
         }
       ]
     },
     {
       "seed": 2,
-      "wins": 100,
-      "losses": 0,
-      "draws": 0,
-      "bestVictoryYear": 24,
-      "bestVictoryTurns": 1,
+      "wins": 33,
+      "losses": 62,
+      "draws": 5,
+      "bestVictoryYear": 3,
+      "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
       "totalMarriages": 55,
-      "totalPlannedBirths": 159,
-      "totalActualBirths": 143,
+      "totalPlannedBirths": 158,
+      "totalActualBirths": 134,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 468,
-      "descendantsAtY100": 20,
-      "descendantRatioY100": 0.4,
-      "avgStrengthY100": 101,
+      "totalUnitsCreated": 456,
+      "descendantsAtY100": 22,
+      "descendantRatioY100": 0.44,
+      "avgStrengthY100": 103.36,
       "originDistY100": {
-        "Japanese": 12,
-        "European": 17,
-        "Classical": 21
+        "Japanese": 18,
+        "European": 18,
+        "Classical": 14
       },
-      "totalRetirements": 324,
-      "totalNaturalRetirements": 93,
-      "totalAdvanceRetirements": 1,
+      "totalRetirements": 315,
+      "totalNaturalRetirements": 94,
+      "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
           "year": 1,
           "result": "Win",
-          "turns": 2,
+          "turns": 3,
           "avgAge": 21,
           "peakCount": 2,
-          "mvpJob": "iron_wall_knight"
+          "mvpJob": "sorcerer"
         },
         {
           "year": 6,
@@ -258,28 +258,28 @@
           "turns": 2,
           "avgAge": 26,
           "peakCount": 8,
-          "mvpJob": "sniper"
+          "mvpJob": "sorcerer"
         },
         {
           "year": 11,
           "result": "Win",
-          "turns": 2,
+          "turns": 4,
           "avgAge": 29.25,
           "peakCount": 5,
-          "mvpJob": "sorcerer"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 16,
-          "result": "Win",
-          "turns": 6,
+          "result": "Loss",
+          "turns": 4,
           "avgAge": 27.083333333333332,
           "peakCount": 9,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 21,
           "result": "Win",
-          "turns": 2,
+          "turns": 7,
           "avgAge": 24.25,
           "peakCount": 5,
           "mvpJob": "heavy_infantry"
@@ -287,164 +287,164 @@
         {
           "year": 26,
           "result": "Win",
-          "turns": 1,
-          "avgAge": 25.083333333333332,
-          "peakCount": 7,
-          "mvpJob": "sniper"
+          "turns": 8,
+          "avgAge": 25,
+          "peakCount": 8,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.833333333333332,
+          "result": "Draw",
+          "turns": 30,
+          "avgAge": 25.166666666666668,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 36,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.75,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 7,
+          "avgAge": 27.083333333333332,
+          "peakCount": 12,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 41,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 26,
-          "peakCount": 12,
-          "mvpJob": "sniper"
+          "avgAge": 26.333333333333332,
+          "peakCount": 10,
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 46,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 25.333333333333332,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.166666666666668,
           "peakCount": 11,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 51,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 26.083333333333332,
-          "peakCount": 12,
-          "mvpJob": "sniper"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.666666666666668,
+          "peakCount": 6,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 56,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.416666666666668,
-          "peakCount": 9,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.333333333333332,
+          "peakCount": 11,
           "mvpJob": "iron_wall_knight"
         },
         {
           "year": 61,
           "result": "Win",
-          "turns": 3,
-          "avgAge": 26.75,
-          "peakCount": 6,
-          "mvpJob": "sniper"
+          "turns": 23,
+          "avgAge": 27.083333333333332,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 66,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.083333333333332,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 28.083333333333332,
+          "peakCount": 6,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 71,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 25.666666666666668,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 27.416666666666668,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 76,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 26.083333333333332,
-          "peakCount": 12,
-          "mvpJob": "tactician"
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.333333333333332,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 81,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
+          "avgAge": 25.333333333333332,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 86,
+          "result": "Loss",
+          "turns": 3,
           "avgAge": 26.333333333333332,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 91,
+          "result": "Draw",
+          "turns": 30,
+          "avgAge": 26.916666666666668,
           "peakCount": 12,
           "mvpJob": "iron_wall_knight"
         },
         {
-          "year": 86,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.833333333333332,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 91,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.666666666666668,
-          "peakCount": 9,
-          "mvpJob": "scout"
-        },
-        {
           "year": 96,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.833333333333332,
+          "result": "Loss",
+          "turns": 1,
+          "avgAge": 28.166666666666668,
           "peakCount": 12,
-          "mvpJob": "scout"
+          "mvpJob": "なし"
         }
       ]
     },
     {
       "seed": 3,
-      "wins": 86,
-      "losses": 14,
+      "wins": 32,
+      "losses": 68,
       "draws": 0,
-      "bestVictoryYear": 9,
-      "bestVictoryTurns": 2,
+      "bestVictoryYear": 6,
+      "bestVictoryTurns": 4,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 63,
-      "totalPlannedBirths": 159,
-      "totalActualBirths": 142,
+      "totalMarriages": 57,
+      "totalPlannedBirths": 148,
+      "totalActualBirths": 120,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 466,
-      "descendantsAtY100": 23,
-      "descendantRatioY100": 0.46,
-      "avgStrengthY100": 102.9,
+      "totalUnitsCreated": 444,
+      "descendantsAtY100": 19,
+      "descendantRatioY100": 0.38,
+      "avgStrengthY100": 102.62,
       "originDistY100": {
-        "Japanese": 18,
-        "European": 19,
-        "Classical": 13
+        "Japanese": 21,
+        "European": 18,
+        "Classical": 11
       },
-      "totalRetirements": 323,
+      "totalRetirements": 301,
       "totalNaturalRetirements": 94,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
           "year": 1,
           "result": "Win",
-          "turns": 5,
+          "turns": 11,
           "avgAge": 20.75,
           "peakCount": 1,
-          "mvpJob": "sniper"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 6,
           "result": "Win",
-          "turns": 3,
+          "turns": 4,
           "avgAge": 25.166666666666668,
           "peakCount": 9,
           "mvpJob": "sniper"
@@ -452,22 +452,22 @@
         {
           "year": 11,
           "result": "Win",
-          "turns": 2,
+          "turns": 7,
           "avgAge": 27.083333333333332,
           "peakCount": 5,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 16,
           "result": "Win",
-          "turns": 2,
+          "turns": 6,
           "avgAge": 24.666666666666668,
           "peakCount": 7,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 21,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
           "avgAge": 27.166666666666668,
           "peakCount": 6,
@@ -476,149 +476,149 @@
         {
           "year": 26,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 21.666666666666668,
-          "peakCount": 2,
-          "mvpJob": "sniper"
+          "turns": 5,
+          "avgAge": 22.416666666666668,
+          "peakCount": 5,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 31,
           "result": "Loss",
-          "turns": 6,
-          "avgAge": 24.916666666666668,
-          "peakCount": 9,
+          "turns": 4,
+          "avgAge": 25.333333333333332,
+          "peakCount": 10,
           "mvpJob": "sniper"
         },
         {
           "year": 36,
           "result": "Win",
-          "turns": 3,
-          "avgAge": 24.833333333333332,
+          "turns": 19,
+          "avgAge": 25.416666666666668,
           "peakCount": 11,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 41,
-          "result": "Win",
-          "turns": 6,
-          "avgAge": 24.916666666666668,
-          "peakCount": 10,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.75,
+          "peakCount": 9,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 46,
           "result": "Win",
-          "turns": 8,
-          "avgAge": 25.166666666666668,
-          "peakCount": 12,
-          "mvpJob": "heavy_infantry"
+          "turns": 7,
+          "avgAge": 24.666666666666668,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 51,
-          "result": "Win",
-          "turns": 5,
-          "avgAge": 26.583333333333332,
+          "result": "Loss",
+          "turns": 9,
+          "avgAge": 26.833333333333332,
           "peakCount": 9,
-          "mvpJob": "heavy_infantry"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 56,
-          "result": "Win",
-          "turns": 8,
-          "avgAge": 25.083333333333332,
-          "peakCount": 11,
-          "mvpJob": "scout"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 61,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.333333333333332,
-          "peakCount": 11,
-          "mvpJob": "scout"
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 27.083333333333332,
+          "peakCount": 5,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 66,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.166666666666668,
-          "peakCount": 10,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 24.833333333333332,
+          "peakCount": 8,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 71,
           "result": "Loss",
-          "turns": 13,
-          "avgAge": 25.666666666666668,
-          "peakCount": 11,
+          "turns": 3,
+          "avgAge": 25.25,
+          "peakCount": 10,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 76,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 25.666666666666668,
-          "peakCount": 4,
-          "mvpJob": "heavy_infantry"
+          "avgAge": 24.583333333333332,
+          "peakCount": 12,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 81,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.583333333333332,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 27,
+          "peakCount": 9,
+          "mvpJob": "tactician"
+        },
+        {
+          "year": 86,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.333333333333332,
           "peakCount": 12,
           "mvpJob": "sniper"
         },
         {
-          "year": 86,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.75,
-          "peakCount": 9,
-          "mvpJob": "scout"
-        },
-        {
           "year": 91,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.25,
-          "peakCount": 5,
-          "mvpJob": "heavy_infantry"
+          "result": "Loss",
+          "turns": 11,
+          "avgAge": 27.083333333333332,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 96,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 24.833333333333332,
-          "peakCount": 11,
-          "mvpJob": "heavy_infantry"
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.333333333333332,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         }
       ]
     },
     {
       "seed": 4,
-      "wins": 97,
-      "losses": 3,
-      "draws": 0,
+      "wins": 19,
+      "losses": 80,
+      "draws": 1,
       "bestVictoryYear": 2,
       "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 59,
-      "totalPlannedBirths": 143,
-      "totalActualBirths": 114,
+      "totalMarriages": 57,
+      "totalPlannedBirths": 151,
+      "totalActualBirths": 132,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 438,
-      "descendantsAtY100": 22,
-      "descendantRatioY100": 0.44,
-      "avgStrengthY100": 104.34,
+      "totalUnitsCreated": 456,
+      "descendantsAtY100": 21,
+      "descendantRatioY100": 0.42,
+      "avgStrengthY100": 101.28,
       "originDistY100": {
         "Japanese": 15,
-        "European": 18,
-        "Classical": 17
+        "European": 16,
+        "Classical": 19
       },
-      "totalRetirements": 294,
+      "totalRetirements": 312,
       "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
@@ -633,15 +633,15 @@
         {
           "year": 6,
           "result": "Win",
-          "turns": 3,
+          "turns": 7,
           "avgAge": 26,
           "peakCount": 9,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 11,
-          "result": "Win",
-          "turns": 4,
+          "result": "Loss",
+          "turns": 7,
           "avgAge": 28,
           "peakCount": 6,
           "mvpJob": "heavy_infantry"
@@ -649,166 +649,166 @@
         {
           "year": 16,
           "result": "Win",
-          "turns": 3,
+          "turns": 5,
           "avgAge": 25.25,
           "peakCount": 8,
-          "mvpJob": "sorcerer"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 21,
           "result": "Win",
-          "turns": 3,
-          "avgAge": 26,
+          "turns": 5,
+          "avgAge": 26.833333333333332,
           "peakCount": 3,
-          "mvpJob": "scout"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 26,
-          "result": "Win",
-          "turns": 8,
-          "avgAge": 23.166666666666668,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 22.833333333333332,
           "peakCount": 4,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 9,
-          "avgAge": 25.916666666666668,
-          "peakCount": 11,
-          "mvpJob": "standard_bearer"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26,
+          "peakCount": 12,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 36,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.25,
-          "peakCount": 10,
-          "mvpJob": "sniper"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.833333333333332,
+          "peakCount": 7,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 41,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.75,
-          "peakCount": 8,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.25,
+          "peakCount": 7,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 46,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 26.166666666666668,
+          "avgAge": 25.333333333333332,
           "peakCount": 10,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 51,
-          "result": "Win",
-          "turns": 6,
-          "avgAge": 24.583333333333332,
-          "peakCount": 11,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 56,
-          "result": "Win",
-          "turns": 6,
-          "avgAge": 26,
-          "peakCount": 9,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 61,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.75,
-          "peakCount": 8,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 66,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.916666666666668,
+          "result": "Loss",
+          "turns": 8,
+          "avgAge": 26.416666666666668,
           "peakCount": 10,
-          "mvpJob": "scout"
-        },
-        {
-          "year": 71,
-          "result": "Win",
-          "turns": 5,
-          "avgAge": 26,
-          "peakCount": 8,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 76,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26,
-          "peakCount": 9,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 81,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.083333333333332,
-          "peakCount": 11,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 86,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 27.583333333333332,
-          "peakCount": 8,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 91,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 25.5,
-          "peakCount": 8,
           "mvpJob": "iron_wall_knight"
         },
         {
-          "year": 96,
-          "result": "Win",
+          "year": 56,
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 25,
+          "avgAge": 26.25,
           "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 61,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 27,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 66,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.5,
+          "peakCount": 11,
+          "mvpJob": "standard_bearer"
+        },
+        {
+          "year": 71,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.833333333333332,
+          "peakCount": 10,
+          "mvpJob": "standard_bearer"
+        },
+        {
+          "year": 76,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27.666666666666668,
+          "peakCount": 12,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 81,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.583333333333332,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 86,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.5,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 91,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.916666666666668,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 96,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.333333333333332,
+          "peakCount": 12,
+          "mvpJob": "scout"
         }
       ]
     },
     {
       "seed": 5,
-      "wins": 68,
-      "losses": 27,
-      "draws": 5,
+      "wins": 16,
+      "losses": 84,
+      "draws": 0,
       "bestVictoryYear": 1,
       "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 55,
-      "totalPlannedBirths": 163,
-      "totalActualBirths": 141,
+      "totalMarriages": 45,
+      "totalPlannedBirths": 138,
+      "totalActualBirths": 115,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 465,
-      "descendantsAtY100": 28,
-      "descendantRatioY100": 0.56,
-      "avgStrengthY100": 106.8,
+      "totalUnitsCreated": 438,
+      "descendantsAtY100": 22,
+      "descendantRatioY100": 0.44,
+      "avgStrengthY100": 107,
       "originDistY100": {
-        "Japanese": 18,
-        "European": 14,
-        "Classical": 18
+        "Japanese": 21,
+        "European": 12,
+        "Classical": 17
       },
-      "totalRetirements": 322,
-      "totalNaturalRetirements": 94,
+      "totalRetirements": 295,
+      "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
@@ -817,193 +817,193 @@
           "turns": 2,
           "avgAge": 20.5,
           "peakCount": 4,
-          "mvpJob": "sorcerer"
+          "mvpJob": "sniper"
         },
         {
           "year": 6,
           "result": "Win",
-          "turns": 2,
+          "turns": 3,
           "avgAge": 24.416666666666668,
           "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "mvpJob": "sniper"
         },
         {
           "year": 11,
           "result": "Win",
-          "turns": 2,
+          "turns": 4,
           "avgAge": 27.25,
           "peakCount": 5,
-          "mvpJob": "scout"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 16,
           "result": "Win",
-          "turns": 2,
+          "turns": 20,
           "avgAge": 29.583333333333332,
           "peakCount": 4,
-          "mvpJob": "scout"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 21,
-          "result": "Win",
-          "turns": 6,
+          "result": "Loss",
+          "turns": 3,
           "avgAge": 27.25,
           "peakCount": 7,
-          "mvpJob": "heavy_infantry"
+          "mvpJob": "scout"
         },
         {
           "year": 26,
           "result": "Loss",
-          "turns": 7,
-          "avgAge": 24.166666666666668,
+          "turns": 2,
+          "avgAge": 24.416666666666668,
           "peakCount": 6,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 18,
-          "avgAge": 24.666666666666668,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.083333333333332,
           "peakCount": 10,
-          "mvpJob": "medic"
+          "mvpJob": "scout"
         },
         {
           "year": 36,
-          "result": "Win",
-          "turns": 10,
-          "avgAge": 23.916666666666668,
-          "peakCount": 7,
-          "mvpJob": "scout"
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 25.666666666666668,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 41,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 24.25,
-          "peakCount": 11,
-          "mvpJob": "scout"
+          "turns": 1,
+          "avgAge": 25.416666666666668,
+          "peakCount": 10,
+          "mvpJob": "なし"
         },
         {
           "year": 46,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.333333333333332,
-          "peakCount": 10,
-          "mvpJob": "scout"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.5,
+          "peakCount": 11,
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 51,
-          "result": "Win",
-          "turns": 5,
-          "avgAge": 26.916666666666668,
-          "peakCount": 11,
-          "mvpJob": "heavy_infantry"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27.25,
+          "peakCount": 8,
+          "mvpJob": "scout"
         },
         {
           "year": 56,
           "result": "Loss",
-          "turns": 5,
-          "avgAge": 25.166666666666668,
-          "peakCount": 10,
-          "mvpJob": "sorcerer"
+          "turns": 3,
+          "avgAge": 27.416666666666668,
+          "peakCount": 8,
+          "mvpJob": "sniper"
         },
         {
           "year": 61,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.75,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.083333333333332,
           "peakCount": 10,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 66,
           "result": "Loss",
-          "turns": 4,
-          "avgAge": 24.916666666666668,
-          "peakCount": 11,
+          "turns": 2,
+          "avgAge": 26.333333333333332,
+          "peakCount": 12,
           "mvpJob": "scout"
         },
         {
           "year": 71,
           "result": "Loss",
-          "turns": 2,
-          "avgAge": 26.083333333333332,
+          "turns": 3,
+          "avgAge": 27.666666666666668,
           "peakCount": 11,
-          "mvpJob": "scout"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 76,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.083333333333332,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.333333333333332,
           "peakCount": 9,
-          "mvpJob": "scout"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 81,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 26.333333333333332,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "avgAge": 26.583333333333332,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 86,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 26.166666666666668,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "avgAge": 24.333333333333332,
+          "peakCount": 6,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 91,
           "result": "Loss",
-          "turns": 2,
-          "avgAge": 25.833333333333332,
-          "peakCount": 12,
-          "mvpJob": "scout"
+          "turns": 1,
+          "avgAge": 25.75,
+          "peakCount": 11,
+          "mvpJob": "なし"
         },
         {
           "year": 96,
-          "result": "Win",
-          "turns": 4,
+          "result": "Loss",
+          "turns": 1,
           "avgAge": 26.833333333333332,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "なし"
         }
       ]
     },
     {
       "seed": 6,
-      "wins": 63,
-      "losses": 37,
+      "wins": 24,
+      "losses": 76,
       "draws": 0,
-      "bestVictoryYear": 70,
-      "bestVictoryTurns": 1,
+      "bestVictoryYear": 4,
+      "bestVictoryTurns": 3,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 61,
-      "totalPlannedBirths": 186,
-      "totalActualBirths": 166,
+      "totalMarriages": 70,
+      "totalPlannedBirths": 202,
+      "totalActualBirths": 179,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 491,
-      "descendantsAtY100": 20,
-      "descendantRatioY100": 0.4,
-      "avgStrengthY100": 101.28,
+      "totalUnitsCreated": 502,
+      "descendantsAtY100": 31,
+      "descendantRatioY100": 0.62,
+      "avgStrengthY100": 107.6,
       "originDistY100": {
-        "Japanese": 18,
-        "European": 21,
-        "Classical": 11
+        "Japanese": 29,
+        "European": 8,
+        "Classical": 13
       },
-      "totalRetirements": 347,
-      "totalNaturalRetirements": 94,
+      "totalRetirements": 359,
+      "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
           "year": 1,
           "result": "Win",
-          "turns": 6,
+          "turns": 10,
           "avgAge": 21,
           "peakCount": 2,
           "mvpJob": "sniper"
@@ -1011,181 +1011,181 @@
         {
           "year": 6,
           "result": "Win",
-          "turns": 4,
+          "turns": 15,
           "avgAge": 24.75,
           "peakCount": 9,
-          "mvpJob": "standard_bearer"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 11,
           "result": "Win",
-          "turns": 3,
+          "turns": 6,
           "avgAge": 27.5,
           "peakCount": 6,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 16,
           "result": "Win",
-          "turns": 3,
+          "turns": 5,
           "avgAge": 26.583333333333332,
           "peakCount": 9,
-          "mvpJob": "sorcerer"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 21,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.916666666666668,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 27.666666666666668,
           "peakCount": 4,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 26,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 23.166666666666668,
-          "peakCount": 6,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 22.916666666666668,
+          "peakCount": 4,
           "mvpJob": "standard_bearer"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.083333333333332,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.166666666666668,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 36,
           "result": "Loss",
-          "turns": 7,
-          "avgAge": 26.916666666666668,
+          "turns": 2,
+          "avgAge": 26,
           "peakCount": 11,
-          "mvpJob": "scout"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 41,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 25.583333333333332,
-          "peakCount": 10,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 46,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 26.5,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.666666666666668,
           "peakCount": 12,
           "mvpJob": "sniper"
         },
         {
+          "year": 46,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.333333333333332,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
           "year": 51,
           "result": "Loss",
-          "turns": 5,
-          "avgAge": 25.583333333333332,
-          "peakCount": 10,
-          "mvpJob": "scout"
+          "turns": 3,
+          "avgAge": 24.583333333333332,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 56,
           "result": "Loss",
           "turns": 3,
-          "avgAge": 25.916666666666668,
-          "peakCount": 11,
+          "avgAge": 26,
+          "peakCount": 12,
           "mvpJob": "standard_bearer"
         },
         {
           "year": 61,
           "result": "Loss",
           "turns": 2,
-          "avgAge": 24.916666666666668,
-          "peakCount": 11,
+          "avgAge": 25.5,
+          "peakCount": 8,
           "mvpJob": "scout"
         },
         {
           "year": 66,
           "result": "Win",
-          "turns": 3,
-          "avgAge": 25.5,
-          "peakCount": 7,
-          "mvpJob": "scout"
+          "turns": 27,
+          "avgAge": 26.166666666666668,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 71,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 27.5,
-          "peakCount": 8,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 76,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 24,
-          "peakCount": 7,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 81,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
           "avgAge": 25.25,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "standard_bearer"
+        },
+        {
+          "year": 76,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 24.833333333333332,
+          "peakCount": 8,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 81,
+          "result": "Loss",
+          "turns": 1,
+          "avgAge": 25.583333333333332,
+          "peakCount": 12,
+          "mvpJob": "なし"
         },
         {
           "year": 86,
           "result": "Loss",
           "turns": 2,
-          "avgAge": 26.5,
+          "avgAge": 27.5,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 91,
           "result": "Loss",
           "turns": 3,
-          "avgAge": 24.5,
+          "avgAge": 24.75,
           "peakCount": 12,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 96,
           "result": "Loss",
-          "turns": 2,
-          "avgAge": 26.916666666666668,
+          "turns": 3,
+          "avgAge": 26.416666666666668,
           "peakCount": 12,
-          "mvpJob": "scout"
+          "mvpJob": "heavy_infantry"
         }
       ]
     },
     {
       "seed": 7,
-      "wins": 97,
-      "losses": 3,
+      "wins": 16,
+      "losses": 84,
       "draws": 0,
       "bestVictoryYear": 1,
       "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 57,
-      "totalPlannedBirths": 144,
-      "totalActualBirths": 122,
+      "totalMarriages": 54,
+      "totalPlannedBirths": 151,
+      "totalActualBirths": 130,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 447,
+      "totalUnitsCreated": 455,
       "descendantsAtY100": 22,
       "descendantRatioY100": 0.44,
-      "avgStrengthY100": 103.58,
+      "avgStrengthY100": 103.84,
       "originDistY100": {
-        "Japanese": 10,
-        "European": 23,
-        "Classical": 17
+        "Japanese": 14,
+        "European": 24,
+        "Classical": 12
       },
-      "totalRetirements": 302,
+      "totalRetirements": 310,
       "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
@@ -1208,173 +1208,173 @@
         {
           "year": 11,
           "result": "Win",
-          "turns": 4,
+          "turns": 8,
           "avgAge": 26.5,
           "peakCount": 6,
-          "mvpJob": "scout"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 16,
-          "result": "Win",
+          "result": "Loss",
           "turns": 4,
           "avgAge": 26.583333333333332,
-          "peakCount": 9,
-          "mvpJob": "scout"
-        },
-        {
-          "year": 21,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.583333333333332,
-          "peakCount": 7,
-          "mvpJob": "scout"
-        },
-        {
-          "year": 26,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 23.333333333333332,
-          "peakCount": 7,
-          "mvpJob": "sniper"
-        },
-        {
-          "year": 31,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 24.916666666666668,
-          "peakCount": 10,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 36,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.333333333333332,
-          "peakCount": 10,
-          "mvpJob": "standard_bearer"
-        },
-        {
-          "year": 41,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.75,
-          "peakCount": 11,
-          "mvpJob": "standard_bearer"
-        },
-        {
-          "year": 46,
-          "result": "Loss",
-          "turns": 6,
-          "avgAge": 26.083333333333332,
           "peakCount": 9,
           "mvpJob": "heavy_infantry"
         },
         {
-          "year": 51,
+          "year": 21,
           "result": "Win",
+          "turns": 9,
+          "avgAge": 27.166666666666668,
+          "peakCount": 6,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 26,
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 25.583333333333332,
+          "peakCount": 7,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 31,
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 25.416666666666668,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 36,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.25,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 41,
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 25.666666666666668,
-          "peakCount": 9,
-          "mvpJob": "sniper"
+          "avgAge": 25.833333333333332,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 46,
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 25.583333333333332,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 51,
+          "result": "Loss",
+          "turns": 10,
+          "avgAge": 25.75,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 56,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 26.75,
-          "peakCount": 7,
-          "mvpJob": "sniper"
+          "avgAge": 26,
+          "peakCount": 12,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 61,
-          "result": "Win",
-          "turns": 19,
-          "avgAge": 24.333333333333332,
-          "peakCount": 12,
-          "mvpJob": "medic"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.666666666666668,
+          "peakCount": 11,
+          "mvpJob": "tactician"
         },
         {
           "year": 66,
-          "result": "Win",
-          "turns": 4,
+          "result": "Loss",
+          "turns": 1,
           "avgAge": 26.916666666666668,
-          "peakCount": 8,
-          "mvpJob": "standard_bearer"
+          "peakCount": 7,
+          "mvpJob": "なし"
         },
         {
           "year": 71,
-          "result": "Win",
-          "turns": 2,
+          "result": "Loss",
+          "turns": 1,
           "avgAge": 26.666666666666668,
           "peakCount": 9,
-          "mvpJob": "sorcerer"
+          "mvpJob": "なし"
         },
         {
           "year": 76,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.666666666666668,
-          "peakCount": 7,
-          "mvpJob": "standard_bearer"
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 25.083333333333332,
+          "peakCount": 9,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 81,
-          "result": "Win",
-          "turns": 2,
+          "result": "Loss",
+          "turns": 4,
           "avgAge": 24.416666666666668,
-          "peakCount": 9,
-          "mvpJob": "sniper"
+          "peakCount": 12,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 86,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 25.25,
+          "avgAge": 27.5,
           "peakCount": 12,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 91,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 27,
-          "peakCount": 12,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27.666666666666668,
+          "peakCount": 11,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 96,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 25.75,
-          "peakCount": 7,
-          "mvpJob": "heavy_infantry"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.333333333333332,
+          "peakCount": 11,
+          "mvpJob": "tactician"
         }
       ]
     },
     {
       "seed": 8,
-      "wins": 77,
-      "losses": 22,
-      "draws": 1,
-      "bestVictoryYear": 9,
+      "wins": 20,
+      "losses": 80,
+      "draws": 0,
+      "bestVictoryYear": 14,
       "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 63,
-      "totalPlannedBirths": 173,
-      "totalActualBirths": 145,
+      "totalMarriages": 64,
+      "totalPlannedBirths": 159,
+      "totalActualBirths": 139,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 467,
-      "descendantsAtY100": 23,
-      "descendantRatioY100": 0.46,
-      "avgStrengthY100": 101.48,
+      "totalUnitsCreated": 463,
+      "descendantsAtY100": 20,
+      "descendantRatioY100": 0.4,
+      "avgStrengthY100": 100.28,
       "originDistY100": {
-        "Japanese": 19,
-        "European": 10,
-        "Classical": 21
+        "Japanese": 22,
+        "European": 14,
+        "Classical": 14
       },
-      "totalRetirements": 325,
+      "totalRetirements": 319,
       "totalNaturalRetirements": 95,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
@@ -1389,182 +1389,182 @@
         {
           "year": 6,
           "result": "Win",
-          "turns": 3,
+          "turns": 10,
           "avgAge": 25.75,
           "peakCount": 10,
-          "mvpJob": "sorcerer"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 11,
           "result": "Win",
-          "turns": 2,
+          "turns": 5,
           "avgAge": 27.5,
           "peakCount": 4,
-          "mvpJob": "sniper"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 16,
           "result": "Win",
-          "turns": 2,
+          "turns": 3,
           "avgAge": 25.666666666666668,
           "peakCount": 6,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 21,
-          "result": "Win",
-          "turns": 3,
-          "avgAge": 27.166666666666668,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 26.083333333333332,
           "peakCount": 8,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 26,
-          "result": "Win",
+          "result": "Loss",
           "turns": 3,
-          "avgAge": 23.916666666666668,
-          "peakCount": 7,
-          "mvpJob": "sniper"
+          "avgAge": 24.666666666666668,
+          "peakCount": 8,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 24.416666666666668,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 24.666666666666668,
           "peakCount": 11,
-          "mvpJob": "scout"
-        },
-        {
-          "year": 36,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 25.416666666666668,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 41,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.583333333333332,
-          "peakCount": 9,
           "mvpJob": "sniper"
         },
         {
+          "year": 36,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.166666666666668,
+          "peakCount": 11,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
+          "year": 41,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 25.583333333333332,
+          "peakCount": 6,
+          "mvpJob": "iron_wall_knight"
+        },
+        {
           "year": 46,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 25.666666666666668,
+          "avgAge": 25.833333333333332,
           "peakCount": 10,
-          "mvpJob": "scout"
+          "mvpJob": "sniper"
         },
         {
           "year": 51,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 25.666666666666668,
-          "peakCount": 9,
+          "avgAge": 27.416666666666668,
+          "peakCount": 7,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 56,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 24,
-          "peakCount": 10,
-          "mvpJob": "sorcerer"
+          "avgAge": 24.416666666666668,
+          "peakCount": 11,
+          "mvpJob": "sniper"
         },
         {
           "year": 61,
-          "result": "Win",
+          "result": "Loss",
           "turns": 4,
-          "avgAge": 25.75,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "avgAge": 25.416666666666668,
+          "peakCount": 9,
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 66,
-          "result": "Win",
-          "turns": 28,
-          "avgAge": 27.5,
-          "peakCount": 11,
-          "mvpJob": "medic"
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.25,
+          "peakCount": 9,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 71,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 25.75,
+          "turns": 4,
+          "avgAge": 25.833333333333332,
           "peakCount": 8,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 76,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 27.75,
-          "peakCount": 6,
-          "mvpJob": "scout"
+          "turns": 2,
+          "avgAge": 26.083333333333332,
+          "peakCount": 12,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 81,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 24.416666666666668,
-          "peakCount": 7,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 1,
+          "avgAge": 25.583333333333332,
+          "peakCount": 9,
+          "mvpJob": "なし"
         },
         {
           "year": 86,
           "result": "Loss",
-          "turns": 5,
-          "avgAge": 26.666666666666668,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "turns": 2,
+          "avgAge": 25.583333333333332,
+          "peakCount": 8,
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 91,
           "result": "Loss",
-          "turns": 2,
-          "avgAge": 26.083333333333332,
+          "turns": 1,
+          "avgAge": 25.916666666666668,
           "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "mvpJob": "なし"
         },
         {
           "year": 96,
-          "result": "Win",
-          "turns": 30,
-          "avgAge": 26.5,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.416666666666668,
+          "peakCount": 5,
+          "mvpJob": "standard_bearer"
         }
       ]
     },
     {
       "seed": 9,
-      "wins": 80,
-      "losses": 19,
-      "draws": 1,
-      "bestVictoryYear": 24,
-      "bestVictoryTurns": 1,
+      "wins": 13,
+      "losses": 87,
+      "draws": 0,
+      "bestVictoryYear": 1,
+      "bestVictoryTurns": 2,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 61,
-      "totalPlannedBirths": 175,
-      "totalActualBirths": 154,
+      "totalMarriages": 55,
+      "totalPlannedBirths": 169,
+      "totalActualBirths": 145,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 478,
-      "descendantsAtY100": 18,
-      "descendantRatioY100": 0.36,
-      "avgStrengthY100": 99.34,
+      "totalUnitsCreated": 470,
+      "descendantsAtY100": 16,
+      "descendantRatioY100": 0.32,
+      "avgStrengthY100": 100.88,
       "originDistY100": {
-        "Japanese": 9,
-        "European": 15,
-        "Classical": 26
+        "Japanese": 17,
+        "European": 16,
+        "Classical": 17
       },
-      "totalRetirements": 334,
-      "totalNaturalRetirements": 95,
+      "totalRetirements": 328,
+      "totalNaturalRetirements": 92,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
@@ -1586,335 +1586,335 @@
         {
           "year": 11,
           "result": "Win",
-          "turns": 3,
+          "turns": 11,
           "avgAge": 26.833333333333332,
           "peakCount": 8,
-          "mvpJob": "medic"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 16,
-          "result": "Win",
-          "turns": 4,
+          "result": "Loss",
+          "turns": 3,
           "avgAge": 27.166666666666668,
           "peakCount": 6,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 21,
-          "result": "Win",
-          "turns": 2,
+          "result": "Loss",
+          "turns": 7,
           "avgAge": 25.666666666666668,
           "peakCount": 6,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 26,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 23,
-          "peakCount": 4,
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 24.333333333333332,
+          "peakCount": 5,
           "mvpJob": "tactician"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 24.833333333333332,
-          "peakCount": 11,
-          "mvpJob": "sniper"
+          "result": "Loss",
+          "turns": 5,
+          "avgAge": 25.333333333333332,
+          "peakCount": 12,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 36,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.166666666666668,
-          "peakCount": 9,
-          "mvpJob": "medic"
+          "result": "Loss",
+          "turns": 4,
+          "avgAge": 26.25,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 41,
           "result": "Loss",
-          "turns": 7,
-          "avgAge": 25,
+          "turns": 4,
+          "avgAge": 26.5,
           "peakCount": 10,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 46,
           "result": "Loss",
-          "turns": 5,
-          "avgAge": 25.75,
+          "turns": 3,
+          "avgAge": 28,
           "peakCount": 11,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 51,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 26.416666666666668,
-          "peakCount": 10,
-          "mvpJob": "tactician"
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.333333333333332,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 56,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 27.166666666666668,
-          "peakCount": 12,
-          "mvpJob": "tactician"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.583333333333332,
+          "peakCount": 10,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 61,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 26.083333333333332,
-          "peakCount": 10,
-          "mvpJob": "medic"
+          "avgAge": 24.833333333333332,
+          "peakCount": 11,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 66,
           "result": "Loss",
-          "turns": 1,
-          "avgAge": 25.166666666666668,
-          "peakCount": 12,
+          "turns": 2,
+          "avgAge": 28.166666666666668,
+          "peakCount": 10,
           "mvpJob": "scout"
         },
         {
           "year": 71,
           "result": "Loss",
           "turns": 3,
-          "avgAge": 25.5,
-          "peakCount": 12,
-          "mvpJob": "scout"
+          "avgAge": 24.75,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 76,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 27,
-          "peakCount": 12,
-          "mvpJob": "scout"
+          "turns": 2,
+          "avgAge": 25.5,
+          "peakCount": 11,
+          "mvpJob": "tactician"
         },
         {
           "year": 81,
-          "result": "Win",
-          "turns": 1,
+          "result": "Loss",
+          "turns": 2,
           "avgAge": 27.25,
           "peakCount": 12,
-          "mvpJob": "sorcerer"
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 86,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 26,
-          "peakCount": 11,
-          "mvpJob": "sorcerer"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.166666666666668,
+          "peakCount": 12,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 91,
-          "result": "Win",
-          "turns": 28,
-          "avgAge": 26.666666666666668,
-          "peakCount": 12,
-          "mvpJob": "medic"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.083333333333332,
+          "peakCount": 11,
+          "mvpJob": "scout"
         },
         {
           "year": 96,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 25.833333333333332,
+          "avgAge": 27.833333333333332,
           "peakCount": 9,
-          "mvpJob": "sniper"
+          "mvpJob": "heavy_infantry"
         }
       ]
     },
     {
       "seed": 10,
-      "wins": 72,
-      "losses": 27,
-      "draws": 1,
-      "bestVictoryYear": 60,
-      "bestVictoryTurns": 1,
+      "wins": 16,
+      "losses": 84,
+      "draws": 0,
+      "bestVictoryYear": 1,
+      "bestVictoryTurns": 4,
       "finalPopulation": 50,
       "maxPopulation": 50,
       "minPopulation": 28,
-      "totalMarriages": 61,
-      "totalPlannedBirths": 178,
-      "totalActualBirths": 159,
+      "totalMarriages": 55,
+      "totalPlannedBirths": 146,
+      "totalActualBirths": 134,
       "titledNamesCount": 0,
-      "totalUnitsCreated": 483,
-      "descendantsAtY100": 27,
-      "descendantRatioY100": 0.54,
-      "avgStrengthY100": 109.72,
+      "totalUnitsCreated": 459,
+      "descendantsAtY100": 25,
+      "descendantRatioY100": 0.5,
+      "avgStrengthY100": 104.74,
       "originDistY100": {
-        "Japanese": 13,
-        "European": 27,
-        "Classical": 10
+        "Japanese": 21,
+        "European": 18,
+        "Classical": 11
       },
-      "totalRetirements": 339,
-      "totalNaturalRetirements": 95,
+      "totalRetirements": 315,
+      "totalNaturalRetirements": 94,
       "totalAdvanceRetirements": 0,
       "battlesSampled": [
         {
           "year": 1,
           "result": "Win",
-          "turns": 2,
+          "turns": 4,
           "avgAge": 20.75,
           "peakCount": 0,
-          "mvpJob": "sorcerer"
+          "mvpJob": "sniper"
         },
         {
           "year": 6,
           "result": "Win",
-          "turns": 2,
+          "turns": 6,
           "avgAge": 23.75,
           "peakCount": 4,
-          "mvpJob": "sniper"
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 11,
-          "result": "Win",
-          "turns": 3,
+          "result": "Loss",
+          "turns": 9,
           "avgAge": 26.083333333333332,
           "peakCount": 11,
-          "mvpJob": "sniper"
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 16,
           "result": "Win",
-          "turns": 3,
+          "turns": 6,
           "avgAge": 27.416666666666668,
           "peakCount": 6,
           "mvpJob": "sniper"
         },
         {
           "year": 21,
-          "result": "Win",
-          "turns": 7,
+          "result": "Loss",
+          "turns": 3,
           "avgAge": 26.75,
           "peakCount": 7,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 26,
-          "result": "Win",
-          "turns": 6,
-          "avgAge": 24.666666666666668,
-          "peakCount": 8,
+          "result": "Loss",
+          "turns": 12,
+          "avgAge": 24.916666666666668,
+          "peakCount": 9,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 31,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.416666666666668,
-          "peakCount": 11,
-          "mvpJob": "sniper"
+          "result": "Loss",
+          "turns": 6,
+          "avgAge": 25.583333333333332,
+          "peakCount": 10,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 36,
           "result": "Loss",
-          "turns": 4,
-          "avgAge": 26.583333333333332,
-          "peakCount": 12,
+          "turns": 3,
+          "avgAge": 25.5,
+          "peakCount": 9,
           "mvpJob": "sniper"
         },
         {
           "year": 41,
           "result": "Loss",
-          "turns": 5,
-          "avgAge": 25,
-          "peakCount": 9,
+          "turns": 3,
+          "avgAge": 25.333333333333332,
+          "peakCount": 10,
           "mvpJob": "heavy_infantry"
         },
         {
           "year": 46,
           "result": "Loss",
-          "turns": 9,
-          "avgAge": 25.75,
-          "peakCount": 12,
-          "mvpJob": "heavy_infantry"
-        },
-        {
-          "year": 51,
-          "result": "Win",
           "turns": 2,
-          "avgAge": 27.583333333333332,
-          "peakCount": 12,
-          "mvpJob": "sorcerer"
-        },
-        {
-          "year": 56,
-          "result": "Win",
-          "turns": 2,
-          "avgAge": 25.916666666666668,
-          "peakCount": 12,
+          "avgAge": 26.416666666666668,
+          "peakCount": 11,
           "mvpJob": "scout"
         },
         {
+          "year": 51,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 27.583333333333332,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
+        },
+        {
+          "year": 56,
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 25.666666666666668,
+          "peakCount": 8,
+          "mvpJob": "heavy_infantry"
+        },
+        {
           "year": 61,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 27.5,
+          "result": "Loss",
+          "turns": 3,
+          "avgAge": 26.166666666666668,
           "peakCount": 12,
           "mvpJob": "sniper"
         },
         {
           "year": 66,
-          "result": "Win",
-          "turns": 4,
-          "avgAge": 26.583333333333332,
-          "peakCount": 12,
-          "mvpJob": "scout"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26,
+          "peakCount": 6,
+          "mvpJob": "standard_bearer"
         },
         {
           "year": 71,
-          "result": "Win",
-          "turns": 20,
-          "avgAge": 25.833333333333332,
-          "peakCount": 12,
-          "mvpJob": "medic"
+          "result": "Loss",
+          "turns": 1,
+          "avgAge": 26,
+          "peakCount": 9,
+          "mvpJob": "なし"
         },
         {
           "year": 76,
           "result": "Loss",
-          "turns": 4,
-          "avgAge": 26.25,
-          "peakCount": 12,
-          "mvpJob": "heavy_infantry"
+          "turns": 1,
+          "avgAge": 27.166666666666668,
+          "peakCount": 9,
+          "mvpJob": "なし"
         },
         {
           "year": 81,
           "result": "Loss",
-          "turns": 3,
-          "avgAge": 29.25,
-          "peakCount": 12,
-          "mvpJob": "heavy_infantry"
+          "turns": 2,
+          "avgAge": 24.833333333333332,
+          "peakCount": 8,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 86,
-          "result": "Win",
-          "turns": 1,
-          "avgAge": 26.916666666666668,
-          "peakCount": 12,
-          "mvpJob": "tactician"
+          "result": "Loss",
+          "turns": 2,
+          "avgAge": 26.25,
+          "peakCount": 9,
+          "mvpJob": "heavy_infantry"
         },
         {
           "year": 91,
-          "result": "Win",
+          "result": "Loss",
           "turns": 2,
-          "avgAge": 28.583333333333332,
-          "peakCount": 12,
-          "mvpJob": "sniper"
+          "avgAge": 23.666666666666668,
+          "peakCount": 7,
+          "mvpJob": "iron_wall_knight"
         },
         {
           "year": 96,
           "result": "Loss",
-          "turns": 4,
-          "avgAge": 25.416666666666668,
-          "peakCount": 12,
-          "mvpJob": "scout"
+          "turns": 1,
+          "avgAge": 25.583333333333332,
+          "peakCount": 11,
+          "mvpJob": "なし"
         }
       ]
     }
