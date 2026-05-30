@@ -66,6 +66,16 @@ export const CHRONICLE_CONFIG = {
     /** 各名前プール（Origin × Gender）の最低保証件数 */
     POOL_MIN_SIZE: 150,
   },
+
+  // 6. 上限・物理制約 (Limits)
+  LIMITS: {
+    /**
+     * 旅団全体の最大定員。超過した場合は自動的に弱者・老兵から除名される
+     * （`utils/brigade.ts` の `enforceMaxBrigadeSize` 参照）。
+     * デフォルトモードでは事実上無制限（10000）。極端モードでは50など。
+     */
+    MAX_BRIGADE_SIZE: 10000,
+  },
 } as const;
 
 // ─── 型ヘルパー ──────────────────────────────────────────────────────────────

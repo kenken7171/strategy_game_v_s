@@ -32,5 +32,8 @@ export type {
 export { MAX_UNITS_PER_SQUAD, MAX_ENEMY_ACTION_LOOP } from "./config";
 export { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
 export type { ChronicleConfigType } from "./config/ChronicleConfig";
+export { CHRONICLE_CONFIG_EXTREME } from "./config/ChronicleConfig.extreme";
 export { rollPeakAges, rollChildPeakAges } from "./utils/age";
 export type { PeakAges } from "./utils/age";
+export { enforceMaxBrigadeSize } from "./utils/brigade";
+export type { RetirementResult } from "./utils/brigade";

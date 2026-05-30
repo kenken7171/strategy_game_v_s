@@ -21,8 +21,10 @@ import { Squad } from "../packages/core/src/models/Squad";
 import { BattleSimulator } from "../packages/core/src/BattleSimulator";
 import type { SimulationResult } from "../packages/core/src/BattleSimulator";
 import { NameGenerator, pickRandomOrigin } from "../packages/core/src/data/names";
-import { CHRONICLE_CONFIG } from "../packages/core/src/config/ChronicleConfig";
+import { CHRONICLE_CONFIG as DEFAULT_CONFIG } from "../packages/core/src/config/ChronicleConfig";
+import { CHRONICLE_CONFIG_EXTREME } from "../packages/core/src/config/ChronicleConfig.extreme";
 import { rollPeakAges } from "../packages/core/src/utils/age";
+import { enforceMaxBrigadeSize } from "../packages/core/src/utils/brigade";
 
 // ─── CLI 引数 ────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,9 @@ const argValue = (flag: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const SEED = parseInt(argValue("--seed") ?? "42", 10);
+// --config extreme で「50人定員・超高回転スパルタモード」に切替
+const CONFIG_NAME = argValue("--config") ?? "default";
+const CHRONICLE_CONFIG = CONFIG_NAME === "extreme" ? CHRONICLE_CONFIG_EXTREME : DEFAULT_CONFIG;
 
 // ─── 乱数 ────────────────────────────────────────────────────────────────────
 
@@ -134,20 +139,24 @@ function buildBattleUnit(u: Unit): Unit {
 
 // ─── 初期旅団 ────────────────────────────────────────────────────────────────
 
-const FOUNDING_JOBS: ReadonlyArray<JobType> = [
-  "iron_wall_knight",
-  "tactician",
-  "medic",
-  "sniper",
-  "iron_wall_knight", // 鉄壁を1名増やし前衛厚めの5名構成
+/** 5名構成パターン（デフォルトモード）。鉄壁を1名増やし前衛厚めに */
+const FOUNDING_JOBS_DEFAULT: ReadonlyArray<JobType> = [
+  "iron_wall_knight", "tactician", "medic", "sniper", "iron_wall_knight",
 ];
 
+/**
+ * INITIAL_MEMBER_COUNT 名の創設メンバーを生成する。
+ * 5名以下なら FOUNDING_JOBS_DEFAULT、それ以上ならランダムジョブで埋める。
+ */
 function makeFoundingMembers(): Unit[] {
-  // 創設時は historical 空集合。各メンバーを生成しながら累積して重複回避
   const cumulative = new Set<string>();
   const founders: Unit[] = [];
-  for (const j of FOUNDING_JOBS) {
-    const u = makeRecruit(j, 20, 1, cumulative);
+  const count = CHRONICLE_CONFIG.SCHEDULE.INITIAL_MEMBER_COUNT;
+  for (let i = 0; i < count; i++) {
+    const job = i < FOUNDING_JOBS_DEFAULT.length
+      ? FOUNDING_JOBS_DEFAULT[i]
+      : pick(JOB_LIST);
+    const u = makeRecruit(job, 20, 1, cumulative);
     cumulative.add(u.name);
     founders.push(u);
   }
@@ -163,20 +172,23 @@ function formBattalion(picks: ReadonlyArray<Unit>): {
   averageAge: number;
   peakCount: number;
 } {
+  // FRONT_ROW_COUNT 名を FRONT に、残りを SQUAD_SIZE ごとに REAR-L / REAR-R へ
+  const frontMax = CHRONICLE_CONFIG.BATTLE.FRONT_ROW_COUNT;
+  const squadMax = CHRONICLE_CONFIG.BATTLE.SQUAD_SIZE;
   const front: Unit[] = [];
   const rear: Unit[] = [];
   for (const u of picks) {
-    if (front.length < 3 && u.job && FRONT_JOBS.includes(u.job)) {
+    if (front.length < frontMax && u.job && FRONT_JOBS.includes(u.job)) {
       front.push(u);
     } else {
       rear.push(u);
     }
   }
-  // FRONT が3枠埋まらなければ後衛から繰り上げ
-  while (front.length < 3 && rear.length > 0) front.push(rear.shift()!);
+  // FRONT が定員に満たなければ後衛から繰り上げ
+  while (front.length < frontMax && rear.length > 0) front.push(rear.shift()!);
 
-  const rearL = rear.slice(0, 3);
-  const rearR = rear.slice(3, 6);
+  const rearL = rear.slice(0, squadMax);
+  const rearR = rear.slice(squadMax, squadMax * 2);
 
   const squads = [
     new Squad("FRONT",  front.map(buildBattleUnit)),
@@ -311,8 +323,11 @@ const battleRng = mulberry32(SEED + 1); // 戦闘用 RNG（別シード）
 console.log("╔══════════════════════════════════════════════════════════╗");
 console.log("║       GrandChronicle — 旅団100年変遷シミュレーター       ║");
 console.log("╚══════════════════════════════════════════════════════════╝");
+console.log(`  Config       : ${CONFIG_NAME}`);
 console.log(`  RNG seed     : ${SEED}`);
-console.log(`  Founding     : ${FOUNDING_JOBS.length}名（20歳・各ジョブ＋鉄壁追加）`);
+console.log(`  Founding     : ${CHRONICLE_CONFIG.SCHEDULE.INITIAL_MEMBER_COUNT}名（20歳）`);
+console.log(`  Max brigade  : ${CHRONICLE_CONFIG.LIMITS.MAX_BRIGADE_SIZE}名（定員）`);
+console.log(`  Battle every : ${CHRONICLE_CONFIG.SCHEDULE.BATTLE_INTERVAL}年・大隊${CHRONICLE_CONFIG.SCHEDULE.BATTALION_SIZE}名`);
 console.log("");
 
 let brigade = new Brigade(makeFoundingMembers());
@@ -348,6 +363,13 @@ for (let year = 1; year <= TOTAL_YEARS; year++) {
   const { brigade: pruned, removed } = removeOldestDecliningUnit(brigade);
   brigade = pruned;
   if (removed) retiresInWindow++;
+
+  // 3-b) 定員管理: MAX_BRIGADE_SIZE を超過していたら自動リストラ
+  const limitResult = enforceMaxBrigadeSize(
+    brigade, CHRONICLE_CONFIG.LIMITS.MAX_BRIGADE_SIZE
+  );
+  brigade = limitResult.brigade;
+  retiresInWindow += limitResult.retired.length;
 
   // 4) BATTLE_INTERVAL 年ごとに試練戦
   if (year % BATTLE_INTERVAL === 0) {
