@@ -171,20 +171,26 @@ function runOne(seed: number): RunResult {
   }
 
   /**
-   * 試練の敵を year に応じてスケーリング生成する。
-   * CHRONICLE_CONFIG_EXTREME.ENEMY_SCALING で HP/ATK/SPD を年率上昇させる。
+   * 試練の敵を year に応じてスケーリング生成（±15% 乱数化）。
+   * instructions.md B-3: 固定値計算を廃止し各個体ごとに揺らぎ。
    */
   function makeTrialEnemy(year: number): Squad[] {
     const sc = CFG.ENEMY_SCALING;
-    const hp    = Math.round(sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR);
-    const atk   = Math.round(sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR);
-    const speed = Math.round(sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR);
-    const enemyUnit = (i: number): Unit => new Unit({
-      id: `enemy-${i}`, name: `試練の兵${i + 1}`, job: null,
-      age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
-      baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
-      maxHp: hp, hp, speed, frontAttack: atk, rearAttack: atk,
-    });
+    const baseHp    = sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR;
+    const baseAtk   = sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR;
+    const baseSpeed = sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR;
+    const jitter = () => 0.85 + battleRng() * 0.30; // ±15%
+    const enemyUnit = (i: number): Unit => {
+      const hp    = Math.max(1, Math.round(baseHp    * jitter()));
+      const atk   = Math.max(1, Math.round(baseAtk   * jitter()));
+      const speed = Math.max(1, Math.round(baseSpeed * jitter()));
+      return new Unit({
+        id: `enemy-${i}`, name: `試練の兵${i + 1}`, job: null,
+        age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
+        baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
+        maxHp: hp, hp, speed, frontAttack: atk, rearAttack: atk,
+      });
+    };
     const units = Array.from({ length: 10 }, (_, i) => enemyUnit(i));
     return [
       new Squad("E1", units.slice(0, 3)),

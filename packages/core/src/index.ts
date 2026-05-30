@@ -37,3 +37,19 @@ export { rollPeakAges, rollChildPeakAges } from "./utils/age";
 export type { PeakAges } from "./utils/age";
 export { enforceMaxBrigadeSize } from "./utils/brigade";
 export type { RetirementResult } from "./utils/brigade";
+// 人事フェーズ API（手動介入用）
+export {
+  getPendingDecisions,
+  acceptRecruit,
+  dismissUnit,
+  applyDecisions,
+} from "./services/HumanDecisionService";
+export type {
+  RetirementReason,
+  RetirementCandidate,
+  RecruitCandidate,
+  PendingDecisions,
+  DismissResult,
+  HumanDecisions,
+  DecisionsApplied,
+} from "./services/HumanDecisionService";

@@ -33,8 +33,11 @@ export const CHRONICLE_CONFIG_EXTREME = {
     BATTLE_INTERVAL: 1,
     /** 初期メンバー25名 */
     INITIAL_MEMBER_COUNT: 25,
-    /** 大隊枠12名（4×3分隊） */
-    BATTALION_SIZE: 12,
+    /**
+     * 大隊枠9名（3×3分隊）。instructions.md の絶対ルールにより、
+     * 編成のジレンマを強化するため12→9に削減。
+     */
+    BATTALION_SIZE: 9,
   },
   LINEAGE: {
     /** 2戦同分隊で結婚圏内（35×2=70） */
@@ -49,10 +52,10 @@ export const CHRONICLE_CONFIG_EXTREME = {
   },
   BATTLE: {
     MAX_TURNS: 30,
-    /** 1分隊4名 */
-    SQUAD_SIZE: 4,
-    /** 前衛枠4名 */
-    FRONT_ROW_COUNT: 4,
+    /** 1分隊3名（instructions.md 絶対ルール: 3×3 構成） */
+    SQUAD_SIZE: 3,
+    /** 前衛枠3名（instructions.md 絶対ルール: 3×3 構成） */
+    FRONT_ROW_COUNT: 3,
   },
   NAMING: {
     POOL_MIN_SIZE: 150,
@@ -63,15 +66,24 @@ export const CHRONICLE_CONFIG_EXTREME = {
   },
   /**
    * 試練の敵の年代スケーリング。
-   * 計算式: stat = BASE_xxx + (year * xxx_GAIN_PER_YEAR)
-   * 例: Y100 では HP=150+500=650, ATK=30+60=90, SPD=100+150=250
+   * 計算式: BASE + year × GAIN_PER_YEAR を基準にし、
+   * makeTrialEnemy で個体ごとに ±15% の乱数ぶれを掛ける（instructions.md B-3 ルール）。
+   *
+   * 例: Y100 の基準値 HP=650, ATK=90, SPD=160
+   *     → 個体差で 552〜748 / 76〜103 / 136〜184 にランダム化される
    */
   ENEMY_SCALING: {
     BASE_HP: 150,
     BASE_ATTACK: 30,
-    BASE_SPEED: 100,            // 敵の初期スピード（味方の最速 scout=60 を既に超える）
-    HP_GAIN_PER_YEAR: 5,        // 100年で +500 → HP650
-    ATTACK_GAIN_PER_YEAR: 0.6,  // 100年で +60 → ATK90
-    SPEED_GAIN_PER_YEAR: 1.5,   // 100年で +150 → SPD250（味方の手数を奪う）
+    BASE_SPEED: 100,
+    HP_GAIN_PER_YEAR: 5,        // Y100: +500 → 基準HP650
+    ATTACK_GAIN_PER_YEAR: 0.6,  // Y100: +60  → 基準ATK90
+    /**
+     * instructions.md 絶対ルールにより 1.5 → 0.6 に緩和。
+     * Y100 で基準 SPD=160。味方 scout(60) × 全盛期 × 旗手(+40)
+     * × 戦術官(+20) = 120 → 血統素体値ボーナス・編成シナジー次第で
+     * 先制を狙える「熱い速度調整」へデチューン。
+     */
+    SPEED_GAIN_PER_YEAR: 0.6,
   },
 } as const satisfies ChronicleConfigType;

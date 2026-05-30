@@ -7,10 +7,10 @@ import { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
 
 /**
  * @deprecated CHRONICLE_CONFIG.BATTLE.SQUAD_SIZE を参照すること。
- * Squad コンストラクタの上限チェック用に大きめの値（10）に設定している。
- * 各 Config の SQUAD_SIZE はシミュレーション側の編成ロジックで使う。
+ * instructions.md の絶対ルール（3×3 構成）により、Squad コンストラクタ
+ * の上限チェックも 3 で運用する。default / extreme どちらも SQUAD_SIZE=3。
  */
-export const MAX_UNITS_PER_SQUAD: number = 10;
+export const MAX_UNITS_PER_SQUAD: number = CHRONICLE_CONFIG.BATTLE.SQUAD_SIZE;
 
 /** 敵アクションループの最大長（JSON設定由来、CHRONICLE_CONFIG 管理外） */
 export const MAX_ENEMY_ACTION_LOOP: number = gameSettings.max_enemy_action_loop;

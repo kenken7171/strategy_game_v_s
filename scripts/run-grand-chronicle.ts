@@ -208,25 +208,30 @@ function formBattalion(picks: ReadonlyArray<Unit>): {
 // ─── 強敵生成（攻撃力30 / ヒット数10） ────────────────────────────────────────
 
 /**
- * 試練の敵を生成する。year に応じて HP/攻撃/スピードがスケーリングする
- * （CHRONICLE_CONFIG.ENEMY_SCALING 参照）。
+ * 試練の敵を生成する。year に応じた基準ステータスに、各個体ごとに
+ * ±15% のランダム振れ幅を掛ける（instructions.md B-3 ルール）。
  *
  * 算出式:
- *   HP    = BASE_HP     + year * HP_GAIN_PER_YEAR
- *   ATK   = BASE_ATTACK + year * ATTACK_GAIN_PER_YEAR
- *   SPD   = BASE_SPEED  + year * SPEED_GAIN_PER_YEAR
+ *   base_stat = BASE + year * GAIN_PER_YEAR
+ *   actual    = round(base_stat * (0.85 + rng() * 0.30))
  *
- * スピードが上がると BattleManager のイニシアチブ順で敵が味方より先に
- * 行動するため、年代が進むほど「敵が先制し味方の手数を奪う」状態になる。
+ * 10体それぞれ独立にロールするため、同じ戦闘内でも「弱い個体・強い個体」
+ * が混在する。これにより固定値の予定調和を破壊し、ローグライク的な
+ * 「一度きりの賽の目」を戦闘にも導入する。
  */
-function makeTrialEnemy(year: number): Squad[] {
+function makeTrialEnemy(year: number, rng: () => number): Squad[] {
   const sc = CHRONICLE_CONFIG.ENEMY_SCALING;
-  const hp    = Math.round(sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR);
-  const atk   = Math.round(sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR);
-  const speed = Math.round(sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR);
+  const baseHp    = sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR;
+  const baseAtk   = sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR;
+  const baseSpeed = sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR;
+  // ±15% 乱数（0.85 .. 1.15）
+  const jitter = () => 0.85 + rng() * 0.30;
 
-  const enemyUnit = (i: number): Unit =>
-    new Unit({
+  const enemyUnit = (i: number): Unit => {
+    const hp    = Math.max(1, Math.round(baseHp    * jitter()));
+    const atk   = Math.max(1, Math.round(baseAtk   * jitter()));
+    const speed = Math.max(1, Math.round(baseSpeed * jitter()));
+    return new Unit({
       id: `enemy-${i}`,
       name: `試練の兵${i + 1}`,
       job: null,
@@ -236,6 +241,7 @@ function makeTrialEnemy(year: number): Squad[] {
       speed,
       frontAttack: atk, rearAttack: atk,
     });
+  };
 
   const units = Array.from({ length: 10 }, (_, i) => enemyUnit(i));
   return [
@@ -276,7 +282,8 @@ function runTrialBattle(
 ): { summary: BattleSummary; squadmatePairs: ReadonlyArray<readonly [string, string]> } {
   const picks = brigade.selectBattalion(CHRONICLE_CONFIG.SCHEDULE.BATTALION_SIZE);
   const { squads, averageAge, peakCount } = formBattalion(picks);
-  const enemy = makeTrialEnemy(year);
+  // ±15% 乱数を適用するため battleRng を渡す
+  const enemy = makeTrialEnemy(year, rng);
 
   const sim = new BattleSimulator(squads, enemy, {
     maxTurns: CHRONICLE_CONFIG.BATTLE.MAX_TURNS,
@@ -378,12 +385,19 @@ for (let year = 1; year <= TOTAL_YEARS; year++) {
   brigade = pruned;
   if (removed) retiresInWindow++;
 
-  // 3-b) 定員管理: MAX_BRIGADE_SIZE を超過していたら自動リストラ
-  const limitResult = enforceMaxBrigadeSize(
-    brigade, CHRONICLE_CONFIG.LIMITS.MAX_BRIGADE_SIZE
-  );
-  brigade = limitResult.brigade;
-  retiresInWindow += limitResult.retired.length;
+  // 3-b) ★自動リストラを本番ループから凍結（instructions.md B-4 ルール）
+  // 人事判断はプレイヤーの手動選択に委ねる仕様。
+  // 過去の自動運用ロジックは下記のコメントとして残置:
+  //
+  //   const limitResult = enforceMaxBrigadeSize(
+  //     brigade, CHRONICLE_CONFIG.LIMITS.MAX_BRIGADE_SIZE
+  //   );
+  //   brigade = limitResult.brigade;
+  //   retiresInWindow += limitResult.retired.length;
+  //
+  // 代替: フロントから HumanDecisionService.acceptRecruit / dismissUnit を
+  // 通じて手動でユニットを採用・除名する。本ループは「定員超過の事実」を
+  // そのまま受け入れ、定員管理しない（人事フェーズが未実装の現状）。
 
   // 4) BATTLE_INTERVAL 年ごとに試練戦
   if (year % BATTLE_INTERVAL === 0) {
