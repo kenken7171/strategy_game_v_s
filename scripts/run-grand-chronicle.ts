@@ -247,7 +247,7 @@ function runTrialBattle(
   joinsInWindow: number,
   retiresInWindow: number,
   rng: () => number
-): BattleSummary {
+): { summary: BattleSummary; squadmatePairs: ReadonlyArray<readonly [string, string]> } {
   const picks = brigade.selectBattalion(CHRONICLE_CONFIG.SCHEDULE.BATTALION_SIZE);
   const { squads, averageAge, peakCount } = formBattalion(picks);
   const enemy = makeTrialEnemy();
@@ -260,16 +260,21 @@ function runTrialBattle(
   const result = sim.run();
 
   return {
-    year,
-    result: result.winner === "Allies" ? "Win" : "Loss",
-    turns: result.turns,
-    averageAge,
-    peakCount,
-    battalionSize: picks.length,
-    mvpJob: determineMvp(result.statistics),
-    killCount: result.statistics.killCount,
-    joinsInWindow,
-    retiresInWindow,
+    summary: {
+      year,
+      result: result.winner === "Allies" ? "Win" : "Loss",
+      turns: result.turns,
+      averageAge,
+      peakCount,
+      battalionSize: picks.length,
+      mvpJob: determineMvp(result.statistics),
+      killCount: result.statistics.killCount,
+      joinsInWindow,
+      retiresInWindow,
+    },
+    // ★ バグ修正: 戦闘後に同分隊好感度を蓄積するため、
+    // 呼び出し側で brigade.applyBattleAffinity(squadmatePairs) を呼ぶ必要がある
+    squadmatePairs: result.squadmatePairs,
   };
 }
 
@@ -346,9 +351,17 @@ for (let year = 1; year <= TOTAL_YEARS; year++) {
 
   // 4) BATTLE_INTERVAL 年ごとに試練戦
   if (year % BATTLE_INTERVAL === 0) {
-    const summary = runTrialBattle(brigade, year, joinsInWindow, retiresInWindow, battleRng);
+    const { summary, squadmatePairs } = runTrialBattle(
+      brigade, year, joinsInWindow, retiresInWindow, battleRng
+    );
     summaries.push(summary);
     printBattleSummary(summary);
+    // ★ バグ修正: 戦闘後に同分隊好感度を蓄積する。
+    // これを呼ばないと血統サイクル（結婚→出産→継承）が100年で一度も発火しない。
+    brigade = brigade.applyBattleAffinity(
+      squadmatePairs,
+      CHRONICLE_CONFIG.LINEAGE.AFFINITY_PER_BATTLE
+    );
     joinsInWindow = 0;
     retiresInWindow = 0;
   }
