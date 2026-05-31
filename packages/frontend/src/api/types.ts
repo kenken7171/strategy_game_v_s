@@ -46,7 +46,15 @@ export interface EnemyPreviewResponse {
 }
 
 // /api/guild/decisions
-export interface RecruitRow {
+export interface BattleStatsFields {
+  maxHp: number;
+  attack: number;        // max(frontAttack, rearAttack)
+  frontAttack: number;
+  rearAttack: number;
+  speed: number;
+  totalRating: number;   // floor(maxHp/5 + attack + speed)
+}
+export interface RecruitRow extends BattleStatsFields {
   id: string;
   name: string;
   job: string | null;
@@ -58,7 +66,7 @@ export interface RecruitRow {
   hasLineage: boolean;
   relatedFamilyIds: string[];
 }
-export interface RetireeRow {
+export interface RetireeRow extends BattleStatsFields {
   id: string;
   name: string;
   job: string | null;
@@ -82,7 +90,7 @@ export interface GuildDecisionsResponse {
 }
 
 // /api/formation/roster
-export interface RosterUnit {
+export interface RosterUnit extends BattleStatsFields {
   id: string;
   name: string;
   job: string | null;

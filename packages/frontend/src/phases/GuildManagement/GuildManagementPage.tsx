@@ -1,17 +1,16 @@
 /**
  * GuildManagementPage — フェーズ2: 人事
  *
- * API:
- *   GET  /api/guild/decisions   採用候補 + 引退候補
- *   POST /api/guild/accept      採用
- *   POST /api/guild/dismiss     解雇
- *
- * 完了条件: overflowCount === 0 && !pending
+ * 拡張（M3）:
+ *   - 全ユニットに HP/ATK/SPD/総合的な強さ（totalRating）を表示
+ *   - ジョブ名を日本語化（formatJob）
+ *   - 引退候補は totalRating 昇順（弱い順）でソート済み API を表示
  */
 import { useCallback, useEffect, useState } from "react";
 import type { PhaseHandle } from "../../game/GameManager";
 import { api } from "../../api/client";
 import type { GuildDecisionsResponse } from "../../api/types";
+import { formatJob } from "../../utils/job";
 
 interface Props {
   year: number;
@@ -29,11 +28,8 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    reload();
-  }, [reload, year]);
+  useEffect(() => { reload(); }, [reload, year]);
 
-  // canProceed: 定員以下 かつ API 通信中でない
   useEffect(() => {
     const canProceed = data ? !pending && data.overflowCount === 0 : false;
     phaseHandle.setCanProceed(canProceed);
@@ -45,7 +41,6 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
     await reload();
     setPending(false);
   };
-
   const onDismiss = async (unitId: string) => {
     setPending(true);
     await api.dismissUnit(unitId);
@@ -55,10 +50,7 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
 
   if (loading || !data) {
     return (
-      <section
-        data-testid="guild-management-page-root"
-        className="guild-management-page"
-      >
+      <section data-testid="guild-management-page-root" className="guild-management-page">
         <div data-testid="common-loading-spinner" className="common-loading-spinner">
           ⏳ 人事情報を読み込み中...
         </div>
@@ -67,17 +59,11 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
   }
 
   return (
-    <section
-      data-testid="guild-management-page-root"
-      className="guild-management-page"
-    >
+    <section data-testid="guild-management-page-root" className="guild-management-page">
       <h2 data-testid="guild-management-page-title">人事フェーズ — Year {year}</h2>
 
       {pending && (
-        <div
-          data-testid="common-loading-spinner"
-          className="common-loading-spinner"
-        >
+        <div data-testid="common-loading-spinner" className="common-loading-spinner">
           ⏳ 処理中...
         </div>
       )}
@@ -92,31 +78,19 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
         </span>
         <span data-testid="guild-overflow-max">/ 定員 {data.maxSize} 名</span>
         {data.overflowCount > 0 && (
-          <strong
-            data-testid="guild-overflow-warning"
-            className="guild-overflow-warning"
-          >
+          <strong data-testid="guild-overflow-warning" className="guild-overflow-warning">
             ⚠ {data.overflowCount} 名超過しています。誰かを解雇してください
           </strong>
         )}
       </div>
 
-      <div
-        data-testid="guild-candidates-section"
-        className="guild-candidates-section"
-      >
+      <div data-testid="guild-candidates-section" className="guild-candidates-section">
         <h3 data-testid="guild-candidates-title">
           志願者・継承者（{data.recruits.length} 名）
         </h3>
-        <ul
-          data-testid="guild-candidates-list"
-          className="guild-candidates-list"
-        >
+        <ul data-testid="guild-candidates-list" className="guild-candidates-list">
           {data.recruits.length === 0 && (
-            <li
-              data-testid="guild-candidates-empty"
-              className="guild-candidates-empty"
-            >
+            <li data-testid="guild-candidates-empty" className="guild-candidates-empty">
               本年の志願者はいません
             </li>
           )}
@@ -128,20 +102,30 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
               data-source={c.source}
               className="guild-candidate-card"
             >
-              <span data-testid={`guild-candidate-name-${c.id}`}>{c.name}</span>
-              <span data-testid={`guild-candidate-job-${c.id}`}>[{c.job ?? "?"}]</span>
+              <span data-testid={`guild-candidate-source-${c.id}`} className="guild-candidate-source-icon">
+                {c.source === "heir" ? "🩸" : "✨"}
+              </span>
+              <span data-testid={`guild-candidate-job-${c.id}`} className="guild-candidate-job">
+                [{formatJob(c.job)}]
+              </span>
+              <span data-testid={`guild-candidate-name-${c.id}`} className="guild-candidate-name">
+                {c.name}
+              </span>
               <span data-testid={`guild-candidate-gender-${c.id}`}>
                 {c.gender === "Male" ? "♂" : "♀"}
               </span>
-              <span data-testid={`guild-candidate-origin-${c.id}`}>
-                {c.origin}
-              </span>
               <span data-testid={`guild-candidate-age-${c.id}`}>{c.age}歳</span>
-              <span data-testid={`guild-candidate-strength-${c.id}`}>
-                STR {c.baseStrength}
+              <span data-testid={`guild-candidate-stats-${c.id}`} className="unit-stats-inline">
+                HP <b data-testid={`guild-candidate-hp-${c.id}`}>{c.maxHp}</b> /
+                ATK <b data-testid={`guild-candidate-atk-${c.id}`}>{c.attack}</b> /
+                SPD <b data-testid={`guild-candidate-spd-${c.id}`}>{c.speed}</b>
               </span>
-              <span data-testid={`guild-candidate-source-${c.id}`}>
-                {c.source === "heir" ? "🩸 継承者" : "✨ 志願者"}
+              <span
+                data-testid={`guild-candidate-total-${c.id}`}
+                className="unit-total-rating"
+                title="総合的な強さ（HP/5 + ATK + SPD）"
+              >
+                総合 {c.totalRating}
               </span>
               <button
                 type="button"
@@ -157,17 +141,11 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
         </ul>
       </div>
 
-      <div
-        data-testid="guild-retirees-section"
-        className="guild-retirees-section"
-      >
+      <div data-testid="guild-retirees-section" className="guild-retirees-section">
         <h3 data-testid="guild-retirees-title">
-          引退候補（弱者・老兵 / {data.retirementCandidates.length} 名）
+          引退候補（総合値の弱い順 / {data.retirementCandidates.length} 名）
         </h3>
-        <ul
-          data-testid="guild-retirees-list"
-          className="guild-retirees-list"
-        >
+        <ul data-testid="guild-retirees-list" className="guild-retirees-list">
           {data.retirementCandidates.map((r) => (
             <li
               key={r.id}
@@ -176,23 +154,33 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
               data-rank={r.strengthRank}
               className="guild-retiree-card"
             >
-              <span data-testid={`guild-retiree-rank-${r.id}`}>
+              <span data-testid={`guild-retiree-rank-${r.id}`} className="guild-retiree-rank">
                 #{r.strengthRank}
               </span>
-              <span data-testid={`guild-retiree-name-${r.id}`}>{r.name}</span>
-              <span data-testid={`guild-retiree-job-${r.id}`}>[{r.job ?? "?"}]</span>
+              <span data-testid={`guild-retiree-job-${r.id}`} className="guild-retiree-job">
+                [{formatJob(r.job)}]
+              </span>
+              <span data-testid={`guild-retiree-name-${r.id}`} className="guild-retiree-name">
+                {r.name}
+              </span>
               <span data-testid={`guild-retiree-gender-${r.id}`}>
                 {r.gender === "Male" ? "♂" : "♀"}
               </span>
               <span data-testid={`guild-retiree-age-${r.id}`}>{r.age}歳</span>
-              <span data-testid={`guild-retiree-strength-${r.id}`}>
-                STR {r.strength}
+              <span data-testid={`guild-retiree-stats-${r.id}`} className="unit-stats-inline">
+                HP <b data-testid={`guild-retiree-hp-${r.id}`}>{r.maxHp}</b> /
+                ATK <b data-testid={`guild-retiree-atk-${r.id}`}>{r.attack}</b> /
+                SPD <b data-testid={`guild-retiree-spd-${r.id}`}>{r.speed}</b>
+              </span>
+              <span
+                data-testid={`guild-retiree-total-${r.id}`}
+                className="unit-total-rating"
+                title="総合的な強さ（HP/5 + ATK + SPD）"
+              >
+                総合 {r.totalRating}
               </span>
               {r.reasons.length > 0 && (
-                <span
-                  data-testid={`guild-retiree-reasons-${r.id}`}
-                  className="guild-retiree-reasons"
-                >
+                <span data-testid={`guild-retiree-reasons-${r.id}`} className="guild-retiree-reasons">
                   [{r.reasons.join(", ")}]
                 </span>
               )}

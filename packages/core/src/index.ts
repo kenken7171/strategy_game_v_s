@@ -2,6 +2,12 @@ export { Unit } from "./models/Unit";
 export type { Stats, UnitProps, JobType, Gender, Parents, Origin } from "./models/Unit";
 export { NameGenerator, NAMES, ALL_ORIGINS, TITLES, pickRandomOrigin } from "./data/names";
 export type { NamePool, NameGenerationResult } from "./data/names";
+// ジョブ定義（単一 SoT）と総合強さヘルパー
+export {
+  JOB_DEFAULTS, JOB_JP, formatJob,
+  computeBattleStats, totalRating,
+} from "./data/jobs";
+export type { JobDefaults, BattleStats } from "./data/jobs";
 export { Brigade } from "./models/Brigade";
 export type {
   YearEvent,

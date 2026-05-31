@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import type { PhaseHandle } from "../../game/GameManager";
 import { api } from "../../api/client";
 import type { BattleRunResponse, BattlePlacement } from "../../api/types";
+import { formatJob } from "../../utils/job";
 
 interface Props {
   year: number;
@@ -248,7 +249,7 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
                         {s.name}
                       </span>
                       <span data-testid={`battle-survivor-job-${i}`}>
-                        [{s.job ?? "?"}]
+                        [{formatJob(s.job)}]
                       </span>
                       <span data-testid={`battle-survivor-hp-${i}`}>
                         HP {s.hp}/{s.maxHp}

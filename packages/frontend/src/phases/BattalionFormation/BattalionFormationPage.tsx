@@ -1,11 +1,12 @@
 /**
- * BattalionFormationPage — フェーズ3: 編成
+ * BattalionFormationPage — フェーズ3: 編成（プルダウン版）
  *
- * API:
- *   GET /api/formation/roster   旅団全員 + 好感度マップ
- *
- * 完了条件: 9マスすべて埋まる
- * UI拡張: 同分隊の未婚男女ペアに好感度に応じてハートマーク表示
+ * UI 刷新 (M3):
+ *   - 3×3 マスを <select> プルダウン化
+ *   - Option 表記: 「[日本語ジョブ] 名前 (年齢) - HP/ATK/SPD [総合: XX]」
+ *   - 他マスに配置済みのユニットは Option から除外（重複ガード）
+ *   - ジョブ名は formatJob で日本語化
+ *   - ベンチ表示も総合的な強さでソート
  */
 import { useEffect, useMemo, useState } from "react";
 import type { PhaseHandle } from "../../game/GameManager";
@@ -16,6 +17,7 @@ import type {
   BattlePlacement,
   SquadRow,
 } from "../../api/types";
+import { formatJob } from "../../utils/job";
 
 interface Props {
   year: number;
@@ -28,6 +30,7 @@ const ROW_LABEL: Record<SquadRow, string> = {
   "REAR-L": "後衛-左",
   "REAR-R": "後衛-右",
 };
+const COLS = [0, 1, 2] as const;
 
 interface GridCell {
   row: SquadRow;
@@ -36,19 +39,18 @@ interface GridCell {
 }
 
 const EMPTY_GRID: GridCell[] = ROWS.flatMap((row) =>
-  [0, 1, 2].map((col) => ({ row, col, unitId: null as string | null }))
+  COLS.map((col) => ({ row, col, unitId: null as string | null }))
 );
 
 // 好感度 → ハートアイコン
 function affinityHeart(value: number): string {
-  if (value >= 100) return "💖"; // 結婚閾値
+  if (value >= 100) return "💖";
   if (value >= 70) return "❤️";
   if (value >= 35) return "🩷";
   if (value > 0) return "💗";
   return "";
 }
 
-// 同分隊の未婚男女ペアを抽出して、最大好感度のハートを返す
 function detectSquadmateHearts(
   grid: GridCell[],
   units: RosterUnit[],
@@ -56,7 +58,6 @@ function detectSquadmateHearts(
 ): Map<string, { partnerName: string; affinity: number; heart: string; married: boolean }> {
   const result = new Map<string, { partnerName: string; affinity: number; heart: string; married: boolean }>();
   const unitById = new Map(units.map((u) => [u.id, u]));
-
   for (const row of ROWS) {
     const cells = grid.filter((c) => c.row === row && c.unitId !== null);
     for (let i = 0; i < cells.length; i++) {
@@ -65,30 +66,28 @@ function detectSquadmateHearts(
         const b = unitById.get(cells[j].unitId!);
         if (!a || !b) continue;
         if (a.gender === b.gender) continue;
-        // 既に既婚（互いに spouseId）かチェック
         const married = a.spouseId === b.id && b.spouseId === a.id;
         const affAB = affinityMap[a.id]?.[b.id] ?? 0;
         const affBA = affinityMap[b.id]?.[a.id] ?? 0;
-        const aff = Math.min(affAB, affBA); // 互いに必要なので min
+        const aff = Math.min(affAB, affBA);
         if (aff === 0 && !married) continue;
         const heart = married ? "❤️‍🔥" : affinityHeart(aff);
         if (!heart) continue;
-        // 双方の cell に対して登録（より高い好感度で上書き）
         for (const [self, partner] of [[a, b], [b, a]] as const) {
           const prev = result.get(self.id);
           if (!prev || prev.affinity < aff) {
-            result.set(self.id, {
-              partnerName: partner.name,
-              affinity: aff,
-              heart,
-              married,
-            });
+            result.set(self.id, { partnerName: partner.name, affinity: aff, heart, married });
           }
         }
       }
     }
   }
   return result;
+}
+
+/** Option ラベル: 「[ジョブ] 名前 (年齢) - HP/ATK/SPD [総合: XX]」 */
+function formatOptionLabel(u: RosterUnit): string {
+  return `[${formatJob(u.job)}] ${u.name} (${u.age}) - HP${u.maxHp}/ATK${u.attack}/SPD${u.speed} [総合: ${u.totalRating}]`;
 }
 
 export function BattalionFormationPage({ year, phaseHandle }: Props) {
@@ -101,7 +100,6 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
       setLoading(true);
       const r = await api.getRoster();
       setRoster(r);
-      // 旅団が変わったらグリッドリセット
       setGrid(EMPTY_GRID);
       setLoading(false);
     })();
@@ -111,7 +109,6 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
     () => new Set(grid.map((c) => c.unitId).filter((id): id is string => id !== null)),
     [grid]
   );
-
   const filledCount = useMemo(
     () => grid.filter((c) => c.unitId !== null).length,
     [grid]
@@ -122,40 +119,30 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
     phaseHandle.setCanProceed(canProceed);
   }, [canProceed, phaseHandle]);
 
-  // 好感度ハート判定
   const heartMap = useMemo(() => {
     if (!roster) return new Map();
     return detectSquadmateHearts(grid, roster.units, roster.affinityMap);
   }, [grid, roster]);
 
-  // BattalionFormationPage 内部で配置中の placements を保持し、battle.run に送る
   useEffect(() => {
     if (canProceed) {
       const placements: BattlePlacement[] = grid
         .filter((c) => c.unitId !== null)
         .map((c) => ({ row: c.row, col: c.col, unitId: c.unitId! }));
-      // セッションストレージに格納（BattleSimulationPage が拾う）
       sessionStorage.setItem("formation:placements", JSON.stringify(placements));
     }
   }, [canProceed, grid]);
 
-  const placeUnit = (row: SquadRow, col: number, unitId: string) => {
+  const handleSelectChange = (row: SquadRow, col: number, value: string) => {
+    const unitId = value === "" ? null : value;
     setGrid((prev) =>
       prev.map((c) => (c.row === row && c.col === col ? { ...c, unitId } : c))
-    );
-  };
-  const clearCell = (row: SquadRow, col: number) => {
-    setGrid((prev) =>
-      prev.map((c) => (c.row === row && c.col === col ? { ...c, unitId: null } : c))
     );
   };
 
   if (loading || !roster) {
     return (
-      <section
-        data-testid="battalion-formation-page-root"
-        className="battalion-formation-page"
-      >
+      <section data-testid="battalion-formation-page-root" className="battalion-formation-page">
         <div data-testid="common-loading-spinner" className="common-loading-spinner">
           ⏳ 旅団情報を読み込み中...
         </div>
@@ -164,17 +151,14 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
   }
 
   const unitsById = new Map(roster.units.map((u) => [u.id, u]));
-  // 引退済み以外を編成候補に
-  const available = roster.units.filter((u) => !u.isRetired);
+  // 編成候補（未引退）を totalRating 降順でソート
+  const available = roster.units
+    .filter((u) => !u.isRetired)
+    .sort((a, b) => b.totalRating - a.totalRating);
 
   return (
-    <section
-      data-testid="battalion-formation-page-root"
-      className="battalion-formation-page"
-    >
-      <h2 data-testid="battalion-formation-page-title">
-        編成フェーズ — Year {year}
-      </h2>
+    <section data-testid="battalion-formation-page-root" className="battalion-formation-page">
+      <h2 data-testid="battalion-formation-page-title">編成フェーズ — Year {year}</h2>
 
       <div
         data-testid="formation-progress"
@@ -206,30 +190,71 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
               >
                 {ROW_LABEL[row]}
               </th>
-              {[0, 1, 2].map((col) => {
+              {COLS.map((col) => {
                 const cell = grid.find((c) => c.row === row && c.col === col)!;
-                const unit = cell.unitId ? unitsById.get(cell.unitId) : null;
-                const heart = unit ? heartMap.get(unit.id) : null;
+                const currentUnit = cell.unitId ? unitsById.get(cell.unitId) ?? null : null;
+                const heart = currentUnit ? heartMap.get(currentUnit.id) : null;
+                // このセルで選択可能な候補 = 未配置 OR このセル自身に配置中
+                const optionable = available.filter(
+                  (u) => !placedIds.has(u.id) || u.id === cell.unitId
+                );
                 return (
                   <td
                     key={col}
                     data-testid={`formation-grid-cell-${row}-${col}`}
-                    data-filled={!!unit}
+                    data-filled={!!currentUnit}
                     className="formation-grid-cell"
                   >
-                    {unit ? (
+                    <select
+                      data-testid={`formation-select-cell-${row}-${col}`}
+                      value={cell.unitId ?? ""}
+                      onChange={(e) => handleSelectChange(row, col, e.target.value)}
+                      className="formation-cell-select"
+                    >
+                      <option
+                        data-testid={`formation-select-option-empty-${row}-${col}`}
+                        value=""
+                      >
+                        ─ 空きスロット ─
+                      </option>
+                      {optionable.map((u) => (
+                        <option
+                          key={u.id}
+                          data-testid={`formation-select-option-${row}-${col}-${u.id}`}
+                          value={u.id}
+                        >
+                          {formatOptionLabel(u)}
+                        </option>
+                      ))}
+                    </select>
+                    {currentUnit && (
                       <div
                         data-testid={`formation-cell-unit-${row}-${col}`}
                         className="formation-cell-unit"
                       >
-                        <span data-testid={`formation-cell-unit-name-${row}-${col}`}>
-                          {unit.name}
+                        <span
+                          data-testid={`formation-cell-unit-name-${row}-${col}`}
+                          className="formation-cell-unit-name"
+                        >
+                          {currentUnit.name}
                         </span>
-                        <span data-testid={`formation-cell-unit-job-${row}-${col}`}>
-                          [{unit.job ?? "?"}]
+                        <span
+                          data-testid={`formation-cell-unit-job-${row}-${col}`}
+                          className="formation-cell-unit-job"
+                        >
+                          [{formatJob(currentUnit.job)}]
                         </span>
-                        <span data-testid={`formation-cell-unit-strength-${row}-${col}`}>
-                          STR {unit.strength}
+                        <span
+                          data-testid={`formation-cell-unit-stats-${row}-${col}`}
+                          className="formation-cell-unit-stats"
+                        >
+                          HP{currentUnit.maxHp} / ATK{currentUnit.attack} / SPD{currentUnit.speed}
+                        </span>
+                        <span
+                          data-testid={`formation-cell-unit-total-${row}-${col}`}
+                          className="formation-cell-unit-total"
+                        >
+                          総合 {currentUnit.totalRating}
                         </span>
                         {heart && (
                           <span
@@ -240,22 +265,7 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                             {heart.heart}
                           </span>
                         )}
-                        <button
-                          type="button"
-                          data-testid={`formation-cell-remove-button-${row}-${col}`}
-                          onClick={() => clearCell(row, col)}
-                          className="formation-cell-remove-button"
-                        >
-                          ✕
-                        </button>
                       </div>
-                    ) : (
-                      <span
-                        data-testid={`formation-cell-empty-${row}-${col}`}
-                        className="formation-cell-empty"
-                      >
-                        空き
-                      </span>
                     )}
                   </td>
                 );
@@ -265,17 +275,11 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
         </tbody>
       </table>
 
-      <div
-        data-testid="formation-roster-section"
-        className="formation-roster-section"
-      >
+      <div data-testid="formation-roster-section" className="formation-roster-section">
         <h3 data-testid="formation-roster-title">
-          出撃可能ユニット（{available.length} 名）
+          ベンチ：旅団全員（{available.length} 名 / 総合的な強さ降順）
         </h3>
-        <ul
-          data-testid="formation-roster-list"
-          className="formation-roster-list"
-        >
+        <ul data-testid="formation-roster-list" className="formation-roster-list">
           {available.map((u) => {
             const isPlaced = placedIds.has(u.id);
             return (
@@ -286,56 +290,38 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                 data-married={u.isMarried}
                 className="formation-roster-card"
               >
-                <span data-testid={`formation-roster-name-${u.id}`}>
-                  {u.name}
+                <span data-testid={`formation-roster-job-${u.id}`} className="formation-roster-job">
+                  [{formatJob(u.job)}]
                 </span>
-                <span data-testid={`formation-roster-job-${u.id}`}>
-                  [{u.job ?? "?"}]
+                <span data-testid={`formation-roster-name-${u.id}`} className="formation-roster-name">
+                  {u.name}
                 </span>
                 <span data-testid={`formation-roster-gender-${u.id}`}>
                   {u.gender === "Male" ? "♂" : "♀"}
                 </span>
-                <span data-testid={`formation-roster-age-${u.id}`}>
-                  {u.age}歳
+                <span data-testid={`formation-roster-age-${u.id}`}>{u.age}歳</span>
+                <span data-testid={`formation-roster-stats-${u.id}`} className="unit-stats-inline">
+                  HP <b data-testid={`formation-roster-hp-${u.id}`}>{u.maxHp}</b> /
+                  ATK <b data-testid={`formation-roster-atk-${u.id}`}>{u.attack}</b> /
+                  SPD <b data-testid={`formation-roster-spd-${u.id}`}>{u.speed}</b>
                 </span>
-                <span data-testid={`formation-roster-strength-${u.id}`}>
-                  STR {u.strength}
+                <span
+                  data-testid={`formation-roster-total-${u.id}`}
+                  className="unit-total-rating"
+                  title="総合的な強さ（HP/5 + ATK + SPD）"
+                >
+                  総合 {u.totalRating}
                 </span>
                 {u.isMarried && (
-                  <span data-testid={`formation-roster-married-badge-${u.id}`}>
-                    💍
-                  </span>
+                  <span data-testid={`formation-roster-married-badge-${u.id}`}>💍</span>
                 )}
                 {u.parents && (
-                  <span data-testid={`formation-roster-heir-badge-${u.id}`}>
-                    🩸
-                  </span>
+                  <span data-testid={`formation-roster-heir-badge-${u.id}`}>🩸</span>
                 )}
-                {!isPlaced && (
-                  <div
-                    data-testid={`formation-roster-place-targets-${u.id}`}
-                    className="formation-roster-place-targets"
-                  >
-                    {ROWS.map((row) =>
-                      [0, 1, 2].map((col) => {
-                        const filled = grid.find(
-                          (c) => c.row === row && c.col === col
-                        )?.unitId;
-                        if (filled) return null;
-                        return (
-                          <button
-                            key={`${row}-${col}`}
-                            type="button"
-                            data-testid={`formation-place-button-${u.id}-${row}-${col}`}
-                            onClick={() => placeUnit(row, col, u.id)}
-                            className="formation-place-button"
-                          >
-                            → {ROW_LABEL[row]}({col + 1})
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
+                {isPlaced && (
+                  <span data-testid={`formation-roster-placed-badge-${u.id}`} className="formation-roster-placed-badge">
+                    出撃予定
+                  </span>
                 )}
               </li>
             );
@@ -344,7 +330,7 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
       </div>
 
       <p data-testid="formation-hint" className="phase-hint">
-        9マスを埋めると「次へ：戦闘」へ進めます。同分隊の男女ペアにハート ❤️ が灯ります。
+        各マスのプルダウンから9名を編成してください。同分隊の男女ペアにハート ❤️ が灯ります。
       </p>
     </section>
   );
