@@ -96,5 +96,51 @@ export const CHRONICLE_CONFIG = {
 
 // ─── 型ヘルパー ──────────────────────────────────────────────────────────────
 
-/** CHRONICLE_CONFIG の型（`as const` により全プロパティが readonly） */
-export type ChronicleConfigType = typeof CHRONICLE_CONFIG;
+/**
+ * CHRONICLE_CONFIG が満たすべき構造。
+ * 各 Config (default / extreme / ...) はこの型を satisfy する。
+ * リテラル型に固定すると互換性が壊れるため、各値は number で表現する。
+ */
+export interface ChronicleConfigType {
+  readonly TIME: {
+    readonly BASE_PEAK_START_AGE: number;
+    readonly BASE_PEAK_END_AGE: number;
+    readonly INDUCTION_AGE: number;
+    readonly DECAY_RATE: number;
+    readonly MIN_STAT_VALUE: number;
+  };
+  readonly SCHEDULE: {
+    readonly CHRONICLE_YEARS: number;
+    readonly RECRUIT_INTERVAL: number;
+    readonly RECRUIT_COUNT: number;
+    readonly BATTLE_INTERVAL: number;
+    readonly INITIAL_MEMBER_COUNT: number;
+    readonly BATTALION_SIZE: number;
+  };
+  readonly LINEAGE: {
+    readonly AFFINITY_PER_BATTLE: number;
+    readonly MARRIAGE_THRESHOLD: number;
+    readonly MARRIAGE_PROBABILITY: number;
+    readonly BIRTH_PROBABILITY: number;
+    readonly CULTURE_INHERIT_PROB: number;
+  };
+  readonly BATTLE: {
+    readonly MAX_TURNS: number;
+    readonly SQUAD_SIZE: number;
+    readonly FRONT_ROW_COUNT: number;
+  };
+  readonly NAMING: {
+    readonly POOL_MIN_SIZE: number;
+  };
+  readonly LIMITS: {
+    readonly MAX_BRIGADE_SIZE: number;
+  };
+  readonly ENEMY_SCALING: {
+    readonly BASE_HP: number;
+    readonly BASE_ATTACK: number;
+    readonly BASE_SPEED: number;
+    readonly HP_GAIN_PER_YEAR: number;
+    readonly ATTACK_GAIN_PER_YEAR: number;
+    readonly SPEED_GAIN_PER_YEAR: number;
+  };
+}

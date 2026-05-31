@@ -30,7 +30,7 @@ export interface UnitProps {
   readonly id: string;
   readonly name: string;
   readonly age: number;
-  readonly birthYear?: number;
+  readonly birthYear?: number | null;
   readonly peakStartAge: number;
   readonly peakEndAge: number;
   readonly maxAge: number;

@@ -116,6 +116,25 @@ export interface SurvivorRecord {
   readonly maxHp: number;
 }
 
+/**
+ * UI ステップ再生用に、各ターンの要点を構造化したログ
+ */
+export interface TurnLog {
+  readonly turn: number;
+  /** 表示用初期化（"Turn 3" 等） */
+  readonly headerText: string;
+  /** イニシアチブ順の表示文字列 */
+  readonly initiativeText: string;
+  /** 敵アクションの説明（不発時は "(行動なし)"） */
+  readonly enemyActionText: string;
+  /** ally 各分隊の攻撃ログ（行ごと） */
+  readonly allyAttackLines: ReadonlyArray<string>;
+  /** 回復ログ */
+  readonly healLines: ReadonlyArray<string>;
+  /** このターンで勝利確定したか */
+  readonly victory: boolean;
+}
+
 export interface SimulationResult {
   readonly winner: "Allies" | "Enemies" | "Draw";
   readonly turns: number;
@@ -128,6 +147,10 @@ export interface SimulationResult {
    * 各ペアは [a, b] の片方向のみ（[b, a] は重複しない）。
    */
   readonly squadmatePairs: ReadonlyArray<readonly [string, string]>;
+  /**
+   * UI ステップ再生用のターン別ログ。各ターンの要点を1配列に格納。
+   */
+  readonly turnLogs: ReadonlyArray<TurnLog>;
 }
 
 // ─── BattleSimulator ─────────────────────────────────────────────────────────
@@ -275,6 +298,52 @@ export class BattleSimulator {
     }
   }
 
+  // ── ターンログ収集（UI ステップ再生用） ─────────────────────────────────
+
+  private buildTurnLog(
+    turnNum: number,
+    result: IntegratedTurnResult,
+    actionUsed: EnemyAction
+  ): TurnLog {
+    const initiativeText = result.initiativeOrder
+      .map((e) => (e.type === "enemy" ? "Enemy" : `Ally[${e.id}]`) + `(spd${e.speed.toFixed(1)})`)
+      .join(" → ");
+
+    let enemyActionText = "(行動なし)";
+    if (actionUsed.targetSlotIds === "NONE") {
+      enemyActionText = "(行動なし)";
+    } else if (result.enemyActionResult) {
+      const hitSummary = Object.entries(result.enemyActionResult.perSlot)
+        .filter(([, s]) => s.hits > 0)
+        .map(([slot, s]) => `${slot}×${s.hits} ${s.damageTaken}dmg${s.defeated ? " [壊滅]" : ""}`)
+        .join(", ");
+      enemyActionText = `${actionUsed.name} ${actionUsed.damage}dmg/hit → ${hitSummary || "命中なし"}`;
+    }
+
+    const allyAttackLines: string[] = [];
+    for (const off of result.squadOffenseResults) {
+      if (off.attackLogs.length === 0) continue;
+      const logStr = off.attackLogs
+        .map((l) => `${l.unitName}${l.isDoubleAttack ? "×2" : ""} ${l.damageDealt}dmg`)
+        .join(" | ");
+      allyAttackLines.push(`Ally[${off.squadId}]: ${logStr} (計${off.totalDamage})`);
+    }
+
+    const healLines = result.healLogs.map(
+      (h) => `Heal: Squad[${h.squadId}] +${h.healAmount}HP`
+    );
+
+    return {
+      turn: turnNum,
+      headerText: `Turn ${turnNum}`,
+      initiativeText,
+      enemyActionText,
+      allyAttackLines,
+      healLines,
+      victory: result.victory,
+    };
+  }
+
   // ── main loop ──────────────────────────────────────────────────────────────
 
   run(): SimulationResult {
@@ -286,6 +355,7 @@ export class BattleSimulator {
 
     let winner: "Allies" | "Enemies" | "Draw" = "Draw";
     let totalTurns = 0;
+    const turnLogs: TurnLog[] = [];
 
     while (totalTurns < this.maxTurns) {
       if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
@@ -302,6 +372,7 @@ export class BattleSimulator {
 
       this.logTurn(totalTurns, result, actionUsed);
       this.collectStats(result, actionUsed, aliveCountBySquad);
+      turnLogs.push(this.buildTurnLog(totalTurns, result, actionUsed));
 
       if (result.victory)          { winner = "Allies";  break; }
       if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
@@ -344,6 +415,7 @@ export class BattleSimulator {
       allySurvivors,
       enemySurvivors,
       squadmatePairs,
+      turnLogs,
     };
   }
 }

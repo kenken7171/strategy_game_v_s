@@ -368,3 +368,166 @@ h3 {
   cursor: pointer;
   font-family: inherit;
 }
+
+/* ─── 共通: ローディング・エラー ─────────────────────────────── */
+
+.common-loading-spinner {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.common-error-banner {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #fbeae8;
+  border-left: 4px solid var(--warning);
+  color: var(--warning);
+}
+
+/* ─── 編成: ハート ───────────────────────────────────────────── */
+
+.formation-cell-heart {
+  font-size: 1.2rem;
+  margin-top: 2px;
+}
+
+.formation-roster-card[data-married="true"] {
+  background: #f5ede0;
+}
+
+/* ─── 履歴アイテム ───────────────────────────────────────────── */
+
+.chronicle-history-list {
+  list-style: none;
+  padding: 0;
+}
+.chronicle-history-item {
+  padding: 6px 8px;
+  border-bottom: 1px dotted var(--border);
+  display: flex;
+  gap: 8px;
+}
+.chronicle-history-year {
+  font-weight: bold;
+  color: var(--accent);
+  min-width: 48px;
+}
+.chronicle-history-item[data-type="battle"] { background: rgba(139, 58, 58, 0.05); }
+.chronicle-history-item[data-type="marriage"] { background: rgba(217, 100, 150, 0.05); }
+.chronicle-history-item[data-type="birth"] { background: rgba(110, 180, 110, 0.05); }
+.chronicle-history-item[data-type="retire"] { background: rgba(120, 111, 99, 0.08); }
+
+/* ─── Guild バッジ ────────────────────────────────────────── */
+
+.guild-retiree-lineage-badge,
+.guild-retiree-descendant-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  background: #fbe7e3;
+  color: var(--accent);
+}
+.guild-retiree-descendant-badge {
+  background: #e3efdc;
+  color: #4f8347;
+}
+
+/* ─── Battle ログ ─────────────────────────────────────────── */
+
+.battle-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  background: white;
+  padding: 8px;
+  border-radius: 6px;
+}
+.battle-log-row {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+  font-size: 0.85rem;
+}
+.battle-log-row[data-victory="true"] {
+  background: #fff0d9;
+  border-left: 3px solid #d6a345;
+}
+.battle-log-header {
+  font-weight: bold;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.battle-log-initiative {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+.battle-log-enemy-action {
+  color: #b04a4a;
+}
+.battle-log-ally-attack {
+  color: #4a6fb0;
+}
+.battle-log-heal {
+  color: #4a8b66;
+}
+.battle-log-victory-mark {
+  margin-top: 6px;
+  text-align: center;
+  font-weight: bold;
+  color: #b8862c;
+  letter-spacing: 4px;
+}
+
+.battle-result-winner-banner {
+  margin: 16px 0;
+  padding: 24px;
+  text-align: center;
+  font-size: 2.4rem;
+  font-weight: bold;
+  letter-spacing: 6px;
+  border-radius: 8px;
+  background: #2c2620;
+  color: white;
+}
+.battle-result-winner-Allies {
+  background: linear-gradient(135deg, #c49530 0%, #b8862c 100%);
+  color: #2c2620;
+}
+.battle-result-winner-Enemies {
+  background: linear-gradient(135deg, #5a2a2a 0%, #3a1a1a 100%);
+  color: #f5d4c5;
+}
+.battle-result-winner-Draw {
+  background: #7c7268;
+}
+
+.battle-survivors-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.battle-survivor-row {
+  padding: 4px 8px;
+  background: white;
+  border-radius: 4px;
+  display: flex;
+  gap: 8px;
+  border: 1px solid var(--border);
+}
+
+/* Guild candidates empty */
+.guild-candidates-empty {
+  padding: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  background: var(--bg-section);
+  border-radius: 6px;
+}
