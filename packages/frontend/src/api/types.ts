@@ -105,6 +105,7 @@ export interface RosterUnit extends BattleStatsFields {
   parents: { fatherId: string; motherId: string } | null;
   isAlive: boolean;
   isRetired: boolean;
+  descendantCount: number;
 }
 export interface FormationRosterResponse {
   year: number;

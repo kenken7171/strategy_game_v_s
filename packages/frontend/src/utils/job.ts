@@ -17,6 +17,18 @@ const JOB_JP: Record<string, string> = {
   scout: "斥候",
 };
 
+/** UI のセレクト等で順番表示するためのエントリ配列 */
+export const JOB_JP_ENTRIES: ReadonlyArray<readonly [string, string]> = [
+  ["iron_wall_knight", "鉄壁騎士"],
+  ["heavy_infantry",   "重装歩兵"],
+  ["standard_bearer",  "旗手"],
+  ["tactician",        "戦術官"],
+  ["medic",            "衛生兵"],
+  ["sniper",           "狙撃兵"],
+  ["sorcerer",         "呪術師"],
+  ["scout",            "斥候"],
+];
+
 /** ジョブID を日本語ラベルに変換。null/未知ジョブは "—" にフォールバック */
 export function formatJob(job: string | null | undefined): string {
   if (!job) return "—";

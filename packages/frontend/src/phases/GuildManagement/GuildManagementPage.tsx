@@ -6,11 +6,17 @@
  *   - ジョブ名を日本語化（formatJob）
  *   - 引退候補は totalRating 昇順（弱い順）でソート済み API を表示
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PhaseHandle } from "../../game/GameManager";
 import { api } from "../../api/client";
 import type { GuildDecisionsResponse } from "../../api/types";
 import { formatJob } from "../../utils/job";
+import {
+  RosterControls,
+  applyRosterControls,
+  type SortKey,
+  type JobFilter,
+} from "../../components/RosterControls";
 
 interface Props {
   year: number;
@@ -21,6 +27,9 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
   const [data, setData] = useState<GuildDecisionsResponse | null>(null);
   const [pending, setPending] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+  // 引退候補リストのソート・フィルタ
+  const [sort, setSort] = useState<SortKey>("totalAsc");
+  const [jobFilter, setJobFilter] = useState<JobFilter>("all");
 
   const reload = useCallback(async () => {
     const d = await api.getDecisions();
@@ -47,6 +56,17 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
     await reload();
     setPending(false);
   };
+
+  // 引退候補に sort/filter を適用（オリジナルの strengthRank は API 由来で固定）
+  const visibleRetirees = useMemo(() => {
+    if (!data) return [];
+    // descendantCount を含まないので、convert して filter
+    const enriched = data.retirementCandidates.map((r) => ({
+      ...r,
+      descendantCount: r.descendantCount,
+    }));
+    return applyRosterControls(enriched, sort, jobFilter);
+  }, [data, sort, jobFilter]);
 
   if (loading || !data) {
     return (
@@ -143,10 +163,18 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
 
       <div data-testid="guild-retirees-section" className="guild-retirees-section">
         <h3 data-testid="guild-retirees-title">
-          引退候補（総合値の弱い順 / {data.retirementCandidates.length} 名）
+          引退候補（{data.retirementCandidates.length} 名）
         </h3>
+        <RosterControls
+          sort={sort}
+          jobFilter={jobFilter}
+          onSortChange={setSort}
+          onJobFilterChange={setJobFilter}
+          visibleCount={visibleRetirees.length}
+          totalCount={data.retirementCandidates.length}
+        />
         <ul data-testid="guild-retirees-list" className="guild-retirees-list">
-          {data.retirementCandidates.map((r) => (
+          {visibleRetirees.map((r) => (
             <li
               key={r.id}
               data-testid={`guild-retiree-card-${r.id}`}

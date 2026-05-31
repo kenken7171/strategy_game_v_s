@@ -21,6 +21,15 @@ formationRoute.get("/roster", (c) => {
     affinityMap[u.id] = row;
   }
 
+  // 子孫数マップ（このユニットを親に持つ子の数）
+  const descendantCount = new Map<string, number>();
+  for (const u of units) {
+    if (u.parents) {
+      descendantCount.set(u.parents.fatherId, (descendantCount.get(u.parents.fatherId) ?? 0) + 1);
+      descendantCount.set(u.parents.motherId, (descendantCount.get(u.parents.motherId) ?? 0) + 1);
+    }
+  }
+
   return c.json({
     year: session.year,
     units: units.map((u) => {
@@ -40,6 +49,7 @@ formationRoute.get("/roster", (c) => {
         parents: u.parents,
         isAlive: u.isAlive,
         isRetired: u.isRetired,
+        descendantCount: descendantCount.get(u.id) ?? 0,
         // 戦闘ステータス（job 由来 × growthFactor）
         maxHp: stats.maxHp,
         attack: stats.attack,
