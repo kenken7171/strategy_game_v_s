@@ -139,6 +139,88 @@ brigade = enforceMaxBrigadeSize(brigade, MAX_BRIGADE_SIZE).brigade;
 
 ---
 
+## F. フロントエンド実装の絶対ルール（M2 以降必須）
+
+### F-1. 厳格な状態遷移（4フェーズステートマシン）
+
+ゲームループは以下の **4フェーズを不可逆かつ一方通行** で遷移する。
+
+```
+CHRONICLE（年初）
+   ↓
+GUILD_MANAGEMENT（人事）
+   ↓
+BATTALION_FORMATION（編成）
+   ↓
+BATTLE_SIMULATION（戦闘）
+   ↓
+（戦闘完了後、次年の CHRONICLE へ戻る）
+```
+
+#### 必須要件
+
+- **前のフェーズへの後退は禁止**（後悔はゲームの一部）
+- 各フェーズには **完了条件（`canProceed: boolean`）** を必ず定義
+- 完了していない場合、**次へ進むボタンは必ず `disabled`** にする
+  - 例1: GUILD_MANAGEMENT で定員超過のまま → 次へボタン disabled
+  - 例2: BATTALION_FORMATION で 9名未満 / 空スロット残あり → 次へボタン disabled
+  - 例3: API 通信中（pending） → disabled
+  - 例4: BATTLE_SIMULATION の戦闘実行中 → disabled
+- 不正な遷移を **コードレベルでガード**（`nextPhase()` 関数が条件不成立時に no-op）
+
+#### 禁止事項
+
+- `setPhase(任意)` のような自由遷移 API を**作ってはならない**
+- 「戻る」ボタンを設置してはならない（ロールバック禁止）
+- フェーズ順序を変更してはならない（4フェーズ固定）
+
+### F-2. 全コンポーネントへの `data-testid` 強制付与
+
+将来の CI/CD・Playwright 等の自動テスト導入を見据え、**全てのコンポーネントに `data-testid` を付与**する。
+
+#### 付与対象（例外なし）
+
+- **全ての React コンポーネントのルート要素**
+- **全てのボタン**（`<button>`, クリッカブル `<div>` 等）
+- **全ての入力フォーム**（`<input>`, `<select>`, `<textarea>`）
+- **全てのカード**（ユニット表示、敵情報等）
+- **全ての主要データ表示セル**（テーブル行・グリッドセル）
+
+#### 命名規則
+
+```
+data-testid="[フェーズ名または共通]-[要素の種類]-[固有名詞やID]"
+```
+
+| 種別 | 例 |
+|---|---|
+| ページのルート | `chronicle-page-root`, `guild-management-page-root` |
+| ボタン（個別ID付き） | `guild-accept-button-${unitId}`, `guild-dismiss-button-${unitId}` |
+| グリッドセル | `formation-grid-cell-${row}-${col}` |
+| データカード | `unit-card-${unitId}`, `enemy-preview-card-${index}` |
+| フェーズ進行 | `next-phase-button`, `phase-indicator-${phase}` |
+| 共通 UI | `shared-modal-${name}`, `shared-tooltip-${target}` |
+
+#### 禁止事項
+
+- `data-testid` の付け忘れ（PR レビューで必ず指摘）
+- 命名規則違反（キャメルケース禁止、`-` 区切り必須）
+- 動的 ID を含む要素で `${id}` を省略すること（同名複数要素は不可）
+
+### F-3. 状態管理の純粋性
+
+- `packages/core` の純粋関数 API（`HumanDecisionService` 等）を**そのまま呼び出す**
+- フロント独自のビジネスロジック実装は禁止（コアに集約）
+- 状態の変更は必ず `reducer` または `service` 経由（直接 setState で複雑な分岐を書かない）
+
+### F-4. テスト容易性のための DOM 構造
+
+- リスト表示は `<ul>` / `<table>` 等の意味的タグを使う
+- 動的な要素には必ず `key` と `data-testid` 両方を付ける
+- インラインスタイルよりクラス名（`className`）優先（Playwright のセレクタが安定する）
+
+---
+
 ## 3. 既に固定されているルール（変更禁止）
 
 以下は本ドキュメント以前に確立済みのルール。今回の指示書では再確認のみ。
@@ -190,3 +272,4 @@ brigade = enforceMaxBrigadeSize(brigade, MAX_BRIGADE_SIZE).brigade;
 | 日付 | 変更内容 |
 |---|---|
 | 2026-05-30 | 初版作成。大隊9名・敵スピード緩和・乱数化・人事権委譲を固定 |
+| 2026-05-30 | フロントエンド絶対ルール（F-1〜F-4）を追加。4フェーズ厳格遷移と data-testid 強制付与 |

@@ -54,6 +54,53 @@ brigade = applyDecisions(brigade, chosen);
 このトレードオフを消すような自動化（例: 「自動で最強の9名を選出して戦闘」）を実装してはならない。
 血統情報（parents / spouseId）は人事画面で **必ず表示** する。
 
+## F. フロントエンド絶対ルール（M2 以降）
+
+### F-1. 厳格な状態遷移（4フェーズステートマシン）
+
+```
+CHRONICLE → GUILD_MANAGEMENT → BATTALION_FORMATION → BATTLE_SIMULATION → CHRONICLE(次年)
+```
+
+- **不可逆・一方通行**。前フェーズへの後退禁止
+- 各フェーズに `canProceed: boolean` 必須、不成立時は「次へ」ボタンを `disabled`
+- 自由遷移 API (`setPhase(任意)`)・「戻る」ボタンは**作ってはならない**
+- `nextPhase()` は条件不成立時に no-op（コードレベルでガード）
+
+### F-2. 全コンポーネントへの `data-testid` 強制付与
+
+例外なく付与する対象:
+- ページのルート要素
+- 全てのボタン・入力・カード・主要データ表示セル
+
+命名規則: `data-testid="[フェーズ名]-[要素種別]-[ID]"`
+
+```typescript
+// ✅ 正しい例
+<button data-testid={`guild-accept-button-${unitId}`}>採用</button>
+<div data-testid="chronicle-page-root">...</div>
+<td data-testid={`formation-grid-cell-${row}-${col}`}>...</td>
+
+// ❌ 禁止
+<button>採用</button>                       // testid なし
+<div data-testid="chroniclePage">         // キャメルケース
+<button data-testid="accept-button">       // 同名複数要素になりうる（ID 省略）
+```
+
+### F-3. 状態管理の純粋性
+
+- `packages/core` の純粋関数 API（`HumanDecisionService` 等）を直接呼ぶ
+- フロント独自のビジネスロジック実装禁止
+- state 変更は `reducer` または `service` 経由
+
+### F-4. テスト容易性
+
+- 意味的 HTML タグ（`<ul>`, `<table>`）優先
+- 動的要素には `key` と `data-testid` の両方を付ける
+- `className` 優先（インラインスタイル最小化）
+
+---
+
 ## 4. 既存スキルとの関係
 
 | 関連スキル | 内容 |

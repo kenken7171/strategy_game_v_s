@@ -1,0 +1,370 @@
+:root {
+  --bg-page: #f5f3ef;
+  --bg-card: #ffffff;
+  --bg-section: #eee9e0;
+  --text-primary: #2c2620;
+  --text-muted: #786f63;
+  --accent: #8b3a3a;
+  --accent-disabled: #b6a8a0;
+  --border: #d4c7b3;
+  --warning: #c0392b;
+  --past: #9fa890;
+  --current: #8b3a3a;
+  --future: #c5b8a8;
+  font-family: "Hiragino Mincho ProN", "游明朝", serif;
+  color: var(--text-primary);
+  background: var(--bg-page);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* ─── GameManager 全体 ────────────────────────────────────────── */
+
+.game-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.game-manager-header {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.game-manager-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.game-manager-year {
+  font-size: 1.2rem;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.phase-indicator {
+  display: flex;
+  list-style: none;
+  margin: 0 0 0 auto;
+  padding: 0;
+  gap: 8px;
+}
+
+.phase-step {
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+}
+
+.phase-step-current {
+  background: var(--current);
+  color: white;
+  font-weight: bold;
+}
+
+.phase-step-past {
+  background: var(--past);
+  color: white;
+}
+
+.phase-step-future {
+  background: var(--bg-section);
+  color: var(--text-muted);
+}
+
+.game-manager-main {
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 400px;
+}
+
+.game-manager-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.next-phase-button {
+  padding: 12px 24px;
+  font-size: 1rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.next-phase-button:disabled {
+  background: var(--accent-disabled);
+  cursor: not-allowed;
+}
+
+/* ─── 共通 ──────────────────────────────────────────────────── */
+
+.phase-hint {
+  margin-top: 16px;
+  padding: 8px 12px;
+  background: var(--bg-section);
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+h2 {
+  margin-top: 0;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 8px;
+}
+
+h3 {
+  margin-top: 24px;
+  color: var(--accent);
+}
+
+/* ─── Chronicle ─────────────────────────────────────────────── */
+
+.chronicle-summary-card,
+.chronicle-history {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-section);
+  border-radius: 6px;
+}
+
+.chronicle-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.chronicle-stats dt {
+  font-weight: bold;
+  color: var(--text-muted);
+}
+
+.chronicle-history-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.chronicle-history-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ─── Guild Management ──────────────────────────────────────── */
+
+.guild-overflow-summary {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--bg-section);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.guild-overflow-warning {
+  color: var(--warning);
+}
+
+.guild-candidates-list,
+.guild-retirees-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guild-candidate-card,
+.guild-retiree-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.guild-candidate-card[data-accepted="true"],
+.guild-retiree-card[data-dismissed="true"] {
+  border-color: var(--accent);
+  background: #faf0ed;
+}
+
+.guild-accept-button,
+.guild-dismiss-button {
+  margin-left: auto;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  background: white;
+  color: var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.guild-accept-button[data-active="true"],
+.guild-dismiss-button[data-active="true"] {
+  background: var(--accent);
+  color: white;
+}
+
+/* ─── Battalion Formation ───────────────────────────────────── */
+
+.formation-progress {
+  margin: 12px 0;
+  font-weight: bold;
+}
+
+.formation-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+.formation-grid th,
+.formation-grid td {
+  border: 1px solid var(--border);
+  padding: 10px;
+  vertical-align: middle;
+  text-align: center;
+}
+.formation-grid thead th {
+  background: var(--bg-section);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.formation-grid-row-label {
+  background: var(--bg-section);
+  font-weight: bold;
+  width: 100px;
+}
+.formation-grid-cell {
+  min-height: 60px;
+  background: white;
+}
+.formation-grid-cell[data-filled="true"] {
+  background: #f5ede0;
+}
+
+.formation-cell-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+.formation-cell-remove-button {
+  margin-top: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.formation-cell-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.formation-roster-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.formation-roster-card {
+  padding: 8px 12px;
+  background: var(--bg-section);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.formation-roster-card[data-placed="true"] {
+  opacity: 0.4;
+}
+.formation-roster-place-targets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.formation-place-button {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ─── Battle ────────────────────────────────────────────────── */
+
+.battle-enemy-preview-card,
+.battle-start-section,
+.battle-running-section,
+.battle-result-section {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-section);
+  border-radius: 6px;
+}
+.battle-result-section[data-winner="Allies"] {
+  border-left: 4px solid #5ea05c;
+}
+.battle-result-section[data-winner="Enemies"] {
+  border-left: 4px solid var(--warning);
+}
+
+.battle-enemy-preview-stats,
+.battle-result-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.battle-enemy-preview-stats dt,
+.battle-result-stats dt {
+  color: var(--text-muted);
+  font-weight: bold;
+}
+
+.battle-start-button {
+  padding: 12px 24px;
+  font-size: 1.1rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
