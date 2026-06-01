@@ -767,3 +767,173 @@ h3 {
   font-weight: bold;
   margin-left: auto;
 }
+
+/* ─── 戦闘前: 行動順予報 ─────────────────────────────────── */
+
+.battle-preview-timeline-section {
+  margin: 16px 0;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, #fff8e8 0%, #f5ede0 100%);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.battle-preview-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.battle-preview-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: white;
+  border-radius: 24px;
+  border: 2px solid var(--border);
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+.battle-preview-timeline-item[data-kind="enemy"] {
+  border-color: #b04a4a;
+  background: linear-gradient(135deg, #fde8e3 0%, #ffd0c4 100%);
+}
+.battle-preview-timeline-item[data-kind="ally"] {
+  border-color: #4a6fb0;
+  background: linear-gradient(135deg, #e6eef9 0%, #d0dbf0 100%);
+}
+.battle-preview-order {
+  font-weight: bold;
+  color: var(--accent);
+  min-width: 28px;
+}
+.battle-preview-icon {
+  font-size: 1.1rem;
+}
+.battle-preview-label {
+  font-weight: bold;
+}
+.battle-preview-speed {
+  margin-left: auto;
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.battle-preview-enemy-stats {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--bg-section);
+  padding: 6px 12px;
+  border-radius: 4px;
+}
+
+/* ─── 作戦選択UI ──────────────────────────────────── */
+
+.battle-strategy-select-root {
+  margin: 16px 0;
+  padding: 16px 18px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+}
+.battle-strategy-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+.battle-strategy-option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.battle-strategy-option:hover {
+  background: #faf0ed;
+}
+.battle-strategy-option.selected {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, #fff8e8 0%, #faf0ed 100%);
+  box-shadow: 0 0 0 3px rgba(196, 149, 48, 0.25);
+}
+.battle-strategy-label {
+  font-weight: bold;
+}
+.battle-strategy-desc {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* ─── 戦闘中: ライブ陣形グリッド ────────────────────────── */
+
+.battle-live-grid-section {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-section);
+  border-radius: 8px;
+}
+.battle-live-grid-strategy-badge {
+  margin-left: 12px;
+  padding: 2px 10px;
+  background: linear-gradient(135deg, #c49530 0%, #b8862c 100%);
+  color: white;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+.battle-live-grid-cell {
+  transition: background 0.6s ease, transform 0.6s ease;
+  min-width: 110px;
+}
+.battle-live-grid-cell[data-alive="false"] {
+  background: #ddd5cc;
+  opacity: 0.55;
+}
+.battle-live-grid-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  font-size: 0.78rem;
+  padding: 4px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.battle-live-grid-unit.fallen {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.battle-live-grid-name {
+  font-weight: bold;
+}
+.battle-live-grid-job {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.battle-live-grid-hp {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+/* ─── ローテーション通知ログ ───────────────────────── */
+
+.battle-log-rotation-notice {
+  background: linear-gradient(135deg, #c49530 0%, #b8862c 100%);
+  color: white;
+  padding: 4px 12px;
+  margin: 4px 0;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+}

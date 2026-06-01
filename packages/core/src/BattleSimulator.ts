@@ -1,6 +1,7 @@
 import { BattleManager, IntegratedTurnResult } from "./BattleManager";
 import { Enemy, EnemyAction } from "./models/Enemy";
 import { Squad } from "./models/Squad";
+import { Unit } from "./models/Unit";
 import { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
 
 // ─── DynamicEnemy ─────────────────────────────────────────────────────────────
@@ -116,6 +117,20 @@ export interface SurvivorRecord {
   readonly maxHp: number;
 }
 
+/** ローテーション戦略 */
+export type RotationStrategy = "NONE" | "CW" | "CCW";
+
+/** 配置情報（1ユニットがどのマスにいるか） */
+export interface GridPlacement {
+  readonly unitId: string;
+  readonly unitName: string;
+  readonly job: string | null;
+  readonly row: "FRONT" | "REAR-L" | "REAR-R";
+  readonly col: number;
+  readonly hp: number;
+  readonly maxHp: number;
+}
+
 /**
  * UI ステップ再生用に、各ターンの要点を構造化したログ
  */
@@ -133,6 +148,13 @@ export interface TurnLog {
   readonly healLines: ReadonlyArray<string>;
   /** このターンで勝利確定したか */
   readonly victory: boolean;
+  /**
+   * このターン開始時にローテーションが発生した場合の通知。
+   * `null` ならローテーションなし（NONE 戦略 or 初ターン）。
+   */
+  readonly rotationNotice: string | null;
+  /** このターン開始時点の各ユニットの配置（ローテーション反映後） */
+  readonly placements: ReadonlyArray<GridPlacement>;
 }
 
 export interface SimulationResult {
@@ -151,6 +173,8 @@ export interface SimulationResult {
    * UI ステップ再生用のターン別ログ。各ターンの要点を1配列に格納。
    */
   readonly turnLogs: ReadonlyArray<TurnLog>;
+  /** 採用された戦略 */
+  readonly rotationStrategy: RotationStrategy;
 }
 
 // ─── BattleSimulator ─────────────────────────────────────────────────────────
@@ -161,6 +185,7 @@ export class BattleSimulator {
   private readonly manager: BattleManager;
   private readonly maxTurns: number;
   private readonly verbose: boolean;
+  private readonly rotationStrategy: RotationStrategy;
 
   // Accumulators
   private dmgByJob = new Map<string, number>();
@@ -174,13 +199,19 @@ export class BattleSimulator {
   constructor(
     allies: Squad[],
     enemies: Squad[],
-    options: { maxTurns?: number; rng?: () => number; verbose?: boolean } = {}
+    options: {
+      maxTurns?: number;
+      rng?: () => number;
+      verbose?: boolean;
+      rotation?: RotationStrategy;
+    } = {}
   ) {
     this.allies = allies;
     this.dynamicEnemy = new DynamicEnemy(enemies);
     this.manager = new BattleManager(allies, this.dynamicEnemy, options.rng ?? Math.random);
     this.maxTurns = options.maxTurns ?? CHRONICLE_CONFIG.BATTLE.MAX_TURNS;
     this.verbose = options.verbose ?? true;
+    this.rotationStrategy = options.rotation ?? "NONE";
 
     for (const sq of allies) {
       for (const u of sq.units) {
@@ -298,12 +329,81 @@ export class BattleSimulator {
     }
   }
 
+  // ── ローテーション ─────────────────────────────────────────────────────
+
+  /**
+   * 現在の 3×3 配置を取得する（行列形式: grid[rowIdx][col] = unit | null）
+   * 各 Squad の units 配列インデックスを「col」として扱う。
+   */
+  private snapshotGrid(): (Unit | null)[][] {
+    const ROWS = ["FRONT", "REAR-L", "REAR-R"];
+    const grid: (Unit | null)[][] = [[null, null, null], [null, null, null], [null, null, null]];
+    for (let r = 0; r < ROWS.length; r++) {
+      const sq = this.allies.find((s) => s.id === ROWS[r]);
+      if (!sq) continue;
+      sq.units.forEach((u, c) => {
+        if (c < 3) grid[r][c] = u;
+      });
+    }
+    return grid;
+  }
+
+  /**
+   * 3×3 行列の回転変換。
+   *   時計回り CW : (r, c) → (c, 2 - r)
+   *   反時計回り CCW: (r, c) → (2 - c, r)
+   */
+  private rotateGrid(strategy: "CW" | "CCW"): void {
+    const grid = this.snapshotGrid();
+    const newGrid: (Unit | null)[][] = [[null, null, null], [null, null, null], [null, null, null]];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const u = grid[r][c];
+        if (!u) continue;
+        const [nr, nc] = strategy === "CW" ? [c, 2 - r] : [2 - c, r];
+        newGrid[nr][nc] = u;
+      }
+    }
+    const ROWS = ["FRONT", "REAR-L", "REAR-R"];
+    for (let r = 0; r < ROWS.length; r++) {
+      const sq = this.allies.find((s) => s.id === ROWS[r]);
+      if (!sq) continue;
+      // 死亡ユニットも含めて、null を除いた配列にして 3 つに整える
+      const newUnits = newGrid[r].filter((u): u is Unit => u !== null);
+      sq.replaceUnits(newUnits);
+    }
+  }
+
+  /** 現在配置を GridPlacement 配列に変換（UI 表示用） */
+  private collectPlacements(): GridPlacement[] {
+    const ROWS = ["FRONT", "REAR-L", "REAR-R"] as const;
+    const out: GridPlacement[] = [];
+    for (const rowId of ROWS) {
+      const sq = this.allies.find((s) => s.id === rowId);
+      if (!sq) continue;
+      sq.units.forEach((u, c) => {
+        out.push({
+          unitId: u.id,
+          unitName: u.name,
+          job: u.job,
+          row: rowId,
+          col: c,
+          hp: u.hp,
+          maxHp: u.maxHp,
+        });
+      });
+    }
+    return out;
+  }
+
   // ── ターンログ収集（UI ステップ再生用） ─────────────────────────────────
 
   private buildTurnLog(
     turnNum: number,
     result: IntegratedTurnResult,
-    actionUsed: EnemyAction
+    actionUsed: EnemyAction,
+    rotationNotice: string | null,
+    placements: ReadonlyArray<GridPlacement>
   ): TurnLog {
     const initiativeText = result.initiativeOrder
       .map((e) => (e.type === "enemy" ? "Enemy" : `Ally[${e.id}]`) + `(spd${e.speed.toFixed(1)})`)
@@ -341,6 +441,8 @@ export class BattleSimulator {
       allyAttackLines,
       healLines,
       victory: result.victory,
+      rotationNotice,
+      placements,
     };
   }
 
@@ -361,6 +463,17 @@ export class BattleSimulator {
       if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
       if (this.manager.isVictory)   { winner = "Allies";  break; }
 
+      // ─── ローテーション（2ターン目以降に毎ターン適用） ───────────────
+      let rotationNotice: string | null = null;
+      if (totalTurns > 0 && this.rotationStrategy !== "NONE") {
+        this.rotateGrid(this.rotationStrategy);
+        rotationNotice =
+          this.rotationStrategy === "CW"
+            ? `↻ 陣形が右回りにローテーションしました`
+            : `↺ 陣形が左回りにローテーションしました`;
+      }
+      const placements = this.collectPlacements();
+
       // Snapshot BEFORE the turn: action used + alive unit counts (for mitigation calc)
       const actionUsed = this.dynamicEnemy.getActionForTurn(this.manager.turn);
       const aliveCountBySquad = new Map(
@@ -372,7 +485,7 @@ export class BattleSimulator {
 
       this.logTurn(totalTurns, result, actionUsed);
       this.collectStats(result, actionUsed, aliveCountBySquad);
-      turnLogs.push(this.buildTurnLog(totalTurns, result, actionUsed));
+      turnLogs.push(this.buildTurnLog(totalTurns, result, actionUsed, rotationNotice, placements));
 
       if (result.victory)          { winner = "Allies";  break; }
       if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
@@ -416,6 +529,7 @@ export class BattleSimulator {
       enemySurvivors,
       squadmatePairs,
       turnLogs,
+      rotationStrategy: this.rotationStrategy,
     };
   }
 }

@@ -114,6 +114,20 @@ export interface FormationRosterResponse {
 }
 
 // /api/battle/run
+
+export type RotationStrategy = "NONE" | "CW" | "CCW";
+
+/** ターン開始時の各ユニットの配置スナップショット */
+export interface GridPlacement {
+  unitId: string;
+  unitName: string;
+  job: string | null;
+  row: SquadRow;
+  col: number;
+  hp: number;
+  maxHp: number;
+}
+
 export interface TurnLog {
   turn: number;
   headerText: string;
@@ -122,6 +136,29 @@ export interface TurnLog {
   allyAttackLines: string[];
   healLines: string[];
   victory: boolean;
+  /** このターン開始時のローテーション通知（NONE なら null） */
+  rotationNotice: string | null;
+  /** このターン開始時点の配置 */
+  placements: GridPlacement[];
+}
+
+// /api/battle/preview
+export interface PreviewTimelineEntry {
+  kind: "ally" | "enemy";
+  id: string;
+  label: string;
+  speed: number;
+  jobs?: string[];
+  members?: string[];
+}
+export interface BattlePreviewResponse {
+  year: number;
+  timeline: PreviewTimelineEntry[];
+  enemyPreview: {
+    count: number;
+    maxSpeed: number;
+    maxAttack: number;
+  };
 }
 export interface SurvivorRow {
   name: string;
@@ -143,6 +180,7 @@ export interface BattleRunResponse {
   allySurvivors: SurvivorRow[];
   enemySurvivors: SurvivorRow[];
   turnLogs: TurnLog[];
+  rotationStrategy: RotationStrategy;
 }
 
 // /api/battle/finish

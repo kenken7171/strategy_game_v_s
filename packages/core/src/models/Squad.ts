@@ -26,6 +26,20 @@ export class Squad {
     this._units.push(unit);
   }
 
+  /**
+   * units 配列を一括差し替える（ローテーション用）。
+   * BattleSimulator が毎ターンの陣形回転で使う。
+   * 死亡ユニット（HP=0）もそのまま位置情報を保持して回転に参加できる。
+   */
+  replaceUnits(units: ReadonlyArray<Unit>): void {
+    if (units.length > MAX_UNITS_PER_SQUAD) {
+      throw new Error(
+        `Squad cannot exceed ${MAX_UNITS_PER_SQUAD} units (got ${units.length})`
+      );
+    }
+    this._units = [...units];
+  }
+
   get averageSpeed(): number {
     const alive = this._units.filter((u) => u.isAlive);
     if (alive.length === 0) return 0;

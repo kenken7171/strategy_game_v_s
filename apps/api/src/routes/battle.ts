@@ -8,7 +8,7 @@ import { getOrCreateSession } from "../session";
 import {
   Unit, Squad, BattleSimulator,
   CHRONICLE_CONFIG_EXTREME as CHRONICLE_CONFIG,
-  type JobType,
+  type JobType, type RotationStrategy,
 } from "../../../../packages/core/src/index";
 
 export const battleRoute = new Hono();
@@ -89,18 +89,18 @@ interface BattlePlacement {
 
 /**
  * 編成済みユニット9名で戦闘実行 + 詳細ログ返却
- * リクエスト: { placements: BattlePlacement[] }
+ * リクエスト: { placements: BattlePlacement[], rotation?: 'NONE'|'CW'|'CCW' }
  */
 battleRoute.post("/run", async (c) => {
   const body = await c.req.json();
   const placements: BattlePlacement[] = body.placements ?? [];
+  const rotation: RotationStrategy = body.rotation ?? "NONE";
   const session = getOrCreateSession();
 
   if (placements.length !== 9) {
     return c.json({ ok: false, error: "placements must be 9" }, 400);
   }
 
-  // ユニットを取得
   const idMap = new Map(session.brigade.units.map((u) => [u.id, u]));
   const grouped: Record<string, Unit[]> = { FRONT: [], "REAR-L": [], "REAR-R": [] };
   for (const p of placements) {
@@ -115,7 +115,6 @@ battleRoute.post("/run", async (c) => {
     new Squad("REAR-R", grouped["REAR-R"]),
   ];
 
-  // 戦闘用 RNG（year + seed で再現性確保）
   const battleRng = mulberry32(session.seed * 1000 + session.year);
   const enemy = makeTrialEnemy(session.year, battleRng);
 
@@ -123,6 +122,7 @@ battleRoute.post("/run", async (c) => {
     maxTurns: CHRONICLE_CONFIG.BATTLE.MAX_TURNS,
     rng: battleRng,
     verbose: false,
+    rotation,
   });
   const result = sim.run();
 
@@ -153,6 +153,92 @@ battleRoute.post("/run", async (c) => {
     allySurvivors: result.allySurvivors,
     enemySurvivors: result.enemySurvivors,
     turnLogs: result.turnLogs,
+    rotationStrategy: result.rotationStrategy,
+  });
+});
+
+/**
+ * 戦闘前の行動順予報。1ターン目のイニシアチブ（SPD順）を返す。
+ *
+ * バフ（tactician/standard_bearer）適用後の最終 speed で並べるため、
+ * 戦闘実行直前と同じロジックで初期化してから initiative を計算する。
+ *
+ * 実装簡略化: BattleSimulator を「dry-run 1ターン」せずに、
+ * Squad の averageSpeed と敵代表 SPD から純粋にタイムラインを構築する。
+ */
+battleRoute.post("/preview", async (c) => {
+  const body = await c.req.json();
+  const placements: BattlePlacement[] = body.placements ?? [];
+  const session = getOrCreateSession();
+  if (placements.length !== 9) {
+    return c.json({ ok: false, error: "placements must be 9" }, 400);
+  }
+
+  const idMap = new Map(session.brigade.units.map((u) => [u.id, u]));
+  const grouped: Record<string, Unit[]> = { FRONT: [], "REAR-L": [], "REAR-R": [] };
+  for (const p of placements) {
+    const u = idMap.get(p.unitId);
+    if (!u) return c.json({ ok: false, error: `unit ${p.unitId} not found` }, 400);
+    grouped[p.row].push(buildBattleUnit(u));
+  }
+
+  // ── 各 Squad の予想 speed: tactician/standard_bearer のバフを近似で加算
+  const buffSpeed = (units: Unit[]): number => {
+    let buff = 0;
+    for (const u of units) buff += u.ab; // tactician=20, standard_bearer=40
+    return buff;
+  };
+  // 大隊全員のバフ総和（他分隊にも適用される）
+  const allUnits = [...grouped.FRONT, ...grouped["REAR-L"], ...grouped["REAR-R"]];
+  const totalAbBuff = buffSpeed(allUnits);
+
+  const battleRng = mulberry32(session.seed * 1000 + session.year);
+  const enemy = makeTrialEnemy(session.year, battleRng);
+  const enemyMaxSpeed = Math.max(...enemy.flatMap((sq) => sq.units.map((u) => u.speed)));
+
+  type Entry = {
+    kind: "ally" | "enemy";
+    id: string;
+    label: string;
+    speed: number;
+    jobs?: string[];
+    members?: string[];
+  };
+  const timeline: Entry[] = [];
+
+  // 敵は1つの集団として扱う（BattleManager と同じ挙動）
+  timeline.push({
+    kind: "enemy",
+    id: "enemy-group",
+    label: `敵軍（${enemy.flatMap(sq => sq.units).length}体）`,
+    speed: enemyMaxSpeed,
+  });
+
+  // 各 ally Squad の平均 speed（+全体バフ）
+  for (const [row, units] of Object.entries(grouped)) {
+    if (units.length === 0) continue;
+    const avgSpeed = units.reduce((s, u) => s + u.speed, 0) / units.length;
+    timeline.push({
+      kind: "ally",
+      id: row,
+      label: row === "FRONT" ? "前衛" : row === "REAR-L" ? "後衛-左" : "後衛-右",
+      speed: avgSpeed + totalAbBuff,
+      jobs: units.map((u) => u.job ?? "?"),
+      members: units.map((u) => u.name),
+    });
+  }
+
+  // SPD 降順（速い順）
+  timeline.sort((a, b) => b.speed - a.speed);
+
+  return c.json({
+    year: session.year,
+    timeline,
+    enemyPreview: {
+      count: enemy.flatMap(sq => sq.units).length,
+      maxSpeed: enemyMaxSpeed,
+      maxAttack: Math.max(...enemy.flatMap(sq => sq.units.map(u => u.frontAttack))),
+    },
   });
 });
 

@@ -12,7 +12,9 @@ import type {
   FormationRosterResponse,
   BattleRunResponse,
   BattleFinishResponse,
+  BattlePreviewResponse,
   BattlePlacement,
+  RotationStrategy,
 } from "./types";
 
 async function getJSON<T>(path: string): Promise<T> {
@@ -52,7 +54,9 @@ export const api = {
   getRoster: () => getJSON<FormationRosterResponse>("/api/formation/roster"),
 
   // Battle
-  runBattle: (placements: BattlePlacement[]) =>
-    postJSON<BattleRunResponse>("/api/battle/run", { placements }),
+  previewBattle: (placements: BattlePlacement[]) =>
+    postJSON<BattlePreviewResponse>("/api/battle/preview", { placements }),
+  runBattle: (placements: BattlePlacement[], rotation: RotationStrategy = "NONE") =>
+    postJSON<BattleRunResponse>("/api/battle/run", { placements, rotation }),
   finishBattle: () => postJSON<BattleFinishResponse>("/api/battle/finish"),
 };
