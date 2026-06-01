@@ -948,6 +948,86 @@ h3 {
   50%      { background: #fff8e8; }
 }
 
+/* ─── 敵の攻撃予告バナー ────────────────────────────── */
+
+.battle-enemy-intent-banner {
+  margin: 16px 0;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 2px solid;
+  animation: intent-pulse 1.6s ease-in-out infinite;
+}
+@keyframes intent-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+  50%      { box-shadow: 0 0 0 4px rgba(0,0,0,0.08); }
+}
+.battle-enemy-intent-banner.severity-high {
+  background: linear-gradient(135deg, #fde8e3 0%, #ffd0c4 100%);
+  border-color: #c0392b;
+  color: #6b1d18;
+}
+.battle-enemy-intent-banner.severity-mid {
+  background: linear-gradient(135deg, #ffefd5 0%, #fae0a8 100%);
+  border-color: #b8862c;
+  color: #5e4218;
+}
+.battle-enemy-intent-banner.severity-low {
+  background: linear-gradient(135deg, #fef5d0 0%, #fbeba8 100%);
+  border-color: #c49530;
+  color: #6c5b1b;
+}
+
+.battle-enemy-intent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+.battle-enemy-intent-icon {
+  font-size: 1.6rem;
+}
+.battle-enemy-intent-warning-text {
+  letter-spacing: 2px;
+}
+.battle-enemy-intent-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+  font-size: 1.1rem;
+  flex-wrap: wrap;
+}
+.battle-enemy-intent-skill-name {
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+.battle-enemy-intent-arrow {
+  font-size: 1.4rem;
+  font-weight: bold;
+}
+.battle-enemy-intent-target-range {
+  padding: 4px 10px;
+  background: white;
+  border-radius: 4px;
+  font-weight: bold;
+}
+.battle-enemy-intent-damage {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: white;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 1.15rem;
+}
+.battle-enemy-intent-affected-list {
+  font-size: 0.85rem;
+  background: rgba(255,255,255,0.5);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
 /* ─── 戦闘中ターンコマンドボタン ───────────────────── */
 
 .battle-turn-command-root {

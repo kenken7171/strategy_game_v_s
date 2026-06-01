@@ -25,6 +25,12 @@ interface EnemyUnitRecord {
 
 class DynamicEnemy extends Enemy {
   private readonly _units: EnemyUnitRecord[];
+  /**
+   * 次ターンに強制実行する EnemyAction。
+   * BattleSimulator が予告システムで「次ターンの攻撃」を予め決めておくため、
+   * これがセットされていれば getActionForTurn の戻り値を上書きする。
+   */
+  private _forcedNextAction: EnemyAction | null = null;
 
   constructor(enemySquads: Squad[]) {
     const records: EnemyUnitRecord[] = enemySquads.flatMap((squad) =>
@@ -75,11 +81,24 @@ class DynamicEnemy extends Enemy {
   }
 
   /**
-   * Overrides Enemy.getActionForTurn so BattleManager uses the *live* state
-   * of enemy units instead of a fixed rotation.
-   * Each alive enemy unit contributes one hit; damage = their average attack.
+   * 次ターン強制実行する EnemyAction をセットする（BattleSimulator 用）。
+   * セットされた値は次の getActionForTurn 呼び出しで返され、その後 null に戻る。
+   */
+  setNextAction(action: EnemyAction): void {
+    this._forcedNextAction = action;
+  }
+
+  /**
+   * BattleManager が呼ぶ。setNextAction で予約されていればそれを優先的に返す。
+   * 予約が無い場合は旧来のフォールバック（生存数ベースの集団攻撃）に戻る。
    */
   getActionForTurn(_turn: number): EnemyAction {
+    if (this._forcedNextAction) {
+      const a = this._forcedNextAction;
+      this._forcedNextAction = null;
+      return a;
+    }
+    // フォールバック（互換動作）
     const alive = this._units.filter((u) => u.currentHp > 0);
     if (alive.length === 0) {
       return { name: "なし（全滅）", targetSlotIds: "NONE", hitCount: 0, damage: 0 };
@@ -155,6 +174,8 @@ export interface TurnLog {
   readonly rotationNotice: string | null;
   /** このターン開始時点の各ユニットの配置（ローテーション反映後） */
   readonly placements: ReadonlyArray<GridPlacement>;
+  /** このターンに実行された攻撃の intent（前ターンの予告通りの攻撃が解決された後の記録） */
+  readonly resolvedIntent: AttackIntent | null;
 }
 
 export interface SimulationResult {
@@ -189,6 +210,26 @@ export interface TimelineEntry {
   readonly members?: ReadonlyArray<string>;
 }
 
+/**
+ * 敵の攻撃パターン種別。
+ *   SINGLE_STRIKE : 単一分隊強襲（1分隊に高ダメージ）
+ *   PINCER        : 複数分隊挟撃（2分隊に中ダメージ）
+ *   TOTAL_ASSAULT : 全大隊総攻撃（3分隊全てに低ダメージ）
+ */
+export type AttackPatternKind = "SINGLE_STRIKE" | "PINCER" | "TOTAL_ASSAULT";
+
+/** プレイヤーへの「敵の次ターン行動予告」 */
+export interface AttackIntent {
+  /** パターン種別 */
+  readonly kind: AttackPatternKind;
+  /** プレイヤー表示用のスキル名 */
+  readonly skillName: string;
+  /** 対象となる分隊（FRONT / REAR-L / REAR-R のいずれか1〜3個） */
+  readonly targetRows: ReadonlyArray<"FRONT" | "REAR-L" | "REAR-R">;
+  /** 各対象ユニット1人あたりに与えるダメージ */
+  readonly damagePerUnit: number;
+}
+
 export class BattleSimulator {
   private readonly allies: Squad[];
   private readonly dynamicEnemy: DynamicEnemy;
@@ -208,6 +249,15 @@ export class BattleSimulator {
   private _winner: "Allies" | "Enemies" | "Draw" | null = null;
   private _turnLogs: TurnLog[] = [];
 
+  // ── 次ターン予告（敵の攻撃パターン） ──────────────────────────
+  private _rng: () => number;
+  /** ベース攻撃力（敵スケーリング由来）。攻撃パターン生成で参照 */
+  private _enemyBaseAttack: number;
+  /** 次ターンに発動する敵の攻撃予告 */
+  private _nextIntent: AttackIntent;
+  /** 次ターンに BattleManager へ渡す EnemyAction */
+  private _nextAction: EnemyAction;
+
   /** unitId → job (for ally units) */
   private readonly unitJob = new Map<string, string | null>();
 
@@ -223,7 +273,8 @@ export class BattleSimulator {
   ) {
     this.allies = allies;
     this.dynamicEnemy = new DynamicEnemy(enemies);
-    this.manager = new BattleManager(allies, this.dynamicEnemy, options.rng ?? Math.random);
+    this._rng = options.rng ?? Math.random;
+    this.manager = new BattleManager(allies, this.dynamicEnemy, this._rng);
     this.maxTurns = options.maxTurns ?? CHRONICLE_CONFIG.BATTLE.MAX_TURNS;
     this.verbose = options.verbose ?? true;
     this.rotationStrategy = options.rotation ?? "NONE";
@@ -233,6 +284,112 @@ export class BattleSimulator {
         this.unitJob.set(u.id, u.job);
       }
     }
+
+    // 敵の基準攻撃力（最大 baseAttack）を初期化用に保持
+    const enemyRecs = this.dynamicEnemy.unitRecords;
+    this._enemyBaseAttack = enemyRecs.length > 0
+      ? Math.max(...enemyRecs.map((r) => r.baseAttack))
+      : 30;
+
+    // 初手の予告を生成
+    const first = this.generateAttackPattern();
+    this._nextIntent = first.intent;
+    this._nextAction = first.action;
+  }
+
+  // ── 攻撃パターン生成 ─────────────────────────────────────────────────
+
+  /** ±15% のジッター（敵ステ乱数化と同様） */
+  private jitter(): number {
+    return 0.85 + this._rng() * 0.30;
+  }
+
+  private pickOne<T>(arr: ReadonlyArray<T>): T {
+    return arr[Math.floor(this._rng() * arr.length)];
+  }
+
+  /**
+   * 次ターンの敵攻撃パターン（SINGLE_STRIKE / PINCER / TOTAL_ASSAULT）を
+   * 抽選し、intent と EnemyAction をペアで返す。
+   *
+   * ダメージ倍率:
+   *   SINGLE_STRIKE : 2.0  （1分隊集中 = 高ダメージ）
+   *   PINCER        : 1.4  （2分隊挟撃 = 中ダメージ）
+   *   TOTAL_ASSAULT : 0.9  （3分隊全員 = 低ダメージ）
+   */
+  private generateAttackPattern(): { intent: AttackIntent; action: EnemyAction } {
+    const ROWS: ReadonlyArray<"FRONT" | "REAR-L" | "REAR-R"> =
+      ["FRONT", "REAR-L", "REAR-R"];
+    const r = this._rng();
+    const base = this._enemyBaseAttack;
+
+    if (r < 1 / 3) {
+      // SINGLE_STRIKE
+      const target = this.pickOne(ROWS);
+      const damage = Math.max(1, Math.round(base * 2.0 * this.jitter()));
+      return {
+        intent: {
+          kind: "SINGLE_STRIKE",
+          skillName: "単一分隊強襲",
+          targetRows: [target],
+          damagePerUnit: damage,
+        },
+        action: {
+          name: `単一分隊強襲【${target}】`,
+          targetSlotIds: [target],
+          damage,
+          hitCount: 1,
+          multiTargetMode: "spread",
+        },
+      };
+    }
+    if (r < 2 / 3) {
+      // PINCER（3C2=3パターン）
+      const pairs: Array<["FRONT" | "REAR-L" | "REAR-R", "FRONT" | "REAR-L" | "REAR-R"]> = [
+        ["FRONT", "REAR-L"],
+        ["FRONT", "REAR-R"],
+        ["REAR-L", "REAR-R"],
+      ];
+      const pair = this.pickOne(pairs);
+      const damage = Math.max(1, Math.round(base * 1.4 * this.jitter()));
+      return {
+        intent: {
+          kind: "PINCER",
+          skillName: "複数分隊挟撃",
+          targetRows: pair,
+          damagePerUnit: damage,
+        },
+        action: {
+          name: `複数分隊挟撃【${pair.join(" + ")}】`,
+          targetSlotIds: [pair[0], pair[1]],
+          damage,
+          hitCount: 1,
+          multiTargetMode: "spread",
+        },
+      };
+    }
+    // TOTAL_ASSAULT
+    const damage = Math.max(1, Math.round(base * 0.9 * this.jitter()));
+    return {
+      intent: {
+        kind: "TOTAL_ASSAULT",
+        skillName: "全大隊総攻撃",
+        targetRows: [...ROWS],
+        damagePerUnit: damage,
+      },
+      action: {
+        name: "全大隊総攻撃",
+        targetSlotIds: "ALL",
+        damage,
+        hitCount: 1,
+        multiTargetMode: "spread",
+      },
+    };
+  }
+
+  /** 現在予告されている次ターン攻撃 intent */
+  getNextActionIntent(): AttackIntent {
+    return this._nextIntent;
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
@@ -418,7 +575,8 @@ export class BattleSimulator {
     result: IntegratedTurnResult,
     actionUsed: EnemyAction,
     rotationNotice: string | null,
-    placements: ReadonlyArray<GridPlacement>
+    placements: ReadonlyArray<GridPlacement>,
+    resolvedIntent: AttackIntent | null
   ): TurnLog {
     const initiativeText = result.initiativeOrder
       .map((e) => (e.type === "enemy" ? "Enemy" : `Ally[${e.id}]`) + `(spd${e.speed.toFixed(1)})`)
@@ -458,6 +616,7 @@ export class BattleSimulator {
       victory: result.victory,
       rotationNotice,
       placements,
+      resolvedIntent,
     };
   }
 
@@ -563,7 +722,11 @@ export class BattleSimulator {
     }
     const placements = this.collectPlacements();
 
-    const actionUsed = this.dynamicEnemy.getActionForTurn(this.manager.turn);
+    // ★ 前ターンに予告した攻撃を強制実行する
+    const resolvedIntent = this._nextIntent;
+    this.dynamicEnemy.setNextAction(this._nextAction);
+    const actionUsed = this._nextAction;
+
     const aliveCountBySquad = new Map(
       this.allies.map((sq) => [sq.id, sq.units.filter((u) => u.isAlive).length])
     );
@@ -573,7 +736,7 @@ export class BattleSimulator {
     this.logTurn(this._totalTurns, result, actionUsed);
     this.collectStats(result, actionUsed, aliveCountBySquad);
     const turnLog = this.buildTurnLog(
-      this._totalTurns, result, actionUsed, rotationNotice, placements
+      this._totalTurns, result, actionUsed, rotationNotice, placements, resolvedIntent
     );
     this._turnLogs.push(turnLog);
 
@@ -584,6 +747,13 @@ export class BattleSimulator {
       this._winner = "Enemies";
     } else if (this._totalTurns >= this.maxTurns) {
       this._winner = "Draw";
+    }
+
+    // ★ 次ターン用の予告を生成（戦闘継続中の場合のみ）
+    if (this._winner === null) {
+      const next = this.generateAttackPattern();
+      this._nextIntent = next.intent;
+      this._nextAction = next.action;
     }
 
     return turnLog;

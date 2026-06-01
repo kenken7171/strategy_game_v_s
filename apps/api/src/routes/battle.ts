@@ -54,31 +54,31 @@ function buildBattleUnit(u: Unit): Unit {
   });
 }
 
-/** 試練の敵（±15% 乱数化）。instructions.md B-3 準拠 */
+/**
+ * 試練の敵（単体化）。
+ *
+ * 旧仕様（10体集団）を廃止し、敵 1 体に統合。
+ * HP は旧 10 体合算と同等のスケール（baseHp × 10）で、攻撃力・速度は
+ * ±15% 乱数で揺らす。攻撃は BattleSimulator が分隊単位パターンに変換するため、
+ * frontAttack / rearAttack の値はパターン生成の base となる。
+ */
 function makeTrialEnemy(year: number, rng: () => number): Squad[] {
   const sc = CHRONICLE_CONFIG.ENEMY_SCALING;
   const baseHp    = sc.BASE_HP     + year * sc.HP_GAIN_PER_YEAR;
   const baseAtk   = sc.BASE_ATTACK + year * sc.ATTACK_GAIN_PER_YEAR;
   const baseSpeed = sc.BASE_SPEED  + year * sc.SPEED_GAIN_PER_YEAR;
   const jitter = () => 0.85 + rng() * 0.30;
-  const enemyUnit = (i: number): Unit => {
-    const hp    = Math.max(1, Math.round(baseHp    * jitter()));
-    const atk   = Math.max(1, Math.round(baseAtk   * jitter()));
-    const speed = Math.max(1, Math.round(baseSpeed * jitter()));
-    return new Unit({
-      id: `enemy-${i}`, name: `試練の兵${i + 1}`, job: null,
-      age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
-      baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
-      maxHp: hp, hp, speed, frontAttack: atk, rearAttack: atk,
-    });
-  };
-  const units = Array.from({ length: 10 }, (_, i) => enemyUnit(i));
-  return [
-    new Squad("E1", units.slice(0, 3)),
-    new Squad("E2", units.slice(3, 6)),
-    new Squad("E3", units.slice(6, 9)),
-    new Squad("E4", units.slice(9, 10)),
-  ];
+  // 旧10体合算HPを単体に集約
+  const hp    = Math.max(1, Math.round(baseHp * 10 * jitter()));
+  const atk   = Math.max(1, Math.round(baseAtk * jitter()));
+  const speed = Math.max(1, Math.round(baseSpeed * jitter()));
+  const boss = new Unit({
+    id: "enemy-1", name: "試練の門の守護者", job: null,
+    age: 25, peakStartAge: 25, peakEndAge: 35, maxAge: 60,
+    baseStats: { strength: 60, agility: 0, intelligence: 0, endurance: 0 },
+    maxHp: hp, hp, speed, frontAttack: atk, rearAttack: atk,
+  });
+  return [new Squad("E1", [boss])];
 }
 
 interface BattlePlacement {
@@ -205,6 +205,8 @@ battleRoute.post("/init", async (c) => {
     timeline: sim.getInitiativeForecast(),
     isFinished: sim.isFinished,
     currentTurn: sim.currentTurn,
+    // ★ 1ターン目の攻撃予告
+    nextActionIntent: sim.getNextActionIntent(),
   });
 });
 
@@ -261,6 +263,8 @@ battleRoute.post("/turn", async (c) => {
     currentTurn: sim.currentTurn,
     allySurvivors: finished ? extractSurvivors(sim) : null,
     enemySurvivors: finished ? extractEnemySurvivors(sim) : null,
+    // ★ 次ターンの攻撃予告（終了時は null）
+    nextActionIntent: finished ? null : sim.getNextActionIntent(),
   });
 });
 

@@ -128,6 +128,17 @@ export interface GridPlacement {
   maxHp: number;
 }
 
+/** 敵の攻撃パターン種別 */
+export type AttackPatternKind = "SINGLE_STRIKE" | "PINCER" | "TOTAL_ASSAULT";
+
+/** 敵の次ターン行動予告 */
+export interface AttackIntent {
+  kind: AttackPatternKind;
+  skillName: string;
+  targetRows: SquadRow[];
+  damagePerUnit: number;
+}
+
 export interface TurnLog {
   turn: number;
   headerText: string;
@@ -140,6 +151,8 @@ export interface TurnLog {
   rotationNotice: string | null;
   /** このターン開始時点の配置 */
   placements: GridPlacement[];
+  /** このターンに解決された攻撃 intent（前ターン予告と一致） */
+  resolvedIntent: AttackIntent | null;
 }
 
 // /api/battle/preview
@@ -169,6 +182,7 @@ export interface BattleInitResponse {
   timeline: PreviewTimelineEntry[];
   isFinished: boolean;
   currentTurn: number;
+  nextActionIntent: AttackIntent;
 }
 export interface BattleTurnResponse {
   ok: boolean;
@@ -179,6 +193,8 @@ export interface BattleTurnResponse {
   currentTurn: number;
   allySurvivors: SurvivorRow[] | null;
   enemySurvivors: SurvivorRow[] | null;
+  /** 次ターンの攻撃予告（戦闘終了時は null） */
+  nextActionIntent: AttackIntent | null;
 }
 export interface SurvivorRow {
   name: string;

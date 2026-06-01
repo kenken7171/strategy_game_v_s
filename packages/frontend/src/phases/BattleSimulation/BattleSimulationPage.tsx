@@ -27,6 +27,8 @@ import type {
   TurnLog,
   Winner,
   SurvivorRow,
+  AttackIntent,
+  SquadRow,
 } from "../../api/types";
 import { formatJob } from "../../utils/job";
 
@@ -54,6 +56,87 @@ const STRATEGY_LABELS: Record<RotationStrategy, string> = {
   CW: "↻ 右回り",
   CCW: "↺ 左回り",
 };
+
+const ROW_LABEL_MAP: Record<SquadRow, string> = {
+  FRONT: "前衛",
+  "REAR-L": "後衛-左",
+  "REAR-R": "後衛-右",
+};
+
+const INTENT_KIND_LABEL: Record<AttackIntent["kind"], { icon: string; severity: "low" | "mid" | "high" }> = {
+  SINGLE_STRIKE: { icon: "💥", severity: "high" },
+  PINCER:        { icon: "⚔️",  severity: "mid"  },
+  TOTAL_ASSAULT: { icon: "🔥", severity: "low"  },
+};
+
+/**
+ * 敵の次ターン攻撃予告バナー。
+ * - skill name (battle-enemy-intent-skill-name)
+ * - target range (battle-enemy-intent-target-range)
+ * - damage per unit
+ * - 影響を受けるユニット数（placements から自動計算）
+ */
+function EnemyIntentBanner({
+  intent, placements,
+}: {
+  intent: AttackIntent;
+  placements: GridPlacement[];
+}) {
+  const meta = INTENT_KIND_LABEL[intent.kind];
+  // 対象分隊の生存ユニット数
+  const affectedUnits = placements.filter(
+    (p) => p.hp > 0 && intent.targetRows.includes(p.row)
+  );
+  const targetLabels = intent.targetRows.map((r) => ROW_LABEL_MAP[r]).join(" + ");
+  return (
+    <div
+      data-testid="battle-enemy-intent-banner"
+      data-kind={intent.kind}
+      data-severity={meta.severity}
+      className={`battle-enemy-intent-banner severity-${meta.severity}`}
+    >
+      <div data-testid="battle-enemy-intent-header" className="battle-enemy-intent-header">
+        <span data-testid="battle-enemy-intent-icon" className="battle-enemy-intent-icon">
+          {meta.icon}
+        </span>
+        <span data-testid="battle-enemy-intent-warning-text" className="battle-enemy-intent-warning-text">
+          ⚠️ 敵の次ターン行動予告
+        </span>
+      </div>
+      <div data-testid="battle-enemy-intent-body" className="battle-enemy-intent-body">
+        <span
+          data-testid="battle-enemy-intent-skill-name"
+          className="battle-enemy-intent-skill-name"
+        >
+          【{intent.skillName}】
+        </span>
+        <span data-testid="battle-enemy-intent-arrow" className="battle-enemy-intent-arrow">
+          ➔
+        </span>
+        <span
+          data-testid="battle-enemy-intent-target-range"
+          className="battle-enemy-intent-target-range"
+        >
+          {targetLabels} の全員
+        </span>
+        <span
+          data-testid="battle-enemy-intent-damage"
+          className="battle-enemy-intent-damage"
+        >
+          {intent.damagePerUnit} ダメージ！
+        </span>
+      </div>
+      <div
+        data-testid="battle-enemy-intent-affected-list"
+        className="battle-enemy-intent-affected-list"
+      >
+        影響圏内: {affectedUnits.length} 名 (
+        {affectedUnits.map((u) => u.unitName).join(", ") || "なし"}
+        )
+      </div>
+    </div>
+  );
+}
 const STRATEGY_DESC: Record<RotationStrategy, string> = {
   NONE: "陣形を回転させず、この配置で1ターン戦う",
   CW:   "陣形を時計回りに1段回す。後衛の若手が前衛に出る",
@@ -68,6 +151,7 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
   const [placements, setPlacements] = useState<GridPlacement[]>([]);
   const [timeline, setTimeline] = useState<PreviewTimelineEntry[]>([]);
   const [currentTurn, setCurrentTurn] = useState<number>(0);
+  const [nextIntent, setNextIntent] = useState<AttackIntent | null>(null);
 
   // ターンログ累積（UI 表示用）
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
@@ -102,6 +186,7 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         setPlacements(res.placements);
         setTimeline(res.timeline);
         setCurrentTurn(res.currentTurn);
+        setNextIntent(res.nextActionIntent);
         setStatus("waiting-command");
       } catch (e) {
         setErrMsg(String(e));
@@ -146,8 +231,9 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
       // placements 更新
       setPlacements(res.turnLog.placements);
       setCurrentTurn(res.currentTurn);
-      // 次ターンの timeline
+      // 次ターンの timeline + 攻撃予告
       if (res.timeline) setTimeline(res.timeline);
+      setNextIntent(res.nextActionIntent);
       // 終了判定
       if (res.finished) {
         setWinner(res.winner);
@@ -245,9 +331,14 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         </div>
       )}
 
-      {/* ターン頭：行動順予報 + コマンド選択 */}
+      {/* ターン頭：敵の攻撃予告 + 行動順予報 + コマンド選択 */}
       {status === "waiting-command" && winner === null && (
         <>
+          {/* ★ 攻撃予告バナー（最重要情報） */}
+          {nextIntent && (
+            <EnemyIntentBanner intent={nextIntent} placements={placements} />
+          )}
+
           <div
             data-testid="battle-preview-timeline-section"
             className="battle-preview-timeline-section"
