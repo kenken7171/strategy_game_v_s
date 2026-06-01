@@ -17,6 +17,7 @@ import {
   type JobType,
   type YearEvent,
 } from "../../../packages/core/src/index";
+import type { BattleSimulator } from "../../../packages/core/src/BattleSimulator";
 
 // ゲーム本編は extreme モード（50人定員・1年1戦・25名創設・SPD+0.6/年）で運用
 
@@ -60,6 +61,8 @@ export class GameSession {
   private _chronicle: ChronicleEntry[] = [];
   /** 戦闘結果ログ（最新のみ保持） */
   private _lastBattleResult: unknown = null;
+  /** アクティブな戦闘インスタンス（ターン単位 API 用） */
+  private _activeBattle: BattleSimulator | null = null;
 
   constructor(seed: number = 42) {
     this._seed = seed;
@@ -80,6 +83,8 @@ export class GameSession {
   setCandidatePool(pool: Unit[]): void { this._candidatePool = pool; }
   setBrigade(b: Brigade): void { this._brigade = b; }
   setLastBattleResult(r: unknown): void { this._lastBattleResult = r; }
+  setActiveBattle(b: BattleSimulator | null): void { this._activeBattle = b; }
+  get activeBattle(): BattleSimulator | null { return this._activeBattle; }
 
   /** 戦闘ログを年代記に追加 */
   pushChronicle(entry: ChronicleEntry): void {

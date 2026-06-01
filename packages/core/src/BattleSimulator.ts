@@ -179,6 +179,16 @@ export interface SimulationResult {
 
 // ─── BattleSimulator ─────────────────────────────────────────────────────────
 
+/** タイムライン（行動順予報）の各エントリ */
+export interface TimelineEntry {
+  readonly kind: "ally" | "enemy";
+  readonly id: string;
+  readonly label: string;
+  readonly speed: number;
+  readonly jobs?: ReadonlyArray<string>;
+  readonly members?: ReadonlyArray<string>;
+}
+
 export class BattleSimulator {
   private readonly allies: Squad[];
   private readonly dynamicEnemy: DynamicEnemy;
@@ -192,6 +202,11 @@ export class BattleSimulator {
   private totalMitigated = 0;
   private healByJob = new Map<string, number>();
   private killByJob = new Map<string, number>();
+
+  // ── ターン単位 API 用の累積状態 ─────────────────────────────────
+  private _totalTurns = 0;
+  private _winner: "Allies" | "Enemies" | "Draw" | null = null;
+  private _turnLogs: TurnLog[] = [];
 
   /** unitId → job (for ally units) */
   private readonly unitJob = new Map<string, string | null>();
@@ -446,7 +461,135 @@ export class BattleSimulator {
     };
   }
 
-  // ── main loop ──────────────────────────────────────────────────────────────
+  // ── ターン単位 API（リアルタイム指揮システム用） ───────────────────────
+
+  /** 現在の戦闘状態。完了していれば true、未完了なら false */
+  get isFinished(): boolean {
+    return this._winner !== null || this._totalTurns >= this.maxTurns;
+  }
+
+  /** 現在の勝敗。未完了なら null */
+  get currentWinner(): "Allies" | "Enemies" | "Draw" | null {
+    return this._winner;
+  }
+
+  /** 経過ターン数 */
+  get currentTurn(): number {
+    return this._totalTurns;
+  }
+
+  /** これまでのターンログ（読み取り専用） */
+  get accumulatedTurnLogs(): ReadonlyArray<TurnLog> {
+    return this._turnLogs;
+  }
+
+  /** 現在の placements を公開 */
+  getCurrentPlacements(): GridPlacement[] {
+    return this.collectPlacements();
+  }
+
+  /**
+   * 次ターンの行動順予報を返す。
+   *
+   * 各 ally Squad の平均 speed + tactician/standard_bearer の AB バフ総和、
+   * 敵集団の最大 speed を SPD 降順で並べる。BattleManager のイニシアチブ
+   * 計算と近い結果になるが、UI 予報用なので近似値である点に注意。
+   */
+  getInitiativeForecast(): TimelineEntry[] {
+    const timeline: TimelineEntry[] = [];
+
+    // ally 全体の AB バフ総和（戦術官 20 / 旗手 40 を含む）
+    let totalAbBuff = 0;
+    for (const sq of this.allies) {
+      for (const u of sq.units) {
+        if (u.isAlive) totalAbBuff += u.ab;
+      }
+    }
+
+    for (const sq of this.allies) {
+      const alive = sq.units.filter((u) => u.isAlive);
+      if (alive.length === 0) continue;
+      const avgSpeed = alive.reduce((s, u) => s + u.speed, 0) / alive.length;
+      const label =
+        sq.id === "FRONT" ? "前衛"
+        : sq.id === "REAR-L" ? "後衛-左"
+        : sq.id === "REAR-R" ? "後衛-右"
+        : sq.id;
+      timeline.push({
+        kind: "ally",
+        id: sq.id,
+        label,
+        speed: avgSpeed + totalAbBuff,
+        jobs: alive.map((u) => u.job ?? "?"),
+        members: alive.map((u) => u.name),
+      });
+    }
+
+    // 敵集団（最大 speed）
+    const aliveEnemies = this.dynamicEnemy.unitRecords.filter((r) => r.currentHp > 0);
+    if (aliveEnemies.length > 0) {
+      const enemyMaxSpeed = Math.max(...aliveEnemies.map((r) => r.speed));
+      timeline.push({
+        kind: "enemy",
+        id: "enemy-group",
+        label: `敵軍（${aliveEnemies.length}体）`,
+        speed: enemyMaxSpeed,
+      });
+    }
+
+    timeline.sort((a, b) => b.speed - a.speed);
+    return timeline;
+  }
+
+  /**
+   * 指定戦略で 1 ターンだけ進める。
+   * 初ターン（_totalTurns === 0）はローテーションを適用せず、純粋に1ターン実行。
+   *
+   * @throws 既に戦闘が終了している場合
+   */
+  runOneTurn(strategy: RotationStrategy): TurnLog {
+    if (this.isFinished) {
+      throw new Error("battle is already finished");
+    }
+
+    // ローテーション（初ターンは不要、勝利後も不要）
+    let rotationNotice: string | null = null;
+    if (this._totalTurns > 0 && strategy !== "NONE") {
+      this.rotateGrid(strategy);
+      rotationNotice =
+        strategy === "CW"
+          ? `↻ 陣形が右回りにローテーションしました`
+          : `↺ 陣形が左回りにローテーションしました`;
+    }
+    const placements = this.collectPlacements();
+
+    const actionUsed = this.dynamicEnemy.getActionForTurn(this.manager.turn);
+    const aliveCountBySquad = new Map(
+      this.allies.map((sq) => [sq.id, sq.units.filter((u) => u.isAlive).length])
+    );
+    const result = this.manager.processIntegratedTurn();
+    this._totalTurns++;
+
+    this.logTurn(this._totalTurns, result, actionUsed);
+    this.collectStats(result, actionUsed, aliveCountBySquad);
+    const turnLog = this.buildTurnLog(
+      this._totalTurns, result, actionUsed, rotationNotice, placements
+    );
+    this._turnLogs.push(turnLog);
+
+    // 終了判定
+    if (result.victory) {
+      this._winner = "Allies";
+    } else if (this.allAlliesDefeated()) {
+      this._winner = "Enemies";
+    } else if (this._totalTurns >= this.maxTurns) {
+      this._winner = "Draw";
+    }
+
+    return turnLog;
+  }
+
+  // ── 一括実行 API（バッチ用、ターン単位 API のラッパ） ─────────────────
 
   run(): SimulationResult {
     if (this.verbose) {
@@ -455,41 +598,12 @@ export class BattleSimulator {
       console.log("=".repeat(50));
     }
 
-    let winner: "Allies" | "Enemies" | "Draw" = "Draw";
-    let totalTurns = 0;
-    const turnLogs: TurnLog[] = [];
-
-    while (totalTurns < this.maxTurns) {
-      if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
-      if (this.manager.isVictory)   { winner = "Allies";  break; }
-
-      // ─── ローテーション（2ターン目以降に毎ターン適用） ───────────────
-      let rotationNotice: string | null = null;
-      if (totalTurns > 0 && this.rotationStrategy !== "NONE") {
-        this.rotateGrid(this.rotationStrategy);
-        rotationNotice =
-          this.rotationStrategy === "CW"
-            ? `↻ 陣形が右回りにローテーションしました`
-            : `↺ 陣形が左回りにローテーションしました`;
-      }
-      const placements = this.collectPlacements();
-
-      // Snapshot BEFORE the turn: action used + alive unit counts (for mitigation calc)
-      const actionUsed = this.dynamicEnemy.getActionForTurn(this.manager.turn);
-      const aliveCountBySquad = new Map(
-        this.allies.map((sq) => [sq.id, sq.units.filter((u) => u.isAlive).length])
-      );
-
-      const result = this.manager.processIntegratedTurn();
-      totalTurns++;
-
-      this.logTurn(totalTurns, result, actionUsed);
-      this.collectStats(result, actionUsed, aliveCountBySquad);
-      turnLogs.push(this.buildTurnLog(totalTurns, result, actionUsed, rotationNotice, placements));
-
-      if (result.victory)          { winner = "Allies";  break; }
-      if (this.allAlliesDefeated()) { winner = "Enemies"; break; }
+    while (!this.isFinished) {
+      this.runOneTurn(this.rotationStrategy);
     }
+    const winner = this._winner ?? "Draw";
+    const totalTurns = this._totalTurns;
+    const turnLogs = this._turnLogs;
 
     if (this.verbose) {
       console.log("\n" + "=".repeat(50));

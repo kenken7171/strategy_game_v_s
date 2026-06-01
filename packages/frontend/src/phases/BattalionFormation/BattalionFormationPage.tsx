@@ -27,6 +27,7 @@ import {
   type SortKey,
   type JobFilter,
 } from "../../components/RosterControls";
+import { UnitDetailModal } from "../../components/UnitDetailModal";
 
 interface Props {
   year: number;
@@ -101,7 +102,8 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
   const [roster, setRoster] = useState<FormationRosterResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [grid, setGrid] = useState<GridCell[]>(EMPTY_GRID);
-  const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
+  /** モーダルで詳細表示中のユニット ID */
+  const [detailUnitId, setDetailUnitId] = useState<string | null>(null);
   // ベンチのソート・フィルタ状態
   const [sort, setSort] = useState<SortKey>("totalDesc");
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
@@ -112,7 +114,7 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
       const r = await api.getRoster();
       setRoster(r);
       setGrid(EMPTY_GRID);
-      setActiveUnitId(null);
+      setDetailUnitId(null);
       setLoading(false);
     })();
   }, [year]);
@@ -147,36 +149,36 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
 
   // ─── 操作ハンドラ ─────────────────────────────────────
 
-  /** ベンチクリック: 同じユニットなら解除、別なら active 切替 */
+  /** ベンチクリック: 詳細モーダルを開く */
   const onBenchClick = (unitId: string) => {
-    setActiveUnitId((prev) => (prev === unitId ? null : unitId));
+    setDetailUnitId(unitId);
+  };
+
+  /** 詳細モーダル内の「配置先指定」ボタンクリック */
+  const onAssign = (row: SquadRow, col: number) => {
+    if (!detailUnitId) return;
+    setGrid((prev) =>
+      prev.map((c) => {
+        // 元の位置を空ける（押し戻し）
+        if (c.unitId === detailUnitId) return { ...c, unitId: null };
+        // 目的マスに配置
+        if (c.row === row && c.col === col) return { ...c, unitId: detailUnitId };
+        return c;
+      })
+    );
+    setDetailUnitId(null); // 配置後はモーダルを閉じる
   };
 
   /**
-   * マスクリック:
-   *   - active がある → 配置（既存があれば押し戻し）+ active 解除
-   *   - active なし → 配置済みなら解除（ベンチに戻す）
+   * 3×3 グリッドのマスクリック: そのマスが埋まっていれば配置解除のみ。
+   * 新規配置は詳細モーダル経由でのみ可能。
    */
   const onCellClick = (row: SquadRow, col: number) => {
-    setGrid((prev) => {
-      const cell = prev.find((c) => c.row === row && c.col === col)!;
-      if (activeUnitId) {
-        // active を配置する: 元の active がいた別マスも空ける（自動入れ替え）
-        return prev.map((c) => {
-          if (c.unitId === activeUnitId) return { ...c, unitId: null };
-          if (c.row === row && c.col === col) return { ...c, unitId: activeUnitId };
-          return c;
-        });
-      }
-      // active なし: このマスを空ける
-      if (cell.unitId) {
-        return prev.map((c) =>
-          c.row === row && c.col === col ? { ...c, unitId: null } : c
-        );
-      }
-      return prev;
-    });
-    if (activeUnitId) setActiveUnitId(null);
+    setGrid((prev) =>
+      prev.map((c) =>
+        c.row === row && c.col === col && c.unitId ? { ...c, unitId: null } : c
+      )
+    );
   };
 
   if (loading || !roster) {
@@ -192,7 +194,7 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
   const unitsById = new Map(roster.units.map((u) => [u.id, u]));
   const availableAll = roster.units.filter((u) => !u.isRetired);
   const visibleBench = applyRosterControls(availableAll, sort, jobFilter);
-  const activeUnit = activeUnitId ? unitsById.get(activeUnitId) ?? null : null;
+  const detailUnit = detailUnitId ? unitsById.get(detailUnitId) ?? null : null;
 
   return (
     <section data-testid="battalion-formation-page-root" className="battalion-formation-page">
@@ -206,55 +208,10 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
         配置済み: {filledCount} / 9 名（旅団 {roster.units.length} 名から選出）
       </div>
 
-      {/* ─── アクティブパネル ────────────────────────── */}
-      <div
-        data-testid="formation-active-panel-root"
-        className={activeUnit ? "formation-active-panel active" : "formation-active-panel"}
-        data-active={!!activeUnit}
-      >
-        {activeUnit ? (
-          <>
-            <strong data-testid="formation-active-panel-hint" className="formation-active-panel-hint">
-              ▶ マスをクリックして配置（もう一度ベンチを押すと解除）
-            </strong>
-            <div data-testid="formation-active-panel-content" className="formation-active-panel-content">
-              <span data-testid="formation-active-panel-job" className="formation-active-panel-job">
-                [{formatJob(activeUnit.job)}]
-              </span>
-              <span data-testid="formation-active-panel-name" className="formation-active-panel-name">
-                {activeUnit.name}
-              </span>
-              <span data-testid="formation-active-panel-gender">
-                {activeUnit.gender === "Male" ? "♂" : "♀"}
-              </span>
-              <span data-testid="formation-active-panel-age">{activeUnit.age}歳</span>
-              <span data-testid="formation-active-panel-stats" className="unit-stats-inline">
-                HP <b data-testid="formation-active-panel-hp">{activeUnit.maxHp}</b> /
-                ATK <b data-testid="formation-active-panel-atk">{activeUnit.attack}</b> /
-                SPD <b data-testid="formation-active-panel-spd">{activeUnit.speed}</b>
-              </span>
-              <span data-testid="formation-active-panel-total" className="unit-total-rating">
-                総合 {activeUnit.totalRating}
-              </span>
-              {activeUnit.isMarried && (
-                <span data-testid="formation-active-panel-married">💍 既婚</span>
-              )}
-              {activeUnit.parents && (
-                <span data-testid="formation-active-panel-heir">🩸 継承者</span>
-              )}
-              {activeUnit.descendantCount > 0 && (
-                <span data-testid="formation-active-panel-descendants">
-                  👶 子孫 {activeUnit.descendantCount}
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <span data-testid="formation-active-panel-placeholder" className="formation-active-panel-placeholder">
-            ▷ ベンチからユニットを選択してください（クリックでアクティブ）
-          </span>
-        )}
-      </div>
+      <p data-testid="formation-instruction-banner" className="formation-instruction-banner">
+        💡 ベンチのユニットをクリックして詳細を確認・配置を指定してください。
+        配置済みのマスをクリックするとそのユニットがベンチに戻ります。
+      </p>
 
       {/* ─── 3×3 グリッド ────────────────────────────── */}
       <table data-testid="formation-grid-root" className="formation-grid">
@@ -283,15 +240,13 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                 const cell = grid.find((c) => c.row === row && c.col === col)!;
                 const currentUnit = cell.unitId ? unitsById.get(cell.unitId) ?? null : null;
                 const heart = currentUnit ? heartMap.get(currentUnit.id) : null;
-                const isAcceptable = !!activeUnit; // active がいれば、どのマスも配置可能（既存は押し戻し）
                 return (
                   <td
                     key={col}
                     data-testid={`formation-target-slot-${row}-${col}`}
                     data-filled={!!currentUnit}
-                    data-acceptable={isAcceptable}
                     onClick={() => onCellClick(row, col)}
-                    className={`formation-grid-cell formation-target-slot ${isAcceptable ? "acceptable" : ""}`}
+                    className="formation-grid-cell formation-target-slot"
                     role="button"
                     tabIndex={0}
                   >
@@ -366,16 +321,14 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
         <ul data-testid="formation-roster-list" className="formation-roster-list">
           {visibleBench.map((u) => {
             const isPlaced = placedIds.has(u.id);
-            const isActive = activeUnitId === u.id;
             return (
               <li
                 key={u.id}
                 data-testid={`formation-bench-card-${u.id}`}
                 data-placed={isPlaced}
                 data-married={u.isMarried}
-                data-active={isActive}
                 onClick={() => onBenchClick(u.id)}
-                className={`formation-roster-card formation-bench-card ${isActive ? "active" : ""} ${isPlaced ? "placed" : ""}`}
+                className={`formation-roster-card formation-bench-card ${isPlaced ? "placed" : ""}`}
                 role="button"
                 tabIndex={0}
               >
@@ -420,14 +373,6 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                     出撃予定
                   </span>
                 )}
-                {isActive && (
-                  <span
-                    data-testid={`formation-bench-active-badge-${u.id}`}
-                    className="formation-bench-active-badge"
-                  >
-                    ▶ 選択中
-                  </span>
-                )}
               </li>
             );
           })}
@@ -435,8 +380,19 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
       </div>
 
       <p data-testid="formation-hint" className="phase-hint">
-        ベンチからユニットを選択 → 3×3 のマスをクリックして配置。同分隊の男女ペアにハート ❤️ が灯ります。
+        ベンチをクリックすると詳細パネルが開きます。そこから配置先のマスを指定してください。
       </p>
+
+      {/* ─── 詳細モーダル ──────────────────────────── */}
+      {detailUnit && (
+        <UnitDetailModal
+          unit={detailUnit}
+          grid={grid}
+          unitsById={unitsById}
+          onAssign={onAssign}
+          onClose={() => setDetailUnitId(null)}
+        />
+      )}
     </section>
   );
 }

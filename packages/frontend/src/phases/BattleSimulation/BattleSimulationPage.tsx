@@ -1,24 +1,32 @@
 /**
- * BattleSimulationPage — フェーズ4: 戦闘
+ * BattleSimulationPage — フェーズ4: 戦闘（リアルタイム指揮システム）
  *
- * 拡張 (M3):
- *   - 戦闘前「作戦選択フェーズ」を追加（CW/CCW/NONE）
- *   - 1ターン目の行動順予報（タイムライン）を表示
- *   - 戦闘中、turnLog.placements で 3×3 配置を毎ターン再描画
- *   - rotationNotice をターンログとして表示
+ * 旧仕様（戦闘前一括作戦選択）を廃止。
+ * 新フロー: 毎ターン頭でプレイヤーがコマンド（CW/CCW/NONE）を選択する。
  *
  * 状態遷移:
- *   preview → strategy-selecting → running → replaying → done
+ *   loading-init → waiting-command → running-turn → playing-log →
+ *     (continue) waiting-command  もしくは
+ *     (done) done
+ *
+ * API 使用:
+ *   POST /api/battle/init  戦闘準備（初期 placements + 1ターン目 timeline）
+ *   POST /api/battle/turn  1ターン分の戦略を送って実行（CW/CCW/NONE）
+ *   POST /api/battle/finish 戦闘終了後の年送り
  */
 import { useEffect, useState } from "react";
 import type { PhaseHandle } from "../../game/GameManager";
 import { api } from "../../api/client";
 import type {
-  BattleRunResponse,
+  BattleInitResponse,
+  BattleTurnResponse,
   BattlePlacement,
-  BattlePreviewResponse,
   RotationStrategy,
   GridPlacement,
+  PreviewTimelineEntry,
+  TurnLog,
+  Winner,
+  SurvivorRow,
 } from "../../api/types";
 import { formatJob } from "../../utils/job";
 
@@ -28,10 +36,10 @@ interface Props {
 }
 
 type BattleStatus =
-  | "loading-preview"
-  | "strategy-selecting"
-  | "running"
-  | "replaying"
+  | "loading-init"     // /init 中
+  | "waiting-command"  // ターン頭・コマンド待ち
+  | "running-turn"     // /turn 通信中
+  | "playing-log"      // ターンログ再生中
   | "done";
 
 const ROWS = ["FRONT", "REAR-L", "REAR-R"] as const;
@@ -42,94 +50,117 @@ const ROW_LABEL: Record<(typeof ROWS)[number], string> = {
 };
 
 const STRATEGY_LABELS: Record<RotationStrategy, string> = {
-  NONE: "そのまま（陣形固定）",
-  CW:   "右回り（時計回り）",
-  CCW:  "左回り（反時計回り）",
+  NONE: "そのまま",
+  CW: "↻ 右回り",
+  CCW: "↺ 左回り",
 };
 const STRATEGY_DESC: Record<RotationStrategy, string> = {
-  NONE: "陣形を回転させずに固定。安定した役割分担で戦う",
-  CW:   "毎ターン陣形が時計回りに回転。後衛が前衛に出るリスクと火力分散の戦略",
-  CCW:  "毎ターン陣形が反時計回りに回転。CWの逆順",
+  NONE: "陣形を回転させず、この配置で1ターン戦う",
+  CW:   "陣形を時計回りに1段回す。後衛の若手が前衛に出る",
+  CCW:  "陣形を反時計回りに1段回す。CWの逆順",
 };
 
 export function BattleSimulationPage({ year, phaseHandle }: Props) {
-  const [status, setStatus] = useState<BattleStatus>("loading-preview");
-  const [preview, setPreview] = useState<BattlePreviewResponse | null>(null);
-  const [strategy, setStrategy] = useState<RotationStrategy>("NONE");
-  const [result, setResult] = useState<BattleRunResponse | null>(null);
-  const [displayedTurns, setDisplayedTurns] = useState<number>(0);
+  const [status, setStatus] = useState<BattleStatus>("loading-init");
   const [errMsg, setErrMsg] = useState<string>("");
-  const [finishing, setFinishing] = useState<boolean>(false);
 
-  const canProceed = status === "done" && !finishing;
+  // 現在の戦況
+  const [placements, setPlacements] = useState<GridPlacement[]>([]);
+  const [timeline, setTimeline] = useState<PreviewTimelineEntry[]>([]);
+  const [currentTurn, setCurrentTurn] = useState<number>(0);
+
+  // ターンログ累積（UI 表示用）
+  const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
+  const [logCursor, setLogCursor] = useState<number>(0); // 何ターンめまで「再生済み」か
+
+  // 最新ターン
+  const [latestTurnLog, setLatestTurnLog] = useState<TurnLog | null>(null);
+  const [logPlaying, setLogPlaying] = useState<boolean>(false);
+
+  // 戦闘終了
+  const [winner, setWinner] = useState<Winner | null>(null);
+  const [allySurvivors, setAllySurvivors] = useState<SurvivorRow[] | null>(null);
+  const [enemySurvivors, setEnemySurvivors] = useState<SurvivorRow[] | null>(null);
+
+  const canProceed = status === "done";
 
   useEffect(() => {
     phaseHandle.setCanProceed(canProceed);
   }, [canProceed, phaseHandle]);
 
-  // 編成 placements を sessionStorage から取得して preview API を叩く
+  // /init 呼び出し
   useEffect(() => {
     (async () => {
-      setErrMsg("");
       const raw = sessionStorage.getItem("formation:placements");
       if (!raw) {
         setErrMsg("編成データが見つかりません");
         return;
       }
-      const placements: BattlePlacement[] = JSON.parse(raw);
+      const pls: BattlePlacement[] = JSON.parse(raw);
       try {
-        const p = await api.previewBattle(placements);
-        setPreview(p);
-        setStatus("strategy-selecting");
+        const res = await api.initBattle(pls);
+        setPlacements(res.placements);
+        setTimeline(res.timeline);
+        setCurrentTurn(res.currentTurn);
+        setStatus("waiting-command");
       } catch (e) {
         setErrMsg(String(e));
       }
     })();
   }, []);
 
-  // unmount で年送り API を叩く
+  // 戦闘終了時の finish API（unmount で）
   useEffect(() => {
     return () => {
-      if (status === "done" && !finishing && result) {
-        api.finishBattle().catch(() => {});
-      }
+      if (status === "done") api.finishBattle().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, finishing, result]);
+  }, [status]);
 
-  const startBattle = async () => {
-    setStatus("running");
-    setErrMsg("");
-    const raw = sessionStorage.getItem("formation:placements");
-    if (!raw) {
-      setErrMsg("編成データが見つかりません");
-      return;
-    }
-    const placements: BattlePlacement[] = JSON.parse(raw);
+  // ターンログ自動表示（700ms）
+  useEffect(() => {
+    if (status !== "playing-log" || !latestTurnLog) return;
+    // 1ターンの全テキストを描画した後、次ターン頭に戻る
+    const t = setTimeout(() => {
+      setLogPlaying(false);
+      setLatestTurnLog(null);
+      // 戦闘終了か継続か
+      if (winner !== null) {
+        setStatus("done");
+      } else {
+        setStatus("waiting-command");
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [status, latestTurnLog, winner]);
+
+  // コマンド実行
+  const sendCommand = async (strategy: RotationStrategy) => {
+    setStatus("running-turn");
     try {
-      const res = await api.runBattle(placements, strategy);
-      setResult(res);
-      setStatus("replaying");
-      setDisplayedTurns(0);
+      const res: BattleTurnResponse = await api.runTurn(strategy);
+      // ログ追加
+      setTurnLogs((prev) => [...prev, res.turnLog]);
+      setLatestTurnLog(res.turnLog);
+      setLogCursor((prev) => prev + 1);
+      // placements 更新
+      setPlacements(res.turnLog.placements);
+      setCurrentTurn(res.currentTurn);
+      // 次ターンの timeline
+      if (res.timeline) setTimeline(res.timeline);
+      // 終了判定
+      if (res.finished) {
+        setWinner(res.winner);
+        setAllySurvivors(res.allySurvivors);
+        setEnemySurvivors(res.enemySurvivors);
+      }
+      setLogPlaying(true);
+      setStatus("playing-log");
     } catch (e) {
       setErrMsg(String(e));
+      setStatus("waiting-command");
     }
   };
-
-  // ステップ再生
-  useEffect(() => {
-    if (status !== "replaying" || !result) return;
-    if (displayedTurns >= result.turnLogs.length) {
-      setStatus("done");
-      return;
-    }
-    const t = setTimeout(() => setDisplayedTurns((n) => n + 1), 700);
-    return () => clearTimeout(t);
-  }, [status, result, displayedTurns]);
-
-  // 現在再生中の最終ターンの placements（戦況グリッド用）
-  const currentPlacements: GridPlacement[] | null =
-    result && displayedTurns > 0 ? result.turnLogs[displayedTurns - 1].placements : null;
 
   return (
     <section
@@ -137,7 +168,7 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
       className="battle-simulation-page"
     >
       <h2 data-testid="battle-simulation-page-title">
-        戦闘フェーズ — Year {year}
+        戦闘フェーズ — Year {year}（Turn {currentTurn}）
       </h2>
 
       {errMsg && (
@@ -146,28 +177,86 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         </div>
       )}
 
-      {status === "loading-preview" && (
+      {status === "loading-init" && (
         <div data-testid="common-loading-spinner" className="common-loading-spinner">
-          ⏳ 戦況を予測中...
+          ⏳ 戦闘を準備中...
         </div>
       )}
 
-      {/* ─── 戦闘前: 作戦選択フェーズ ────────────────── */}
-      {status === "strategy-selecting" && preview && (
+      {/* ライブ陣形グリッド（常時表示） */}
+      {status !== "loading-init" && placements.length > 0 && (
+        <div
+          data-testid="battle-live-grid-section"
+          className="battle-live-grid-section"
+        >
+          <h3 data-testid="battle-live-grid-title">現在の陣形</h3>
+          <table data-testid="battle-live-grid-table" className="formation-grid battle-live-grid">
+            <thead>
+              <tr>
+                <th>分隊</th>
+                <th>1</th>
+                <th>2</th>
+                <th>3</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ROWS.map((row) => (
+                <tr key={row} data-testid={`battle-live-grid-row-${row}`}>
+                  <th
+                    data-testid={`battle-live-grid-row-label-${row}`}
+                    className="formation-grid-row-label"
+                  >
+                    {ROW_LABEL[row]}
+                  </th>
+                  {[0, 1, 2].map((col) => {
+                    const p = placements.find((x) => x.row === row && x.col === col);
+                    return (
+                      <td
+                        key={col}
+                        data-testid={`battle-live-grid-cell-${row}-${col}`}
+                        data-alive={p ? p.hp > 0 : false}
+                        className="formation-grid-cell battle-live-grid-cell"
+                      >
+                        {p ? (
+                          <div
+                            data-testid={`battle-live-grid-unit-${row}-${col}`}
+                            className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
+                          >
+                            <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
+                              {p.unitName}
+                            </span>
+                            <span data-testid={`battle-live-grid-job-${row}-${col}`} className="battle-live-grid-job">
+                              [{formatJob(p.job)}]
+                            </span>
+                            <span data-testid={`battle-live-grid-hp-${row}-${col}`} className="battle-live-grid-hp">
+                              HP {p.hp}/{p.maxHp}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="formation-cell-empty">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ターン頭：行動順予報 + コマンド選択 */}
+      {status === "waiting-command" && winner === null && (
         <>
-          {/* 行動順予報 */}
           <div
             data-testid="battle-preview-timeline-section"
             className="battle-preview-timeline-section"
           >
             <h3 data-testid="battle-preview-title">
-              🔮 1ターン目 行動順予報
+              🔮 Turn {currentTurn + 1} 行動順予報
             </h3>
-            <ol
-              data-testid="battle-preview-timeline"
-              className="battle-preview-timeline"
-            >
-              {preview.timeline.map((e, i) => (
+            <ol data-testid="battle-preview-timeline" className="battle-preview-timeline">
+              {timeline.map((e, i) => (
                 <li
                   key={`${e.kind}-${e.id}`}
                   data-testid={`battle-preview-timeline-item-${i}`}
@@ -189,158 +278,63 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
                 </li>
               ))}
             </ol>
-            <div
-              data-testid="battle-preview-enemy-stats"
-              className="battle-preview-enemy-stats"
-            >
-              敵情報: {preview.enemyPreview.count} 体 / 最大 SPD {preview.enemyPreview.maxSpeed} / 最大 ATK {preview.enemyPreview.maxAttack}
-            </div>
           </div>
 
-          {/* 作戦選択 */}
           <div
-            data-testid="battle-strategy-select-root"
-            className="battle-strategy-select-root"
+            data-testid="battle-turn-command-root"
+            className="battle-turn-command-root"
           >
-            <h3 data-testid="battle-strategy-select-title">⚔ 作戦を選択</h3>
-            <p data-testid="battle-strategy-select-hint" className="phase-hint">
-              1ターンごとに陣形を回転させる作戦を選んでください。
-            </p>
+            <h3 data-testid="battle-turn-command-title">
+              ⚔ ターン {currentTurn + 1} の作戦を指示
+            </h3>
             <div
-              data-testid="battle-strategy-options"
-              className="battle-strategy-options"
-              role="radiogroup"
+              data-testid="battle-turn-command-options"
+              className="battle-turn-command-options"
             >
               {(["NONE", "CW", "CCW"] as RotationStrategy[]).map((s) => (
-                <label
+                <button
                   key={s}
-                  data-testid={`battle-strategy-option-${s}`}
-                  data-selected={strategy === s}
-                  className={`battle-strategy-option ${strategy === s ? "selected" : ""}`}
+                  type="button"
+                  data-testid={`battle-turn-command-${s}`}
+                  onClick={() => sendCommand(s)}
+                  className={`battle-turn-command-button battle-turn-command-${s}`}
                 >
-                  <input
-                    type="radio"
-                    name="rotation-strategy"
-                    value={s}
-                    checked={strategy === s}
-                    onChange={() => setStrategy(s)}
-                    data-testid={`battle-strategy-radio-${s}`}
-                  />
-                  <span data-testid={`battle-strategy-label-${s}`} className="battle-strategy-label">
+                  <span data-testid={`battle-turn-command-label-${s}`} className="battle-turn-command-label">
                     {STRATEGY_LABELS[s]}
                   </span>
-                  <span data-testid={`battle-strategy-desc-${s}`} className="battle-strategy-desc">
+                  <span data-testid={`battle-turn-command-desc-${s}`} className="battle-turn-command-desc">
                     {STRATEGY_DESC[s]}
                   </span>
-                </label>
+                </button>
               ))}
             </div>
-            <button
-              type="button"
-              data-testid="battle-start-button"
-              onClick={startBattle}
-              className="battle-start-button"
-            >
-              ⚔ この作戦で出撃する
-            </button>
           </div>
         </>
       )}
 
-      {/* ─── 戦闘中ローディング ───────────────────── */}
-      {status === "running" && (
-        <div data-testid="battle-running-section" className="battle-running-section">
-          <div data-testid="common-loading-spinner" className="common-loading-spinner">
-            ⏳ 戦闘進行中...
-          </div>
+      {status === "running-turn" && (
+        <div data-testid="common-loading-spinner" className="common-loading-spinner">
+          ⚔ 戦闘処理中...
         </div>
       )}
 
-      {/* ─── ステップ再生中 + 完了 ───────────────── */}
-      {(status === "replaying" || status === "done") && result && (
-        <>
-          {/* 現在のフォーメーション可視化 */}
-          {currentPlacements && (
-            <div
-              data-testid="battle-live-grid-section"
-              className="battle-live-grid-section"
-            >
-              <h3 data-testid="battle-live-grid-title">
-                現在の陣形（Turn {displayedTurns}）
-                {result.rotationStrategy !== "NONE" && (
-                  <span data-testid="battle-live-grid-strategy-badge" className="battle-live-grid-strategy-badge">
-                    {STRATEGY_LABELS[result.rotationStrategy]}
-                  </span>
-                )}
-              </h3>
-              <table data-testid="battle-live-grid-table" className="formation-grid battle-live-grid">
-                <thead>
-                  <tr>
-                    <th>分隊</th>
-                    <th>1</th>
-                    <th>2</th>
-                    <th>3</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ROWS.map((row) => (
-                    <tr key={row} data-testid={`battle-live-grid-row-${row}`}>
-                      <th data-testid={`battle-live-grid-row-label-${row}`} className="formation-grid-row-label">
-                        {ROW_LABEL[row]}
-                      </th>
-                      {[0, 1, 2].map((col) => {
-                        const p = currentPlacements.find((x) => x.row === row && x.col === col);
-                        return (
-                          <td
-                            key={col}
-                            data-testid={`battle-live-grid-cell-${row}-${col}`}
-                            data-alive={p ? p.hp > 0 : false}
-                            className="formation-grid-cell battle-live-grid-cell"
-                          >
-                            {p ? (
-                              <div
-                                data-testid={`battle-live-grid-unit-${row}-${col}`}
-                                className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
-                              >
-                                <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
-                                  {p.unitName}
-                                </span>
-                                <span data-testid={`battle-live-grid-job-${row}-${col}`} className="battle-live-grid-job">
-                                  [{formatJob(p.job)}]
-                                </span>
-                                <span data-testid={`battle-live-grid-hp-${row}-${col}`} className="battle-live-grid-hp">
-                                  HP {p.hp}/{p.maxHp}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="formation-cell-empty">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* バトルログ */}
-          <div
-            data-testid="battle-log-section"
-            className="battle-log-section"
-          >
-            <h3 data-testid="battle-log-title">
-              バトルログ（{displayedTurns} / {result.turnLogs.length} ターン）
-            </h3>
-            <ol data-testid="battle-log-list" className="battle-log-list">
-              {result.turnLogs.slice(0, displayedTurns).map((log, idx) => (
+      {/* バトルログ累積（過去の全ターンを蓄積表示） */}
+      {turnLogs.length > 0 && (
+        <div data-testid="battle-log-section" className="battle-log-section">
+          <h3 data-testid="battle-log-title">
+            バトルログ（{turnLogs.length} ターン進行）
+          </h3>
+          <ol data-testid="battle-log-list" className="battle-log-list">
+            {turnLogs.map((log, idx) => {
+              const isLatest = idx === turnLogs.length - 1;
+              return (
                 <li
                   key={log.turn}
                   data-testid={`battle-log-row-${idx}`}
                   data-turn={log.turn}
                   data-victory={log.victory}
-                  className="battle-log-row"
+                  data-latest={isLatest}
+                  className={`battle-log-row ${isLatest && logPlaying ? "playing" : ""}`}
                 >
                   <div data-testid={`battle-log-header-${idx}`} className="battle-log-header">
                     🏰 {log.headerText}
@@ -375,70 +369,62 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
                     </div>
                   )}
                 </li>
-              ))}
-            </ol>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+
+      {/* 戦闘結果 */}
+      {status === "done" && winner !== null && (
+        <div
+          data-testid="battle-result-section"
+          className="battle-result-section"
+          data-winner={winner}
+        >
+          <h3 data-testid="battle-result-title">戦闘結果</h3>
+          <div
+            data-testid="battle-result-winner-banner"
+            className={`battle-result-winner-banner battle-result-winner-${winner}`}
+          >
+            {winner === "Allies"
+              ? "🎉 VICTORY!"
+              : winner === "Enemies"
+                ? "💀 DEFEAT..."
+                : "🤝 DRAW"}
           </div>
-
-          {/* 戦闘結果 */}
-          {status === "done" && (
-            <div
-              data-testid="battle-result-section"
-              className="battle-result-section"
-              data-winner={result.winner}
-            >
-              <h3 data-testid="battle-result-title">戦闘結果</h3>
-              <div
-                data-testid="battle-result-winner-banner"
-                className={`battle-result-winner-banner battle-result-winner-${result.winner}`}
-              >
-                {result.winner === "Allies"
-                  ? "🎉 VICTORY!"
-                  : result.winner === "Enemies"
-                    ? "💀 DEFEAT..."
-                    : "🤝 DRAW"}
-              </div>
-              <dl data-testid="battle-result-stats" className="battle-result-stats">
-                <dt data-testid="battle-result-label-turns">ターン数</dt>
-                <dd data-testid="battle-result-value-turns">{result.turns}</dd>
-                <dt data-testid="battle-result-label-strategy">作戦</dt>
-                <dd data-testid="battle-result-value-strategy">
-                  {STRATEGY_LABELS[result.rotationStrategy]}
-                </dd>
-                <dt data-testid="battle-result-label-survivors">味方生存</dt>
-                <dd data-testid="battle-result-value-survivors">
-                  {result.allySurvivors.length} / 9
-                </dd>
-                <dt data-testid="battle-result-label-enemy-survivors">敵生存</dt>
-                <dd data-testid="battle-result-value-enemy-survivors">
-                  {result.enemySurvivors.length} / 10
-                </dd>
-                <dt data-testid="battle-result-label-mitigation">被ダメ軽減</dt>
-                <dd data-testid="battle-result-value-mitigation">
-                  {result.statistics.totalDamageMitigated} HP
-                </dd>
-              </dl>
-
-              <div data-testid="battle-survivors-section" className="battle-survivors-section">
-                <h4 data-testid="battle-survivors-title">生存ユニット</h4>
-                <ul data-testid="battle-survivors-list" className="battle-survivors-list">
-                  {result.allySurvivors.map((s, i) => (
-                    <li key={i} data-testid={`battle-survivor-row-${i}`} className="battle-survivor-row">
-                      <span data-testid={`battle-survivor-name-${i}`}>{s.name}</span>
-                      <span data-testid={`battle-survivor-job-${i}`}>[{formatJob(s.job)}]</span>
-                      <span data-testid={`battle-survivor-hp-${i}`}>
-                        HP {s.hp}/{s.maxHp}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <p data-testid="battle-result-hint" className="phase-hint">
-                準備が整いました。「次年を迎える」ボタンで年送りします。
-              </p>
+          <dl data-testid="battle-result-stats" className="battle-result-stats">
+            <dt data-testid="battle-result-label-turns">ターン数</dt>
+            <dd data-testid="battle-result-value-turns">{currentTurn}</dd>
+            <dt data-testid="battle-result-label-survivors">味方生存</dt>
+            <dd data-testid="battle-result-value-survivors">
+              {allySurvivors?.length ?? 0} / 9
+            </dd>
+            <dt data-testid="battle-result-label-enemy-survivors">敵生存</dt>
+            <dd data-testid="battle-result-value-enemy-survivors">
+              {enemySurvivors?.length ?? 0} / 10
+            </dd>
+          </dl>
+          {allySurvivors && allySurvivors.length > 0 && (
+            <div data-testid="battle-survivors-section" className="battle-survivors-section">
+              <h4 data-testid="battle-survivors-title">生存ユニット</h4>
+              <ul data-testid="battle-survivors-list" className="battle-survivors-list">
+                {allySurvivors.map((s, i) => (
+                  <li key={i} data-testid={`battle-survivor-row-${i}`} className="battle-survivor-row">
+                    <span data-testid={`battle-survivor-name-${i}`}>{s.name}</span>
+                    <span data-testid={`battle-survivor-job-${i}`}>[{formatJob(s.job)}]</span>
+                    <span data-testid={`battle-survivor-hp-${i}`}>
+                      HP {s.hp}/{s.maxHp}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
-        </>
+          <p data-testid="battle-result-hint" className="phase-hint">
+            「次年を迎える」で年送りします。
+          </p>
+        </div>
       )}
     </section>
   );

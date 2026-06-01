@@ -937,3 +937,299 @@ h3 {
   font-size: 0.85rem;
   letter-spacing: 2px;
 }
+
+.battle-log-row.playing {
+  animation: log-highlight 0.6s ease-in-out;
+  border-left: 4px solid var(--accent);
+  padding-left: 8px;
+}
+@keyframes log-highlight {
+  0%, 100% { background: white; }
+  50%      { background: #fff8e8; }
+}
+
+/* ─── 戦闘中ターンコマンドボタン ───────────────────── */
+
+.battle-turn-command-root {
+  margin: 16px 0;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, #fff8e8 0%, #f5ede0 100%);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  animation: command-pulse 1.5s ease-in-out infinite;
+}
+@keyframes command-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 149, 48, 0.4); }
+  50%      { box-shadow: 0 0 0 4px rgba(196, 149, 48, 0.2); }
+}
+.battle-turn-command-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.battle-turn-command-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 12px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+}
+.battle-turn-command-button:hover {
+  transform: translateY(-2px);
+  background: #faf0ed;
+  border-color: var(--accent);
+}
+.battle-turn-command-button:active {
+  transform: translateY(0);
+}
+.battle-turn-command-CW {
+  border-color: #4a6fb0;
+}
+.battle-turn-command-CCW {
+  border-color: #b04a4a;
+}
+.battle-turn-command-NONE {
+  border-color: var(--text-muted);
+}
+.battle-turn-command-label {
+  font-size: 1.05rem;
+  font-weight: bold;
+  color: var(--accent);
+}
+.battle-turn-command-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ─── 編成画面 命令バナー ─────────────────────────── */
+
+.formation-instruction-banner {
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: #f5ede0;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+/* ─── UnitDetailModal ─────────────────────────────── */
+
+.unit-detail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.unit-detail-modal-root {
+  position: relative;
+  max-width: 720px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+  padding: 24px 28px;
+  border: 2px solid var(--border);
+}
+.unit-detail-modal-close-button {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.unit-detail-modal-close-button:hover {
+  background: var(--bg-section);
+}
+
+.unit-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.unit-detail-job-badge {
+  background: var(--accent);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+.unit-detail-name {
+  margin: 0;
+  font-size: 1.6rem;
+}
+.unit-detail-gender, .unit-detail-age, .unit-detail-origin {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.unit-detail-stats-section {
+  background: var(--bg-section);
+  padding: 14px 18px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.unit-detail-stats-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+}
+.unit-detail-stats-grid dt {
+  font-weight: bold;
+  color: var(--text-muted);
+}
+.unit-detail-stats-grid dd {
+  margin: 0;
+  font-family: "SF Mono", Consolas, monospace;
+}
+.unit-detail-stat-effective {
+  font-size: 0.85em;
+  color: var(--accent);
+  margin-left: 8px;
+}
+.unit-detail-total-rating {
+  text-align: center;
+  background: linear-gradient(135deg, #c49530 0%, #b8862c 100%);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+.unit-detail-total-rating strong {
+  font-size: 1.4rem;
+  margin-left: 6px;
+}
+.unit-detail-lineage-section {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.unit-detail-no-lineage {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.unit-detail-ability-section {
+  background: linear-gradient(180deg, #fff8e8 0%, #f5ede0 100%);
+  padding: 14px 18px;
+  border-radius: 6px;
+  border-left: 4px solid var(--accent);
+  margin-bottom: 16px;
+}
+.unit-detail-ability-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 8px 0 0;
+}
+.unit-detail-ability-list dt {
+  font-weight: bold;
+  color: var(--accent);
+}
+.unit-detail-ability-list dd {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.unit-detail-ability-flavor {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.unit-detail-assign-section {
+  background: var(--bg-section);
+  padding: 14px 18px;
+  border-radius: 6px;
+}
+.unit-detail-assign-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+.unit-detail-mini-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.unit-detail-mini-grid-row {
+  display: grid;
+  grid-template-columns: 80px repeat(3, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.unit-detail-mini-grid-row-label {
+  font-weight: bold;
+  color: var(--accent);
+  text-align: center;
+}
+.unit-detail-mini-grid-btn {
+  padding: 10px 12px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+.unit-detail-mini-grid-btn:hover {
+  transform: translateY(-1px);
+  background: #faf0ed;
+  border-color: var(--accent);
+}
+.unit-detail-mini-grid-btn.empty {
+  background: white;
+  border-style: dashed;
+}
+.unit-detail-mini-grid-btn.occupied {
+  background: #fbe7e3;
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.unit-detail-mini-grid-btn.self {
+  background: linear-gradient(135deg, #c49530 0%, #b8862c 100%);
+  color: white;
+  border-color: var(--accent);
+  font-weight: bold;
+}
+.unit-detail-mini-grid-slot-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.unit-detail-mini-grid-btn.self .unit-detail-mini-grid-slot-label,
+.unit-detail-mini-grid-btn.occupied .unit-detail-mini-grid-slot-label {
+  color: inherit;
+}

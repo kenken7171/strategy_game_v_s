@@ -157,6 +157,133 @@ battleRoute.post("/run", async (c) => {
   });
 });
 
+// ─── ターン単位 API（リアルタイム指揮システム用） ─────────────────────
+
+/**
+ * 戦闘を初期化する。
+ *   - 編成 placements で味方 Squad を構築
+ *   - 敵 ±15% 乱数を適用して生成
+ *   - BattleSimulator を作成してセッションに保持
+ *   - 初期状態（placements + 1ターン目の forecast）を返す
+ *
+ * 以降は POST /api/battle/turn { strategy } で1ターンずつ進める。
+ */
+battleRoute.post("/init", async (c) => {
+  const body = await c.req.json();
+  const placements: BattlePlacement[] = body.placements ?? [];
+  const session = getOrCreateSession();
+  if (placements.length !== 9) {
+    return c.json({ ok: false, error: "placements must be 9" }, 400);
+  }
+  const idMap = new Map(session.brigade.units.map((u) => [u.id, u]));
+  const grouped: Record<string, Unit[]> = { FRONT: [], "REAR-L": [], "REAR-R": [] };
+  for (const p of placements) {
+    const u = idMap.get(p.unitId);
+    if (!u) return c.json({ ok: false, error: `unit ${p.unitId} not found` }, 400);
+    grouped[p.row].push(buildBattleUnit(u));
+  }
+  const squads = [
+    new Squad("FRONT",  grouped.FRONT),
+    new Squad("REAR-L", grouped["REAR-L"]),
+    new Squad("REAR-R", grouped["REAR-R"]),
+  ];
+  const battleRng = mulberry32(session.seed * 1000 + session.year);
+  const enemy = makeTrialEnemy(session.year, battleRng);
+
+  const sim = new BattleSimulator(squads, enemy, {
+    maxTurns: CHRONICLE_CONFIG.BATTLE.MAX_TURNS,
+    rng: battleRng,
+    verbose: false,
+    rotation: "NONE", // ターン単位 API では各 turn 呼び出しで都度指定するためデフォルトは NONE
+  });
+  session.setActiveBattle(sim);
+
+  return c.json({
+    ok: true,
+    year: session.year,
+    placements: sim.getCurrentPlacements(),
+    timeline: sim.getInitiativeForecast(),
+    isFinished: sim.isFinished,
+    currentTurn: sim.currentTurn,
+  });
+});
+
+/**
+ * 1 ターン進める。戦略に応じて陣形をローテーションしてから 1 ターン処理。
+ * 戻り値:
+ *   - turnLog: 今 turn の詳細ログ
+ *   - placements: turn 開始時点の配置
+ *   - timeline: 次ターンの行動順予報（未終了の場合）
+ *   - finished: 戦闘終了したか
+ *   - winner: 終了時の勝敗
+ */
+battleRoute.post("/turn", async (c) => {
+  const body = await c.req.json();
+  const strategy: RotationStrategy = body.strategy ?? "NONE";
+  const session = getOrCreateSession();
+  const sim = session.activeBattle;
+  if (!sim) {
+    return c.json({ ok: false, error: "no active battle (call /init first)" }, 400);
+  }
+  if (sim.isFinished) {
+    return c.json({ ok: false, error: "battle already finished" }, 400);
+  }
+
+  const turnLog = sim.runOneTurn(strategy);
+  const finished = sim.isFinished;
+  const winner = sim.currentWinner;
+
+  // 戦闘終了時の付随処理（applyBattleAffinity・年代記）
+  if (finished && winner) {
+    // squadmatePairs を抽出するため一旦再構築（簡略化: 各 squad の生存ペア）
+    const pairs: [string, string][] = [];
+    for (const sq of (sim as unknown as { allies: Squad[] }).allies) {
+      const ids = sq.units.map((u) => u.id);
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++) pairs.push([ids[i], ids[j]]);
+    }
+    session.setBrigade(
+      session.brigade.applyBattleAffinity(pairs, CHRONICLE_CONFIG.LINEAGE.AFFINITY_PER_BATTLE)
+    );
+    session.pushChronicle({
+      year: session.year,
+      type: "battle",
+      text: `⚔️ Year ${session.year}: ${winner} (${sim.currentTurn}ターン)`,
+    });
+  }
+
+  return c.json({
+    ok: true,
+    turnLog,
+    timeline: finished ? null : sim.getInitiativeForecast(),
+    finished,
+    winner,
+    currentTurn: sim.currentTurn,
+    allySurvivors: finished ? extractSurvivors(sim) : null,
+    enemySurvivors: finished ? extractEnemySurvivors(sim) : null,
+  });
+});
+
+/** BattleSimulator の internal から ally 生存者を抽出（型を限定的に exposing） */
+function extractSurvivors(sim: BattleSimulator) {
+  const allies = (sim as unknown as { allies: Squad[] }).allies;
+  return allies.flatMap((sq) =>
+    sq.units.filter((u) => u.isAlive).map((u) => ({
+      name: u.name, job: u.job, hp: u.hp, maxHp: u.maxHp,
+    }))
+  );
+}
+function extractEnemySurvivors(sim: BattleSimulator) {
+  const enemy = (sim as unknown as {
+    dynamicEnemy: { unitRecords: ReadonlyArray<{
+      name: string; job: string | null; currentHp: number; maxHp: number;
+    }> };
+  }).dynamicEnemy;
+  return enemy.unitRecords
+    .filter((r) => r.currentHp > 0)
+    .map((r) => ({ name: r.name, job: r.job, hp: r.currentHp, maxHp: r.maxHp }));
+}
+
 /**
  * 戦闘前の行動順予報。1ターン目のイニシアチブ（SPD順）を返す。
  *

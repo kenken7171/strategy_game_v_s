@@ -13,6 +13,8 @@ import type {
   BattleRunResponse,
   BattleFinishResponse,
   BattlePreviewResponse,
+  BattleInitResponse,
+  BattleTurnResponse,
   BattlePlacement,
   RotationStrategy,
 } from "./types";
@@ -58,5 +60,10 @@ export const api = {
     postJSON<BattlePreviewResponse>("/api/battle/preview", { placements }),
   runBattle: (placements: BattlePlacement[], rotation: RotationStrategy = "NONE") =>
     postJSON<BattleRunResponse>("/api/battle/run", { placements, rotation }),
+  // ★ターン単位 API（リアルタイム指揮）
+  initBattle: (placements: BattlePlacement[]) =>
+    postJSON<BattleInitResponse>("/api/battle/init", { placements }),
+  runTurn: (strategy: RotationStrategy) =>
+    postJSON<BattleTurnResponse>("/api/battle/turn", { strategy }),
   finishBattle: () => postJSON<BattleFinishResponse>("/api/battle/finish"),
 };

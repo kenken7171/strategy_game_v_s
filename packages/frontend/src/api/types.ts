@@ -160,6 +160,26 @@ export interface BattlePreviewResponse {
     maxAttack: number;
   };
 }
+
+// /api/battle/init, /api/battle/turn
+export interface BattleInitResponse {
+  ok: boolean;
+  year: number;
+  placements: GridPlacement[];
+  timeline: PreviewTimelineEntry[];
+  isFinished: boolean;
+  currentTurn: number;
+}
+export interface BattleTurnResponse {
+  ok: boolean;
+  turnLog: TurnLog;
+  timeline: PreviewTimelineEntry[] | null;
+  finished: boolean;
+  winner: Winner | null;
+  currentTurn: number;
+  allySurvivors: SurvivorRow[] | null;
+  enemySurvivors: SurvivorRow[] | null;
+}
 export interface SurvivorRow {
   name: string;
   job: string | null;
