@@ -273,7 +273,7 @@ function extractSurvivors(sim: BattleSimulator) {
   const allies = (sim as unknown as { allies: Squad[] }).allies;
   return allies.flatMap((sq) =>
     sq.units.filter((u) => u.isAlive).map((u) => ({
-      name: u.name, job: u.job, hp: u.hp, maxHp: u.maxHp,
+      name: u.name, job: u.job, gender: u.gender, hp: u.hp, maxHp: u.maxHp,
     }))
   );
 }

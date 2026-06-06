@@ -132,6 +132,8 @@ export interface BattleStatistics {
 export interface SurvivorRecord {
   readonly name: string;
   readonly job: string | null;
+  /** 性別（味方のみ、敵は省略） */
+  readonly gender?: "Male" | "Female";
   readonly hp: number;
   readonly maxHp: number;
 }
@@ -144,6 +146,8 @@ export interface GridPlacement {
   readonly unitId: string;
   readonly unitName: string;
   readonly job: string | null;
+  /** 性別（UI アイコン表示で使用） */
+  readonly gender: "Male" | "Female";
   readonly row: "FRONT" | "REAR-L" | "REAR-R";
   readonly col: number;
   readonly hp: number;
@@ -558,6 +562,7 @@ export class BattleSimulator {
           unitId: u.id,
           unitName: u.name,
           job: u.job,
+          gender: u.gender,
           row: rowId,
           col: c,
           hp: u.hp,
@@ -783,7 +788,7 @@ export class BattleSimulator {
     const allySurvivors: SurvivorRecord[] = this.allies
       .flatMap((sq) => sq.units)
       .filter((u) => u.isAlive)
-      .map((u) => ({ name: u.name, job: u.job, hp: u.hp, maxHp: u.maxHp }));
+      .map((u) => ({ name: u.name, job: u.job, gender: u.gender, hp: u.hp, maxHp: u.maxHp }));
 
     const enemySurvivors: SurvivorRecord[] = this.dynamicEnemy.unitRecords
       .filter((r) => r.currentHp > 0)

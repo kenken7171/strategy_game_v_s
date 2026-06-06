@@ -28,6 +28,7 @@ import {
   type JobFilter,
 } from "../../components/RosterControls";
 import { UnitDetailModal } from "../../components/UnitDetailModal";
+import { UnitIcon } from "../../components/UnitIcon";
 
 interface Props {
   year: number;
@@ -255,6 +256,13 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                         data-testid={`formation-cell-unit-${row}-${col}`}
                         className="formation-cell-unit"
                       >
+                        <UnitIcon
+                          jobId={currentUnit.job}
+                          gender={currentUnit.gender}
+                          size="md"
+                          altName={currentUnit.name}
+                          testIdSuffix={`formation-cell-${row}-${col}`}
+                        />
                         <span
                           data-testid={`formation-cell-unit-name-${row}-${col}`}
                           className="formation-cell-unit-name"
@@ -332,6 +340,13 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                 role="button"
                 tabIndex={0}
               >
+                <UnitIcon
+                  jobId={u.job}
+                  gender={u.gender}
+                  size="sm"
+                  altName={u.name}
+                  testIdSuffix={`bench-${u.id}`}
+                />
                 <span data-testid={`formation-bench-job-${u.id}`} className="formation-roster-job">
                   [{formatJob(u.job)}]
                 </span>

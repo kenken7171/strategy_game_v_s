@@ -948,6 +948,42 @@ h3 {
   50%      { background: #fff8e8; }
 }
 
+/* ─── UnitIcon（16-bit ドット絵） ─────────────────────── */
+
+/*
+ * 全 <img class="unit-icon"> に pixelated レンダリングを強制適用。
+ * Chrome/Edge: pixelated / Safari: -webkit-optimize-contrast / Firefox: crisp-edges
+ */
+.unit-icon {
+  display: inline-block;
+  vertical-align: middle;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+  -ms-interpolation-mode: nearest-neighbor;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.unit-icon-size-sm { width: 32px; height: 32px; }
+.unit-icon-size-md { width: 48px; height: 48px; }
+.unit-icon-size-lg { width: 72px; height: 72px; }
+.unit-icon-size-xl { width: 96px; height: 96px; }
+
+/* 画像読み込み失敗時のフォールバック（円形＋頭文字） */
+.unit-icon-fallback {
+  display: inline-block;
+  text-align: center;
+  background: var(--bg-section);
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  color: var(--accent);
+  font-weight: bold;
+  font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 /* ─── 敵の攻撃予告バナー ────────────────────────────── */
 
 .battle-enemy-intent-banner {

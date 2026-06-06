@@ -17,6 +17,7 @@
 import type { JSX } from "react";
 import type { RosterUnit, SquadRow } from "../api/types";
 import { formatJob, getJobAbility } from "../utils/job";
+import { UnitIcon } from "./UnitIcon";
 
 interface Props {
   unit: RosterUnit;
@@ -63,6 +64,13 @@ export function UnitDetailModal({
 
         {/* ─── ヘッダ ─────────────────────────────── */}
         <div data-testid="unit-detail-header" className="unit-detail-header">
+          <UnitIcon
+            jobId={unit.job}
+            gender={unit.gender}
+            size="xl"
+            altName={unit.name}
+            testIdSuffix={`detail-${unit.id}`}
+          />
           <span data-testid="unit-detail-job-badge" className="unit-detail-job-badge">
             {formatJob(unit.job)}
           </span>

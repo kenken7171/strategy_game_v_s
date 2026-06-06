@@ -122,6 +122,8 @@ export interface GridPlacement {
   unitId: string;
   unitName: string;
   job: string | null;
+  /** 性別（UI アイコン表示で使用） */
+  gender: Gender;
   row: SquadRow;
   col: number;
   hp: number;
@@ -199,6 +201,8 @@ export interface BattleTurnResponse {
 export interface SurvivorRow {
   name: string;
   job: string | null;
+  /** 性別（味方のみ、敵は省略） */
+  gender?: Gender;
   hp: number;
   maxHp: number;
 }

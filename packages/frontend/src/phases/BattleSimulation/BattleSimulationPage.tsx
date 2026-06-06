@@ -31,6 +31,7 @@ import type {
   SquadRow,
 } from "../../api/types";
 import { formatJob } from "../../utils/job";
+import { UnitIcon } from "../../components/UnitIcon";
 
 interface Props {
   year: number;
@@ -308,6 +309,13 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
                             data-testid={`battle-live-grid-unit-${row}-${col}`}
                             className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
                           >
+                            <UnitIcon
+                              jobId={p.job}
+                              gender={p.gender}
+                              size="md"
+                              altName={p.unitName}
+                              testIdSuffix={`battle-live-${row}-${col}`}
+                            />
                             <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
                               {p.unitName}
                             </span>
@@ -502,6 +510,13 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
               <ul data-testid="battle-survivors-list" className="battle-survivors-list">
                 {allySurvivors.map((s, i) => (
                   <li key={i} data-testid={`battle-survivor-row-${i}`} className="battle-survivor-row">
+                    <UnitIcon
+                      jobId={s.job}
+                      gender={s.gender ?? null}
+                      size="sm"
+                      altName={s.name}
+                      testIdSuffix={`battle-survivor-${i}`}
+                    />
                     <span data-testid={`battle-survivor-name-${i}`}>{s.name}</span>
                     <span data-testid={`battle-survivor-job-${i}`}>[{formatJob(s.job)}]</span>
                     <span data-testid={`battle-survivor-hp-${i}`}>
