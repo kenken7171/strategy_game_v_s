@@ -1,6 +1,12 @@
 /**
  * UnitIcon — ユニットの 16-bit ドット絵アイコンを表示する共通コンポーネント
  *
+ * 設計方針（M5 リファクタ）:
+ *   - 自分自身は固定サイズを持たない「親要素フィット型」
+ *   - <img> は CSS で width: 100%; height: 100%; object-fit: contain; を適用
+ *   - 呼び出し側は親に `.unit-icon-slot` + サイズ修飾子（xs/sm/md/lg/xl）を付けて
+ *     表示寸法を制御する（global.css 参照）
+ *
  * パス規則: /image/{jobId}/{gender}.png
  *   例: /image/iron_wall_knight/male.png
  *
@@ -8,7 +14,7 @@
  * CSS で確実に適用する（unit-icon クラス参照）。
  *
  * 画像が見つからない場合は <onError> で broken state にし、
- * フォールバックの絵文字アイコンを表示する。
+ * フォールバックの円形＋頭文字アイコンを表示する。
  */
 import { useState } from "react";
 import { formatJob } from "../utils/job";
@@ -46,15 +52,11 @@ export function getJobIconPath(
   return `/image/${jobId}/${g}.png`;
 }
 
-export type UnitIconSize = "sm" | "md" | "lg" | "xl";
-
 interface Props {
   /** ジョブID (例: "iron_wall_knight") */
   jobId: string | null | undefined;
   /** 性別 ("Male" | "Female") */
   gender: IconGender | null | undefined;
-  /** 表示サイズ。デフォルト "md" (48px) */
-  size?: UnitIconSize;
   /** alt 属性に使う名前（無ければジョブ日本語名） */
   altName?: string;
   /** 追加のクラス名（任意） */
@@ -63,35 +65,30 @@ interface Props {
   testIdSuffix?: string;
 }
 
-/** サイズ→絵文字フォールバック時のフォントサイズ */
-const SIZE_TO_PX: Record<UnitIconSize, number> = {
-  sm: 32,
-  md: 48,
-  lg: 72,
-  xl: 96,
-};
-
+/**
+ * 親要素フィット型のユニットアイコン。
+ * 呼び出し側は `<span class="unit-icon-slot unit-icon-slot-{xs|sm|md|lg|xl}">` などで
+ * 親に寸法を与えた上で本コンポーネントを置く。
+ */
 export function UnitIcon({
-  jobId, gender, size = "md", altName, className, testIdSuffix,
+  jobId, gender, altName, className, testIdSuffix,
 }: Props) {
   const path = getJobIconPath(jobId, gender);
   const [broken, setBroken] = useState(false);
-  const px = SIZE_TO_PX[size];
   const alt = altName ?? formatJob(jobId);
   const testid = testIdSuffix
     ? `unit-icon-${testIdSuffix}`
     : "unit-icon";
 
   if (!path || broken) {
-    // フォールバック: 円形のジョブ頭文字
+    // フォールバック: 円形のジョブ頭文字（親 100% フィット）
     const initial = formatJob(jobId).slice(0, 1) || "?";
     return (
       <span
         data-testid={`${testid}-fallback`}
         data-job={jobId ?? "none"}
         data-gender={gender ?? "none"}
-        className={`unit-icon-fallback unit-icon-size-${size} ${className ?? ""}`}
-        style={{ width: px, height: px, lineHeight: `${px}px`, fontSize: px * 0.42 }}
+        className={`unit-icon-fallback ${className ?? ""}`}
         aria-label={alt}
         title={alt}
       >
@@ -108,9 +105,7 @@ export function UnitIcon({
       data-testid={testid}
       data-job={jobId}
       data-gender={gender}
-      width={px}
-      height={px}
-      className={`unit-icon unit-icon-size-${size} ${className ?? ""}`}
+      className={`unit-icon ${className ?? ""}`}
       onError={() => setBroken(true)}
       draggable={false}
     />

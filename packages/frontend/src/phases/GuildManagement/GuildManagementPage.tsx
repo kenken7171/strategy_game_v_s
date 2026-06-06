@@ -126,13 +126,17 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
               <span data-testid={`guild-candidate-source-${c.id}`} className="guild-candidate-source-icon">
                 {c.source === "heir" ? "🩸" : "✨"}
               </span>
-              <UnitIcon
-                jobId={c.job}
-                gender={c.gender}
-                size="sm"
-                altName={c.name}
-                testIdSuffix={`candidate-${c.id}`}
-              />
+              <span
+                data-testid={`guild-candidate-icon-slot-${c.id}`}
+                className="unit-icon-slot unit-icon-slot-sm"
+              >
+                <UnitIcon
+                  jobId={c.job}
+                  gender={c.gender}
+                  altName={c.name}
+                  testIdSuffix={`candidate-${c.id}`}
+                />
+              </span>
               <span data-testid={`guild-candidate-job-${c.id}`} className="guild-candidate-job">
                 [{formatJob(c.job)}]
               </span>
@@ -193,13 +197,17 @@ export function GuildManagementPage({ year, phaseHandle }: Props) {
               <span data-testid={`guild-retiree-rank-${r.id}`} className="guild-retiree-rank">
                 #{r.strengthRank}
               </span>
-              <UnitIcon
-                jobId={r.job}
-                gender={r.gender}
-                size="sm"
-                altName={r.name}
-                testIdSuffix={`retiree-${r.id}`}
-              />
+              <span
+                data-testid={`guild-retiree-icon-slot-${r.id}`}
+                className="unit-icon-slot unit-icon-slot-sm"
+              >
+                <UnitIcon
+                  jobId={r.job}
+                  gender={r.gender}
+                  altName={r.name}
+                  testIdSuffix={`retiree-${r.id}`}
+                />
+              </span>
               <span data-testid={`guild-retiree-job-${r.id}`} className="guild-retiree-job">
                 [{formatJob(r.job)}]
               </span>

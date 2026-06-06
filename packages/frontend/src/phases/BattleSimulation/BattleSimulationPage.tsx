@@ -131,9 +131,43 @@ function EnemyIntentBanner({
         data-testid="battle-enemy-intent-affected-list"
         className="battle-enemy-intent-affected-list"
       >
-        影響圏内: {affectedUnits.length} 名 (
-        {affectedUnits.map((u) => u.unitName).join(", ") || "なし"}
-        )
+        影響圏内: {affectedUnits.length} 名
+        {affectedUnits.length === 0 ? (
+          <span
+            data-testid="battle-enemy-intent-affected-empty"
+            className="battle-enemy-intent-affected-empty"
+          >
+            （該当ユニットなし）
+          </span>
+        ) : (
+          <ul
+            data-testid="battle-enemy-intent-affected-units"
+            className="battle-enemy-intent-affected-units"
+          >
+            {affectedUnits.map((u) => (
+              <li
+                key={u.unitId}
+                data-testid={`battle-enemy-intent-affected-unit-${u.unitId}`}
+                className="battle-enemy-intent-affected-unit"
+              >
+                <span
+                  data-testid={`battle-enemy-intent-affected-icon-slot-${u.unitId}`}
+                  className="unit-icon-slot unit-icon-slot-xs"
+                >
+                  <UnitIcon
+                    jobId={u.job}
+                    gender={u.gender}
+                    altName={u.unitName}
+                    testIdSuffix={`intent-affected-${u.unitId}`}
+                  />
+                </span>
+                <span data-testid={`battle-enemy-intent-affected-name-${u.unitId}`}>
+                  {u.unitName}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -309,13 +343,17 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
                             data-testid={`battle-live-grid-unit-${row}-${col}`}
                             className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
                           >
-                            <UnitIcon
-                              jobId={p.job}
-                              gender={p.gender}
-                              size="md"
-                              altName={p.unitName}
-                              testIdSuffix={`battle-live-${row}-${col}`}
-                            />
+                            <span
+                              data-testid={`battle-live-grid-icon-slot-${row}-${col}`}
+                              className="unit-icon-slot unit-icon-slot-md"
+                            >
+                              <UnitIcon
+                                jobId={p.job}
+                                gender={p.gender}
+                                altName={p.unitName}
+                                testIdSuffix={`battle-live-${row}-${col}`}
+                              />
+                            </span>
                             <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
                               {p.unitName}
                             </span>
@@ -510,13 +548,17 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
               <ul data-testid="battle-survivors-list" className="battle-survivors-list">
                 {allySurvivors.map((s, i) => (
                   <li key={i} data-testid={`battle-survivor-row-${i}`} className="battle-survivor-row">
-                    <UnitIcon
-                      jobId={s.job}
-                      gender={s.gender ?? null}
-                      size="sm"
-                      altName={s.name}
-                      testIdSuffix={`battle-survivor-${i}`}
-                    />
+                    <span
+                      data-testid={`battle-survivor-icon-slot-${i}`}
+                      className="unit-icon-slot unit-icon-slot-sm"
+                    >
+                      <UnitIcon
+                        jobId={s.job}
+                        gender={s.gender ?? null}
+                        altName={s.name}
+                        testIdSuffix={`battle-survivor-${i}`}
+                      />
+                    </span>
                     <span data-testid={`battle-survivor-name-${i}`}>{s.name}</span>
                     <span data-testid={`battle-survivor-job-${i}`}>[{formatJob(s.job)}]</span>
                     <span data-testid={`battle-survivor-hp-${i}`}>

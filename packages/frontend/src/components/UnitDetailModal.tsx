@@ -64,13 +64,17 @@ export function UnitDetailModal({
 
         {/* ─── ヘッダ ─────────────────────────────── */}
         <div data-testid="unit-detail-header" className="unit-detail-header">
-          <UnitIcon
-            jobId={unit.job}
-            gender={unit.gender}
-            size="xl"
-            altName={unit.name}
-            testIdSuffix={`detail-${unit.id}`}
-          />
+          <span
+            data-testid={`unit-detail-icon-slot-${unit.id}`}
+            className="unit-icon-slot unit-icon-slot-xl"
+          >
+            <UnitIcon
+              jobId={unit.job}
+              gender={unit.gender}
+              altName={unit.name}
+              testIdSuffix={`detail-${unit.id}`}
+            />
+          </span>
           <span data-testid="unit-detail-job-badge" className="unit-detail-job-badge">
             {formatJob(unit.job)}
           </span>
@@ -204,7 +208,21 @@ export function UnitDetailModal({
                           ✓ 現在配置中
                         </span>
                       ) : occupant ? (
-                        <span data-testid={`formation-assign-btn-occupant-${row}-${col}`}>
+                        <span
+                          data-testid={`formation-assign-btn-occupant-${row}-${col}`}
+                          className="unit-detail-mini-grid-occupant"
+                        >
+                          <span
+                            data-testid={`formation-assign-btn-occupant-icon-slot-${row}-${col}`}
+                            className="unit-icon-slot unit-icon-slot-sm"
+                          >
+                            <UnitIcon
+                              jobId={occupant.job}
+                              gender={occupant.gender}
+                              altName={occupant.name}
+                              testIdSuffix={`assign-occupant-${row}-${col}`}
+                            />
+                          </span>
                           {occupant.name} を押し戻す
                         </span>
                       ) : (

@@ -256,13 +256,17 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                         data-testid={`formation-cell-unit-${row}-${col}`}
                         className="formation-cell-unit"
                       >
-                        <UnitIcon
-                          jobId={currentUnit.job}
-                          gender={currentUnit.gender}
-                          size="md"
-                          altName={currentUnit.name}
-                          testIdSuffix={`formation-cell-${row}-${col}`}
-                        />
+                        <span
+                          data-testid={`formation-cell-icon-slot-${row}-${col}`}
+                          className="unit-icon-slot unit-icon-slot-md"
+                        >
+                          <UnitIcon
+                            jobId={currentUnit.job}
+                            gender={currentUnit.gender}
+                            altName={currentUnit.name}
+                            testIdSuffix={`formation-cell-${row}-${col}`}
+                          />
+                        </span>
                         <span
                           data-testid={`formation-cell-unit-name-${row}-${col}`}
                           className="formation-cell-unit-name"
@@ -340,13 +344,17 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
                 role="button"
                 tabIndex={0}
               >
-                <UnitIcon
-                  jobId={u.job}
-                  gender={u.gender}
-                  size="sm"
-                  altName={u.name}
-                  testIdSuffix={`bench-${u.id}`}
-                />
+                <span
+                  data-testid={`formation-bench-icon-slot-${u.id}`}
+                  className="unit-icon-slot unit-icon-slot-sm"
+                >
+                  <UnitIcon
+                    jobId={u.job}
+                    gender={u.gender}
+                    altName={u.name}
+                    testIdSuffix={`bench-${u.id}`}
+                  />
+                </span>
                 <span data-testid={`formation-bench-job-${u.id}`} className="formation-roster-job">
                   [{formatJob(u.job)}]
                 </span>

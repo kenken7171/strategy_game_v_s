@@ -948,31 +948,31 @@ h3 {
   50%      { background: #fff8e8; }
 }
 
-/* ─── UnitIcon（16-bit ドット絵） ─────────────────────── */
+/* ─── UnitIcon（16-bit ドット絵 / 親要素フィット型） ─── */
 
 /*
- * 全 <img class="unit-icon"> に pixelated レンダリングを強制適用。
+ * UnitIcon 本体は固定寸法を持たず、親 `.unit-icon-slot-*` に従って
+ * 100% 拡縮する。pixelated は必ず適用。
  * Chrome/Edge: pixelated / Safari: -webkit-optimize-contrast / Firefox: crisp-edges
  */
 .unit-icon {
-  display: inline-block;
-  vertical-align: middle;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   image-rendering: pixelated;
   image-rendering: -moz-crisp-edges;
   image-rendering: -webkit-optimize-contrast;
   -ms-interpolation-mode: nearest-neighbor;
-  object-fit: contain;
-  flex-shrink: 0;
 }
 
-.unit-icon-size-sm { width: 32px; height: 32px; }
-.unit-icon-size-md { width: 48px; height: 48px; }
-.unit-icon-size-lg { width: 72px; height: 72px; }
-.unit-icon-size-xl { width: 96px; height: 96px; }
-
-/* 画像読み込み失敗時のフォールバック（円形＋頭文字） */
+/* 画像読み込み失敗時のフォールバック（円形＋頭文字、親 100% フィット） */
 .unit-icon-fallback {
-  display: inline-block;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   background: var(--bg-section);
   border: 2px solid var(--border);
@@ -980,9 +980,30 @@ h3 {
   color: var(--accent);
   font-weight: bold;
   font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
-  vertical-align: middle;
-  flex-shrink: 0;
+  font-size: 1em;
+  line-height: 1;
+  box-sizing: border-box;
+  overflow: hidden;
 }
+
+/*
+ * UnitIcon を入れるためのラッパー。
+ * 「親要素」として明示的に寸法を提供し、その中で <img> が 100% フィットする。
+ * font-size はフォールバック頭文字の表示サイズに使われる。
+ */
+.unit-icon-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+.unit-icon-slot-xs { width: 24px; height: 24px; font-size: 14px; }
+.unit-icon-slot-sm { width: 32px; height: 32px; font-size: 16px; }
+.unit-icon-slot-md { width: 48px; height: 48px; font-size: 22px; }
+.unit-icon-slot-lg { width: 72px; height: 72px; font-size: 32px; }
+.unit-icon-slot-xl { width: 96px; height: 96px; font-size: 42px; }
 
 /* ─── 敵の攻撃予告バナー ────────────────────────────── */
 
@@ -1062,6 +1083,29 @@ h3 {
   padding: 6px 10px;
   border-radius: 4px;
   margin-top: 4px;
+}
+.battle-enemy-intent-affected-units {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.battle-enemy-intent-affected-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.battle-enemy-intent-affected-empty {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ─── 戦闘中ターンコマンドボタン ───────────────────── */
@@ -1344,6 +1388,13 @@ h3 {
   font-size: 0.7rem;
   color: var(--text-muted);
   text-transform: uppercase;
+}
+.unit-detail-mini-grid-occupant {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  margin-top: 2px;
 }
 .unit-detail-mini-grid-btn.self .unit-detail-mini-grid-slot-label,
 .unit-detail-mini-grid-btn.occupied .unit-detail-mini-grid-slot-label {
