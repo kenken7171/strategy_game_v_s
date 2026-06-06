@@ -214,108 +214,114 @@ export function BattalionFormationPage({ year, phaseHandle }: Props) {
         配置済みのマスをクリックするとそのユニットがベンチに戻ります。
       </p>
 
-      {/* ─── 3×3 グリッド ────────────────────────────── */}
-      <table data-testid="formation-grid-root" className="formation-grid">
-        <thead data-testid="formation-grid-header">
-          <tr>
-            <th data-testid="formation-grid-header-row-label">分隊</th>
-            <th data-testid="formation-grid-header-col-0">スロット1</th>
-            <th data-testid="formation-grid-header-col-1">スロット2</th>
-            <th data-testid="formation-grid-header-col-2">スロット3</th>
-          </tr>
-        </thead>
-        <tbody data-testid="formation-grid-body">
-          {ROWS.map((row) => (
-            <tr
+      {/* ─── V字（くさび型）フォーメーション ────────────────────────────── */}
+      <div
+        data-testid="formation-v-shape-root"
+        className="formation-v-shape"
+      >
+        {ROWS.map((row) => {
+          const squadModifier =
+            row === "FRONT" ? "front"
+            : row === "REAR-L" ? "rear-l"
+            : "rear-r";
+          return (
+            <div
               key={row}
-              data-testid={`formation-grid-row-${row}`}
-              className="formation-grid-row"
+              data-testid={`formation-v-squad-${row}`}
+              data-row={row}
+              className={`formation-v-squad formation-v-squad-${squadModifier}`}
             >
-              <th
-                data-testid={`formation-grid-row-label-${row}`}
-                className="formation-grid-row-label"
+              <div
+                data-testid={`formation-v-squad-label-${row}`}
+                className="formation-v-squad-header"
               >
+                {row === "FRONT" ? "⚔ " : "🛡 "}
                 {ROW_LABEL[row]}
-              </th>
-              {COLS.map((col) => {
-                const cell = grid.find((c) => c.row === row && c.col === col)!;
-                const currentUnit = cell.unitId ? unitsById.get(cell.unitId) ?? null : null;
-                const heart = currentUnit ? heartMap.get(currentUnit.id) : null;
-                return (
-                  <td
-                    key={col}
-                    data-testid={`formation-target-slot-${row}-${col}`}
-                    data-filled={!!currentUnit}
-                    onClick={() => onCellClick(row, col)}
-                    className="formation-grid-cell formation-target-slot"
-                    role="button"
-                    tabIndex={0}
-                  >
-                    {currentUnit ? (
-                      <div
-                        data-testid={`formation-cell-unit-${row}-${col}`}
-                        className="formation-cell-unit"
-                      >
-                        <span
-                          data-testid={`formation-cell-icon-slot-${row}-${col}`}
-                          className="unit-icon-slot unit-icon-slot-md"
+              </div>
+              <div
+                data-testid={`formation-v-slot-row-${row}`}
+                className="formation-v-slot-row"
+              >
+                {COLS.map((col) => {
+                  const cell = grid.find((c) => c.row === row && c.col === col)!;
+                  const currentUnit = cell.unitId ? unitsById.get(cell.unitId) ?? null : null;
+                  const heart = currentUnit ? heartMap.get(currentUnit.id) : null;
+                  return (
+                    <div
+                      key={col}
+                      data-testid={`formation-target-slot-${row}-${col}`}
+                      data-filled={!!currentUnit}
+                      onClick={() => onCellClick(row, col)}
+                      className="formation-v-slot formation-target-slot"
+                      role="button"
+                      tabIndex={0}
+                    >
+                      {currentUnit ? (
+                        <div
+                          data-testid={`formation-cell-unit-${row}-${col}`}
+                          className="formation-cell-unit"
                         >
-                          <UnitIcon
-                            jobId={currentUnit.job}
-                            gender={currentUnit.gender}
-                            altName={currentUnit.name}
-                            testIdSuffix={`formation-cell-${row}-${col}`}
-                          />
-                        </span>
-                        <span
-                          data-testid={`formation-cell-unit-name-${row}-${col}`}
-                          className="formation-cell-unit-name"
-                        >
-                          {currentUnit.name}
-                        </span>
-                        <span
-                          data-testid={`formation-cell-unit-job-${row}-${col}`}
-                          className="formation-cell-unit-job"
-                        >
-                          [{formatJob(currentUnit.job)}]
-                        </span>
-                        <span
-                          data-testid={`formation-cell-unit-stats-${row}-${col}`}
-                          className="formation-cell-unit-stats"
-                        >
-                          HP{currentUnit.maxHp}/ATK{currentUnit.attack}/SPD{currentUnit.speed}
-                        </span>
-                        <span
-                          data-testid={`formation-cell-unit-total-${row}-${col}`}
-                          className="formation-cell-unit-total"
-                        >
-                          総合 {currentUnit.totalRating}
-                        </span>
-                        {heart && (
                           <span
-                            data-testid={`formation-cell-heart-${row}-${col}`}
-                            className="formation-cell-heart"
-                            title={`${heart.partnerName} と好感度 ${heart.affinity}${heart.married ? "（既婚）" : ""}`}
+                            data-testid={`formation-cell-icon-slot-${row}-${col}`}
+                            className="unit-icon-slot unit-icon-slot-md"
                           >
-                            {heart.heart}
+                            <UnitIcon
+                              jobId={currentUnit.job}
+                              gender={currentUnit.gender}
+                              altName={currentUnit.name}
+                              testIdSuffix={`formation-cell-${row}-${col}`}
+                            />
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span
-                        data-testid={`formation-cell-empty-${row}-${col}`}
-                        className="formation-cell-empty"
-                      >
-                        + 空き
-                      </span>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                          <span
+                            data-testid={`formation-cell-unit-name-${row}-${col}`}
+                            className="formation-cell-unit-name"
+                          >
+                            {currentUnit.name}
+                          </span>
+                          <span
+                            data-testid={`formation-cell-unit-job-${row}-${col}`}
+                            className="formation-cell-unit-job"
+                          >
+                            [{formatJob(currentUnit.job)}]
+                          </span>
+                          <span
+                            data-testid={`formation-cell-unit-stats-${row}-${col}`}
+                            className="formation-cell-unit-stats"
+                          >
+                            HP{currentUnit.maxHp}/ATK{currentUnit.attack}/SPD{currentUnit.speed}
+                          </span>
+                          <span
+                            data-testid={`formation-cell-unit-total-${row}-${col}`}
+                            className="formation-cell-unit-total"
+                          >
+                            総合 {currentUnit.totalRating}
+                          </span>
+                          {heart && (
+                            <span
+                              data-testid={`formation-cell-heart-${row}-${col}`}
+                              className="formation-cell-heart"
+                              title={`${heart.partnerName} と好感度 ${heart.affinity}${heart.married ? "（既婚）" : ""}`}
+                            >
+                              {heart.heart}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span
+                          data-testid={`formation-cell-empty-${row}-${col}`}
+                          className="formation-cell-empty"
+                        >
+                          + 空き
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* ─── ベンチ（ソート・フィルタ付き） ───────────── */}
       <div data-testid="formation-roster-section" className="formation-roster-section">

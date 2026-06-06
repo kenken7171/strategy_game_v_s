@@ -207,6 +207,8 @@ battleRoute.post("/init", async (c) => {
     currentTurn: sim.currentTurn,
     // ★ 1ターン目の攻撃予告
     nextActionIntent: sim.getNextActionIntent(),
+    // ★ 敵ボスの現在 state（戦闘画面最上部の敵カード用）
+    enemy: sim.getEnemyState(),
   });
 });
 
@@ -265,6 +267,8 @@ battleRoute.post("/turn", async (c) => {
     enemySurvivors: finished ? extractEnemySurvivors(sim) : null,
     // ★ 次ターンの攻撃予告（終了時は null）
     nextActionIntent: finished ? null : sim.getNextActionIntent(),
+    // ★ 敵ボスの現在 state（HP は毎ターン減少する）
+    enemy: sim.getEnemyState(),
   });
 });
 

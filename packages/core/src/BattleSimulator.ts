@@ -234,6 +234,21 @@ export interface AttackIntent {
   readonly damagePerUnit: number;
 }
 
+/**
+ * 敵ボスの現在 state。
+ * 戦闘画面の最上部に敵ステータスカードを描画するために、毎ターン UI へ返す。
+ * 本ゲームの敵は単体ボス（「試練の門の守護者」）なので、配列ではなく単一構造体。
+ */
+export interface EnemyState {
+  readonly name: string;
+  readonly job: string | null;
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly speed: number;
+  readonly frontAttack: number;
+  readonly rearAttack: number;
+}
+
 export class BattleSimulator {
   private readonly allies: Squad[];
   private readonly dynamicEnemy: DynamicEnemy;
@@ -650,6 +665,37 @@ export class BattleSimulator {
   /** 現在の placements を公開 */
   getCurrentPlacements(): GridPlacement[] {
     return this.collectPlacements();
+  }
+
+  /**
+   * 敵ボスの現在 state（戦闘画面の最上部 EnemyStatusCard 用）。
+   *
+   * 本ゲームの敵は単体ボス（試練の門の守護者）として makeTrialEnemy が生成する。
+   * DynamicEnemy.unitRecords[0] が唯一のレコードなので、そこから直接抽出する。
+   * 0 体（生成失敗）の場合は安全な空オブジェクトを返す。
+   *
+   * 攻撃力は core 内では baseAttack（= front/rear の平均、生成時固定）のみ保持。
+   * 試練の敵生成側で frontAttack === rearAttack === atk としているので、
+   * 両方に同じ値を返す。
+   */
+  getEnemyState(): EnemyState {
+    const r = this.dynamicEnemy.unitRecords[0];
+    if (!r) {
+      return {
+        name: "(unknown)", job: null,
+        hp: 0, maxHp: 0,
+        speed: 0, frontAttack: 0, rearAttack: 0,
+      };
+    }
+    return {
+      name: r.name,
+      job: r.job,
+      hp: r.currentHp,
+      maxHp: r.maxHp,
+      speed: r.speed,
+      frontAttack: r.baseAttack,
+      rearAttack: r.baseAttack,
+    };
   }
 
   /**

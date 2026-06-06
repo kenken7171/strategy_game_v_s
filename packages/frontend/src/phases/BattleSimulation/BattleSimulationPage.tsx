@@ -29,6 +29,7 @@ import type {
   SurvivorRow,
   AttackIntent,
   SquadRow,
+  EnemyState,
 } from "../../api/types";
 import { formatJob } from "../../utils/job";
 import { UnitIcon } from "../../components/UnitIcon";
@@ -69,6 +70,99 @@ const INTENT_KIND_LABEL: Record<AttackIntent["kind"], { icon: string; severity: 
   PINCER:        { icon: "⚔️",  severity: "mid"  },
   TOTAL_ASSAULT: { icon: "🔥", severity: "low"  },
 };
+
+/**
+ * 敵ボスステータスカード（戦闘画面最上部、味方陣形の直上）。
+ *
+ * 「今敵がどんな状況か一目でわかる」ために、以下を集約表示:
+ *   - 敵の名前
+ *   - HP バー（current / max、低体力時は色変化）
+ *   - frontAttack / rearAttack
+ *   - speed
+ *
+ * 旧 EnemyIntentBanner はこのカードの直下に配置することで、
+ * 「敵ステータス → 次の予告 → 自分の布陣」の視線移動だけで戦況が読める。
+ */
+function EnemyStatusCard({
+  enemy, currentTurn,
+}: {
+  enemy: EnemyState;
+  currentTurn: number;
+}) {
+  const ratio = enemy.maxHp > 0 ? Math.max(0, Math.min(1, enemy.hp / enemy.maxHp)) : 0;
+  const pct = Math.round(ratio * 100);
+  const isLow = ratio < 0.3 && enemy.hp > 0;
+  return (
+    <div
+      data-testid="battle-enemy-status-card"
+      className="battle-enemy-status-card"
+    >
+      <div
+        data-testid="battle-enemy-status-header"
+        className="battle-enemy-status-header"
+      >
+        <span data-testid="battle-enemy-status-icon" className="battle-enemy-status-icon">
+          👹
+        </span>
+        <h3
+          data-testid="battle-enemy-status-name"
+          className="battle-enemy-status-name"
+        >
+          {enemy.name}
+        </h3>
+        <span
+          data-testid="battle-enemy-status-turn-label"
+          className="battle-enemy-status-turn-label"
+        >
+          Turn {currentTurn}
+        </span>
+      </div>
+      <div data-testid="battle-enemy-hp-row" className="battle-enemy-hp-row">
+        <span data-testid="battle-enemy-hp-label" className="battle-enemy-hp-label">
+          HP
+        </span>
+        <div
+          data-testid="battle-enemy-hp-bar-wrap"
+          className="battle-enemy-hp-bar-wrap"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={enemy.maxHp}
+          aria-valuenow={enemy.hp}
+        >
+          <div
+            data-testid="battle-enemy-hp-bar-fill"
+            data-low={isLow}
+            className="battle-enemy-hp-bar-fill"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span data-testid="battle-enemy-hp-text" className="battle-enemy-hp-text">
+          {enemy.hp} / {enemy.maxHp}
+        </span>
+      </div>
+      <div data-testid="battle-enemy-stats-row" className="battle-enemy-stats-row">
+        <span
+          data-testid="battle-enemy-stat-front-attack"
+          className="battle-enemy-stat-chip"
+        >
+          ATK(前) <b>{enemy.frontAttack}</b>
+        </span>
+        <span
+          data-testid="battle-enemy-stat-rear-attack"
+          className="battle-enemy-stat-chip"
+        >
+          ATK(後) <b>{enemy.rearAttack}</b>
+        </span>
+        <span
+          data-testid="battle-enemy-stat-speed"
+          className="battle-enemy-stat-chip"
+        >
+          SPD <b>{enemy.speed}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * 敵の次ターン攻撃予告バナー。
@@ -187,6 +281,8 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
   const [timeline, setTimeline] = useState<PreviewTimelineEntry[]>([]);
   const [currentTurn, setCurrentTurn] = useState<number>(0);
   const [nextIntent, setNextIntent] = useState<AttackIntent | null>(null);
+  /** 敵ボスの現在ステータス（毎ターン更新） */
+  const [enemy, setEnemy] = useState<EnemyState | null>(null);
 
   // ターンログ累積（UI 表示用）
   const [turnLogs, setTurnLogs] = useState<TurnLog[]>([]);
@@ -222,6 +318,7 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         setTimeline(res.timeline);
         setCurrentTurn(res.currentTurn);
         setNextIntent(res.nextActionIntent);
+        setEnemy(res.enemy);
         setStatus("waiting-command");
       } catch (e) {
         setErrMsg(String(e));
@@ -269,6 +366,8 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
       // 次ターンの timeline + 攻撃予告
       if (res.timeline) setTimeline(res.timeline);
       setNextIntent(res.nextActionIntent);
+      // 敵 state（HP は毎ターン減少する）
+      setEnemy(res.enemy);
       // 終了判定
       if (res.finished) {
         setWinner(res.winner);
@@ -304,7 +403,19 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         </div>
       )}
 
-      {/* ライブ陣形グリッド（常時表示） */}
+      {/* ★ 1. 敵ステータスカード（最上部・常時表示）
+            戦闘中いつでも「敵が今どんな状況か」が一目でわかるよう、
+            ローディング以外の全ステージで表示する。 */}
+      {status !== "loading-init" && enemy && (
+        <EnemyStatusCard enemy={enemy} currentTurn={currentTurn} />
+      )}
+
+      {/* ★ 2. 敵の次ターン攻撃予告（waiting-command のときだけ・敵カード直下） */}
+      {status === "waiting-command" && winner === null && nextIntent && (
+        <EnemyIntentBanner intent={nextIntent} placements={placements} />
+      )}
+
+      {/* ★ 3. ライブ陣形グリッド（味方、常時表示） */}
       {status !== "loading-init" && placements.length > 0 && (
         <div
           data-testid="battle-live-grid-section"
@@ -377,14 +488,10 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         </div>
       )}
 
-      {/* ターン頭：敵の攻撃予告 + 行動順予報 + コマンド選択 */}
+      {/* ★ 4. 行動順予報 + 5. コマンド選択（waiting-command のときのみ）
+            ※ 攻撃予告バナーは敵カード直下に集約済みのためここからは削除 */}
       {status === "waiting-command" && winner === null && (
         <>
-          {/* ★ 攻撃予告バナー（最重要情報） */}
-          {nextIntent && (
-            <EnemyIntentBanner intent={nextIntent} placements={placements} />
-          )}
-
           <div
             data-testid="battle-preview-timeline-section"
             className="battle-preview-timeline-section"

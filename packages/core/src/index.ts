@@ -40,6 +40,7 @@ export type {
   TimelineEntry,
   AttackIntent,
   AttackPatternKind,
+  EnemyState,
 } from "./BattleSimulator";
 export { MAX_UNITS_PER_SQUAD, MAX_ENEMY_ACTION_LOOP } from "./config";
 export { CHRONICLE_CONFIG } from "./config/ChronicleConfig";

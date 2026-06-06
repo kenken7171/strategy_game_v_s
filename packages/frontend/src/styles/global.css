@@ -240,6 +240,122 @@ h3 {
   font-weight: bold;
 }
 
+/* ─── V字（くさび型）フォーメーション ──────────────────────── */
+
+/*
+ * 旧 3×3 テーブルを廃止して、敵の方向（上）に対して
+ *  - FRONT（前衛）を中央上にせり出させる
+ *  - REAR-L / REAR-R を左下／右下に配置
+ * という戦術的に直感的なくさび型レイアウトを実現する。
+ */
+.formation-v-shape {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "front  front"
+    "rear-l rear-r";
+  gap: 24px 40px;
+  padding: 28px 12px 16px;
+  margin: 16px 0;
+  background: linear-gradient(180deg, #f5ede0 0%, #eee9e0 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+}
+/* 敵方向の矢印（FRONT の上に小さく） */
+.formation-v-shape::before {
+  content: "▲ 敵の方向";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--warning);
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+.formation-v-squad {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+.formation-v-squad-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: bold;
+  color: var(--accent);
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+}
+.formation-v-squad-front {
+  grid-area: front;
+  justify-self: center;
+  /* 前衛は一歩前に「せり出す」: 上方向に margin -8px、影を強める */
+  margin-top: -4px;
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(139, 58, 58, 0.18);
+}
+.formation-v-squad-rear-l {
+  grid-area: rear-l;
+  justify-self: end;
+  /* 左後衛は右下方向に寄せて V の左脚を作る */
+  margin-top: 8px;
+}
+.formation-v-squad-rear-r {
+  grid-area: rear-r;
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.formation-v-slot-row {
+  display: grid;
+  grid-template-columns: repeat(3, 130px);
+  gap: 8px;
+}
+
+.formation-v-slot {
+  min-height: 140px;
+  padding: 8px 6px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  box-sizing: border-box;
+}
+.formation-v-slot:hover {
+  background: #faf0ed;
+}
+.formation-v-slot[data-filled="true"] {
+  background: #f5ede0;
+}
+.formation-v-slot.acceptable {
+  background: rgba(196, 149, 48, 0.08);
+  animation: slot-pulse 1.4s ease-in-out infinite;
+}
+
+/* レスポンシブ: 狭い画面ではスロット幅を狭める */
+@media (max-width: 900px) {
+  .formation-v-slot-row {
+    grid-template-columns: repeat(3, 100px);
+  }
+  .formation-v-slot {
+    min-height: 120px;
+  }
+}
+
 .formation-grid {
   width: 100%;
   border-collapse: collapse;
@@ -1004,6 +1120,104 @@ h3 {
 .unit-icon-slot-md { width: 48px; height: 48px; font-size: 22px; }
 .unit-icon-slot-lg { width: 72px; height: 72px; font-size: 32px; }
 .unit-icon-slot-xl { width: 96px; height: 96px; font-size: 42px; }
+
+/* ─── 敵ステータスカード（戦闘画面 最上部） ────────── */
+
+.battle-enemy-status-card {
+  margin: 16px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #2c2620 0%, #463a30 100%);
+  color: #f5d4c5;
+  border: 2px solid #6b1d18;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(107, 29, 24, 0.4);
+}
+.battle-enemy-status-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.battle-enemy-status-icon {
+  font-size: 1.8rem;
+  filter: drop-shadow(0 0 6px rgba(255, 80, 80, 0.6));
+}
+.battle-enemy-status-name {
+  font-size: 1.3rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin: 0;
+  color: #fae0a8;
+}
+.battle-enemy-status-turn-label {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #c5b8a8;
+  letter-spacing: 1px;
+}
+.battle-enemy-hp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.battle-enemy-hp-label {
+  font-weight: bold;
+  font-size: 0.95rem;
+  color: #fae0a8;
+  min-width: 36px;
+}
+.battle-enemy-hp-bar-wrap {
+  flex: 1;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #6b1d18;
+  border-radius: 9px;
+  overflow: hidden;
+  position: relative;
+}
+.battle-enemy-hp-bar-fill {
+  height: 100%;
+  background: linear-gradient(180deg, #e63a3a 0%, #b02020 100%);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.4);
+}
+.battle-enemy-hp-bar-fill[data-low="true"] {
+  background: linear-gradient(180deg, #ffc857 0%, #c49530 100%);
+  animation: enemy-hp-pulse 1.2s ease-in-out infinite;
+}
+@keyframes enemy-hp-pulse {
+  0%, 100% { box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.4); }
+  50%      { box-shadow: inset 0 0 12px rgba(255, 200, 87, 0.8); }
+}
+.battle-enemy-hp-text {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.9rem;
+  color: #fae0a8;
+  min-width: 110px;
+  text-align: right;
+}
+.battle-enemy-stats-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.battle-enemy-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #6b1d18;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-family: "SF Mono", Consolas, monospace;
+  color: #fef5d0;
+}
+.battle-enemy-stat-chip b {
+  color: #ffc857;
+}
 
 /* ─── 敵の攻撃予告バナー ────────────────────────────── */
 

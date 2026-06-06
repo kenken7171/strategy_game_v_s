@@ -176,6 +176,17 @@ export interface BattlePreviewResponse {
   };
 }
 
+/** 敵ボスの現在状態（戦闘画面最上部の EnemyStatusCard で表示） */
+export interface EnemyState {
+  name: string;
+  job: string | null;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  frontAttack: number;
+  rearAttack: number;
+}
+
 // /api/battle/init, /api/battle/turn
 export interface BattleInitResponse {
   ok: boolean;
@@ -185,6 +196,8 @@ export interface BattleInitResponse {
   isFinished: boolean;
   currentTurn: number;
   nextActionIntent: AttackIntent;
+  /** 敵ボスの現在 state */
+  enemy: EnemyState;
 }
 export interface BattleTurnResponse {
   ok: boolean;
@@ -197,6 +210,8 @@ export interface BattleTurnResponse {
   enemySurvivors: SurvivorRow[] | null;
   /** 次ターンの攻撃予告（戦闘終了時は null） */
   nextActionIntent: AttackIntent | null;
+  /** 敵ボスの現在 state（HP は毎ターン減少） */
+  enemy: EnemyState;
 }
 export interface SurvivorRow {
   name: string;
