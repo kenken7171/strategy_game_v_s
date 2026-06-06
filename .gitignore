@@ -1,0 +1,9 @@
+# プロジェクト全体の無視ルール
+
+# 開発時の散らかし
+.DS_Store
+*.log
+
+# ルート直下に置かれたアセット原本（packages/frontend/public/image/ に複製済）
+# 配信用は public/image/{jobId}/{gender}.png として管理する
+/image/
