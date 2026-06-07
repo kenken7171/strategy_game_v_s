@@ -1489,6 +1489,34 @@ h3 {
   text-align: center;
 }
 
+/* 次鋒予告: ボタン押下時に FRONT へ来る squad の所属メンバー名 */
+.battle-turn-command-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #fff8e8 0%, #f5ede0 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  max-width: 100%;
+}
+.battle-turn-command-preview-icon {
+  font-size: 0.95rem;
+}
+.battle-turn-command-preview-members {
+  font-weight: bold;
+  color: var(--accent);
+  word-break: break-all;
+  text-align: left;
+}
+.battle-turn-command-button:hover .battle-turn-command-preview {
+  background: linear-gradient(135deg, #fbe7e3 0%, #faf0ed 100%);
+  border-color: var(--accent);
+}
+
 /* ─── 編成画面 命令バナー ─────────────────────────── */
 
 .formation-instruction-banner {

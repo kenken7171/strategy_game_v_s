@@ -523,45 +523,46 @@ export class BattleSimulator {
   // ── ローテーション ─────────────────────────────────────────────────────
 
   /**
-   * 現在の 3×3 配置を取得する（行列形式: grid[rowIdx][col] = unit | null）
-   * 各 Squad の units 配列インデックスを「col」として扱う。
-   */
-  private snapshotGrid(): (Unit | null)[][] {
-    const ROWS = ["FRONT", "REAR-L", "REAR-R"];
-    const grid: (Unit | null)[][] = [[null, null, null], [null, null, null], [null, null, null]];
-    for (let r = 0; r < ROWS.length; r++) {
-      const sq = this.allies.find((s) => s.id === ROWS[r]);
-      if (!sq) continue;
-      sq.units.forEach((u, c) => {
-        if (c < 3) grid[r][c] = u;
-      });
-    }
-    return grid;
-  }
-
-  /**
-   * 3×3 行列の回転変換。
-   *   時計回り CW : (r, c) → (c, 2 - r)
-   *   反時計回り CCW: (r, c) → (2 - c, r)
+   * 分隊単位のローテーション（squad-level rotation）。
+   *
+   * V 字陣形（FRONT が中央上、REAR-L が左下、REAR-R が右下）の三角配置に対し、
+   * プレイヤーの直感に沿った「ガシャコンと旅団全体が回転する」挙動を実装する。
+   *
+   * - **時計回り (CW)**: 旅団全体を時計回りに回す
+   *     REAR-L → FRONT （左後ろの分隊が右にスライドして前へせり出す）
+   *     FRONT  → REAR-R
+   *     REAR-R → REAR-L
+   *
+   * - **反時計回り (CCW)**: 旅団全体を反時計回りに回す
+   *     REAR-R → FRONT （右後ろの分隊が左にスライドして前へせり出す）
+   *     FRONT  → REAR-L
+   *     REAR-L → REAR-R
+   *
+   * 各分隊内のスロット順（col 0/1/2）は完全に保持される。
+   * 敵の分隊単位ダメージは squad ID（FRONT/REAR-L/REAR-R）にバインドされるため、
+   * 内部 units 配列を入れ替えるだけで攻撃ターゲットも正しく追従する。
    */
   private rotateGrid(strategy: "CW" | "CCW"): void {
-    const grid = this.snapshotGrid();
-    const newGrid: (Unit | null)[][] = [[null, null, null], [null, null, null], [null, null, null]];
-    for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < 3; c++) {
-        const u = grid[r][c];
-        if (!u) continue;
-        const [nr, nc] = strategy === "CW" ? [c, 2 - r] : [2 - c, r];
-        newGrid[nr][nc] = u;
-      }
-    }
-    const ROWS = ["FRONT", "REAR-L", "REAR-R"];
-    for (let r = 0; r < ROWS.length; r++) {
-      const sq = this.allies.find((s) => s.id === ROWS[r]);
-      if (!sq) continue;
-      // 死亡ユニットも含めて、null を除いた配列にして 3 つに整える
-      const newUnits = newGrid[r].filter((u): u is Unit => u !== null);
-      sq.replaceUnits(newUnits);
+    const front  = this.allies.find((s) => s.id === "FRONT");
+    const rearL  = this.allies.find((s) => s.id === "REAR-L");
+    const rearR  = this.allies.find((s) => s.id === "REAR-R");
+    if (!front || !rearL || !rearR) return;
+
+    // スナップショット
+    const frontUnits = [...front.units];
+    const rearLUnits = [...rearL.units];
+    const rearRUnits = [...rearR.units];
+
+    if (strategy === "CW") {
+      // 時計回り: REAR-L → FRONT, FRONT → REAR-R, REAR-R → REAR-L
+      front.replaceUnits(rearLUnits);
+      rearR.replaceUnits(frontUnits);
+      rearL.replaceUnits(rearRUnits);
+    } else {
+      // 反時計回り: REAR-R → FRONT, FRONT → REAR-L, REAR-L → REAR-R
+      front.replaceUnits(rearRUnits);
+      rearL.replaceUnits(frontUnits);
+      rearR.replaceUnits(rearLUnits);
     }
   }
 
@@ -768,8 +769,8 @@ export class BattleSimulator {
       this.rotateGrid(strategy);
       rotationNotice =
         strategy === "CW"
-          ? `↻ 陣形が右回りにローテーションしました`
-          : `↺ 陣形が左回りにローテーションしました`;
+          ? `↻ 右回り: 後衛-左 が前衛へ進軍`
+          : `↺ 左回り: 後衛-右 が前衛へ進軍`;
     }
     const placements = this.collectPlacements();
 

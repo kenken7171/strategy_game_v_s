@@ -268,9 +268,22 @@ function EnemyIntentBanner({
 }
 const STRATEGY_DESC: Record<RotationStrategy, string> = {
   NONE: "陣形を回転させず、この配置で1ターン戦う",
-  CW:   "陣形を時計回りに1段回す。後衛の若手が前衛に出る",
-  CCW:  "陣形を反時計回りに1段回す。CWの逆順",
+  CW:   "次鋒: 後衛-左 が前衛へ進軍",
+  CCW:  "次鋒: 後衛-右 が前衛へ進軍",
 };
+
+/**
+ * 戦略選択時に「次に FRONT へ来る squad」を求めるヘルパー。
+ * core/BattleSimulator.rotateGrid と完全に同じ規約:
+ *   - CW  : REAR-L → FRONT
+ *   - CCW : REAR-R → FRONT
+ *   - NONE: 現在の FRONT のまま
+ */
+function nextFrontRow(strategy: RotationStrategy): SquadRow {
+  if (strategy === "CW")  return "REAR-L";
+  if (strategy === "CCW") return "REAR-R";
+  return "FRONT";
+}
 
 export function BattleSimulationPage({ year, phaseHandle }: Props) {
   const [status, setStatus] = useState<BattleStatus>("loading-init");
@@ -562,22 +575,59 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
               data-testid="battle-turn-command-options"
               className="battle-turn-command-options"
             >
-              {(["NONE", "CW", "CCW"] as RotationStrategy[]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  data-testid={`battle-turn-command-${s}`}
-                  onClick={() => sendCommand(s)}
-                  className={`battle-turn-command-button battle-turn-command-${s}`}
-                >
-                  <span data-testid={`battle-turn-command-label-${s}`} className="battle-turn-command-label">
-                    {STRATEGY_LABELS[s]}
-                  </span>
-                  <span data-testid={`battle-turn-command-desc-${s}`} className="battle-turn-command-desc">
-                    {STRATEGY_DESC[s]}
-                  </span>
-                </button>
-              ))}
+              {(["NONE", "CW", "CCW"] as RotationStrategy[]).map((s) => {
+                // この戦略を採用したら次に FRONT に来る squad のメンバー名
+                const nextFrontRowId = nextFrontRow(s);
+                const nextFrontMembers = placements
+                  .filter((p) => p.row === nextFrontRowId && p.hp > 0)
+                  .map((p) => p);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    data-testid={`battle-turn-command-${s}`}
+                    onClick={() => sendCommand(s)}
+                    className={`battle-turn-command-button battle-turn-command-${s}`}
+                  >
+                    <span data-testid={`battle-turn-command-label-${s}`} className="battle-turn-command-label">
+                      {STRATEGY_LABELS[s]}
+                    </span>
+                    <span data-testid={`battle-turn-command-desc-${s}`} className="battle-turn-command-desc">
+                      {STRATEGY_DESC[s]}
+                    </span>
+                    {s !== "NONE" && nextFrontMembers.length > 0 && (
+                      <span
+                        data-testid={`battle-turn-command-preview-${s}`}
+                        className="battle-turn-command-preview"
+                      >
+                        <span
+                          data-testid={`battle-turn-command-preview-icon-${s}`}
+                          className="battle-turn-command-preview-icon"
+                        >
+                          👥
+                        </span>
+                        <span
+                          data-testid={`battle-turn-command-preview-members-${s}`}
+                          className="battle-turn-command-preview-members"
+                        >
+                          {nextFrontMembers.map((m) => m.unitName).join("・")}
+                        </span>
+                      </span>
+                    )}
+                    {s === "NONE" && (
+                      <span
+                        data-testid="battle-turn-command-preview-NONE"
+                        className="battle-turn-command-preview"
+                      >
+                        <span className="battle-turn-command-preview-icon">🛡</span>
+                        <span className="battle-turn-command-preview-members">
+                          現在の前衛を維持
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </>
