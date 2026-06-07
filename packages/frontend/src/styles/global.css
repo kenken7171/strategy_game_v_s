@@ -120,6 +120,42 @@ body {
   cursor: not-allowed;
 }
 
+/* ─── グローバルヘッダー: ジョブ説明ボタン ─────────────────── */
+
+.open-job-manual-button {
+  margin-left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #fff8e8 0%, #f5ede0 100%);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.open-job-manual-button:hover {
+  background: linear-gradient(135deg, var(--accent) 0%, #6b1d18 100%);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(139, 58, 58, 0.3);
+}
+.open-job-manual-button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.open-job-manual-button-icon {
+  font-size: 1.05rem;
+}
+.open-job-manual-button-label {
+  font-weight: bold;
+}
+
 /* ─── 共通 ──────────────────────────────────────────────────── */
 
 .phase-hint {
@@ -1640,6 +1676,186 @@ h3 {
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 0.9rem;
+}
+
+/* ─── JobManualOverlay（グローバルジョブマニュアル） ─────────────── */
+
+.job-manual-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+  padding: 16px;
+}
+.job-manual-overlay-root {
+  position: relative;
+  width: min(1100px, 96vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--border);
+  overflow: hidden;
+}
+.job-manual-close-button {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-muted);
+  z-index: 1;
+}
+.job-manual-close-button:hover {
+  background: var(--bg-section);
+}
+
+.job-manual-header {
+  padding: 16px 24px 14px;
+  background: linear-gradient(135deg, var(--accent) 0%, #6b1d18 100%);
+  color: white;
+  border-bottom: 1px solid var(--border);
+}
+.job-manual-title {
+  margin: 0;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  letter-spacing: 2px;
+}
+.job-manual-title-icon {
+  font-size: 1.4rem;
+}
+.job-manual-title-subtitle {
+  font-size: 0.85rem;
+  font-weight: normal;
+  letter-spacing: 1px;
+  opacity: 0.85;
+  margin-left: 4px;
+}
+
+.job-manual-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 左サイドバー */
+.job-manual-sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--bg-section);
+  overflow-y: auto;
+}
+.job-manual-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+}
+.job-manual-sidebar-item {
+  margin: 0;
+}
+.job-manual-sidebar-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.job-manual-sidebar-button:hover {
+  background: #faf0ed;
+}
+.job-manual-sidebar-item[data-active="true"] .job-manual-sidebar-button {
+  background: white;
+  border-left-color: var(--accent);
+  font-weight: bold;
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.job-manual-sidebar-item-jp {
+  font-weight: bold;
+}
+.job-manual-sidebar-item-id {
+  margin-left: auto;
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* 右ペイン */
+.job-manual-main-panel {
+  padding: 18px 22px 22px;
+  overflow-y: auto;
+  background: white;
+}
+.job-manual-active-job-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent);
+}
+.job-manual-active-job-name {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+.job-manual-active-job-id {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .job-manual-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .job-manual-sidebar {
+    max-height: 140px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .job-manual-sidebar-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+  }
+  .job-manual-sidebar-button {
+    padding: 6px 10px;
+    border-left: none;
+    border-radius: 16px;
+  }
+  .job-manual-sidebar-item[data-active="true"] .job-manual-sidebar-button {
+    background: var(--accent);
+    color: white;
+    border-left: none;
+  }
 }
 
 /* ─── UnitDetailModal ─────────────────────────────── */

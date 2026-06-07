@@ -18,6 +18,7 @@ import { ChroniclePage } from "../phases/Chronicle/ChroniclePage";
 import { GuildManagementPage } from "../phases/GuildManagement/GuildManagementPage";
 import { BattalionFormationPage } from "../phases/BattalionFormation/BattalionFormationPage";
 import { BattleSimulationPage } from "../phases/BattleSimulation/BattleSimulationPage";
+import { JobManualOverlay } from "../components/JobManualOverlay";
 
 /**
  * ゲーム全体の状態。M2 段階では最小限。
@@ -109,6 +110,11 @@ export function GameManager() {
     phase: "CHRONICLE",
   });
   const [canProceed, setCanProceed] = useState<boolean>(false);
+  /**
+   * ジョブマニュアル（ヘッダー常設の📖ボタンで開く全画面オーバーレイ）の表示状態。
+   * ゲーム本編とは独立した補助ビューで、いつでも開閉できる。
+   */
+  const [isJobManualOpen, setIsJobManualOpen] = useState<boolean>(false);
 
   const handle: PhaseHandle = useMemo(
     () => ({ canProceed, setCanProceed }),
@@ -146,6 +152,19 @@ export function GameManager() {
           Year {state.year}
         </div>
         <PhaseIndicator current={state.phase} />
+        {/* グローバルヘッダーから常時アクセスできる「ジョブ説明」ボタン。
+            フェーズに関係なく、どの画面からでもジョブマニュアルを開ける。 */}
+        <button
+          type="button"
+          data-testid="open-job-manual-button"
+          onClick={() => setIsJobManualOpen(true)}
+          className="open-job-manual-button"
+          aria-label="ジョブ説明を開く"
+          title="全 8 ジョブの推奨配置と能力をカタログ閲覧"
+        >
+          <span className="open-job-manual-button-icon">📖</span>
+          <span className="open-job-manual-button-label">ジョブ説明</span>
+        </button>
       </header>
 
       <main data-testid="game-manager-main" className="game-manager-main">
@@ -173,6 +192,11 @@ export function GameManager() {
           onAdvance={advance}
         />
       </footer>
+
+      {/* ジョブマニュアルオーバーレイ（ヘッダー📖ボタンから開く） */}
+      {isJobManualOpen && (
+        <JobManualOverlay onClose={() => setIsJobManualOpen(false)} />
+      )}
     </div>
   );
 }

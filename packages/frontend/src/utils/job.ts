@@ -37,8 +37,15 @@ export function formatJob(job: string | null | undefined): string {
 
 /**
  * 各ジョブのアビリティ解説（フロント用ミラー）。
- * core/data/jobs.ts の JOB_ABILITY と完全に同期する。
- * 詳細表示モーダル等で使用。
+ * core/data/jobs.ts の JOB_ABILITY と内容は同期するが、本ミラーは
+ * 「ユーザー目視可能な表示文言」として日本語化されている:
+ *   - BDF → 「🛡️ 大隊総守護力」（大隊全員の受けるダメージ軽減）
+ *   - SDF → 「🛡️ 分隊守護力」（自分隊の受けるダメージ軽減）
+ *   - AB  → 「⚡ 突撃号令」（ターン開始時の速度・攻撃バフ）
+ *   - HL  → 「💚 ターン末分隊治癒」（ターン末の分隊回復量）
+ * core 側の jobs.ts は実装者向け SoT として略称表記を維持しているが、
+ * 本ミラーは UI 上でユーザーに表示する版なので翻訳済み。
+ * HP/SPD/FA/RA など一般略称はそのまま維持（広く認知）。
  */
 export interface JobAbilityInfo {
   role: string;
@@ -49,38 +56,38 @@ export interface JobAbilityInfo {
 export const JOB_ABILITY: Record<string, JobAbilityInfo> = {
   iron_wall_knight: {
     role: "前衛の盾。大隊を守護する重装騎士",
-    ability: "BDF（FRONT配置時、大隊全員の被ダメを-10）+ SDF（自分隊の被ダメを-15）。複数いれば加算される",
+    ability: "🛡️ 大隊総守護力（FRONT配置時、大隊全員の被ダメージ-10）+ 🛡️ 分隊守護力（自分隊の被ダメージ-15）。複数いれば加算される",
     usage: "前衛中央に置き、後衛アタッカーへの被害を最小化する。複数編成で堅さが倍増する",
     flavor: "古き誓いを纏う者。我が身を盾とし、後ろの者たちを生かす",
   },
   heavy_infantry: {
     role: "単騎完結型の前衛アタッカー",
-    ability: "全ジョブ最高 HP=300 + 高い前衛攻撃力 FA=70 + 自分隊軽減 SDF=10",
+    ability: "全ジョブ最高 HP=300 + 高い前衛攻撃力 FA=70 + 🛡️ 分隊守護力=10",
     usage: "鉄壁騎士の隣に置き、削れない盾として攻撃も担う。長期戦に強い",
     flavor: "壊れぬ鎧、屈せぬ意志。最後の一人になるまで戦線を支える",
   },
   standard_bearer: {
     role: "大隊全員の火力を底上げする精神的支柱",
-    ability: "AB=40（ターン開始時、自分以外の全員に SPD+40 / 攻撃+40）。重ね掛け可能",
+    ability: "⚡ 突撃号令=40（ターン開始時、自分以外の全員に SPD+40 / 攻撃+40）。重ね掛け可能",
     usage: "前衛か後衛どちらでも機能する。複数編成で大隊全員が「化け物」になる",
     flavor: "翻る軍旗が士気を呼び覚ます。皆の心に火を灯す者",
   },
   tactician: {
     role: "速度寄りの軽量バフ役",
-    ability: "AB=20（速度+20 / 攻撃+20）+ 自身も中速 SPD=35",
+    ability: "⚡ 突撃号令=20（SPD+20 / 攻撃+20）+ 自身も中速 SPD=35",
     usage: "旗手より控えめだが速度値も持つため、複合運用で先制力強化が狙える",
     flavor: "盤上の駒を読む冷徹な頭脳。号令一つで戦況を変える",
   },
   medic: {
     role: "唯一の継続回復役",
-    ability: "HL=30（ターン末、自分隊の生存者全員を +30 HP 回復）。HP上限まで",
+    ability: "💚 ターン末分隊治癒=30（ターン末、自分隊の生存者全員を +30 HP 回復）。HP上限まで",
     usage: "脆い後衛分隊に必ず配置。前衛にも近代戦の必需品。長期戦の生命線",
     flavor: "戦場の天使、または、最後の希望。手当ての先に新たな未来を見る",
   },
   sniper: {
-    role: "後衛超火力 + 2連撃の砲台",
-    ability: "RA=90（後衛攻撃力90）。イニシアチブ1番手かつ分隊最速なら2連撃発動",
-    usage: "REAR-L/REAR-R に配置必須。tactician/standard_bearer の SPD バフで2連撃確率を高める",
+    role: "後衛超火力 + 二の矢の砲台",
+    ability: "RA=90（後衛攻撃力90）。イニシアチブ1番手かつ分隊最速なら 🎯 二の矢（2連撃）発動",
+    usage: "REAR-L / REAR-R に配置必須。戦術官 / 旗手の SPD バフで二の矢確率を高める",
     flavor: "風の音を聴き、息を止める。一矢で戦況を変える狙撃の達人",
   },
   sorcerer: {
@@ -92,7 +99,7 @@ export const JOB_ABILITY: Record<string, JobAbilityInfo> = {
   scout: {
     role: "速度最強の先制削り役",
     ability: "SPD=60（全ジョブ最速）+ 前後均等 FA=RA=40 で配置自由度高",
-    usage: "REAR 配置で先制を取り、敵の出鼻を挫く。ジョブ最速の利を活かして tactician の補佐も可能",
+    usage: "REAR 配置で先制を取り、敵の出鼻を挫く。ジョブ最速の利を活かして戦術官の補佐も可能",
     flavor: "誰よりも早く動き、誰よりも先に敵を見る。風のように戦場を駆ける",
   },
 };
@@ -144,44 +151,44 @@ export const JOB_FORMATION_GUIDE: Record<string, JobFormationGuideInfo> = {
   iron_wall_knight: {
     recommendedRows: ["FRONT"],
     effectRange:     ["FRONT", "REAR-L", "REAR-R"],
-    effectRangeNote: "BDFはFRONT配置時のみ大隊全体に届く / SDFは所属分隊のみ",
+    effectRangeNote: "🛡️ 大隊総守護力はFRONT配置時のみ大隊全体に届く / 🛡️ 分隊守護力は所属分隊のみ",
     effectKind:      "defend",
-    headline:        "推奨：最前線（BDF発動条件）",
+    headline:        "推奨：最前線（大隊総守護力の発動条件）",
   },
   heavy_infantry: {
     recommendedRows: ["FRONT"],
     effectRange:     ["FRONT"],
-    effectRangeNote: "SDF=10で自分隊を軽減 / 高HP+高FAで前線を支える",
+    effectRangeNote: "🛡️ 分隊守護力=10で自分隊を軽減 / 高HP+高FAで前線を支える",
     effectKind:      "attack",
     headline:        "推奨：最前線（壊れぬ盾）",
   },
   standard_bearer: {
     recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
     effectRange:     ["FRONT", "REAR-L", "REAR-R"],
-    effectRangeNote: "AB=40で自分以外の大隊全員にSPD+40/攻撃+40を撒く",
+    effectRangeNote: "⚡ 突撃号令=40で自分以外の大隊全員にSPD+40/攻撃+40を撒く",
     effectKind:      "buff",
     headline:        "推奨：どこでも可（大隊全員を強化）",
   },
   tactician: {
     recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
     effectRange:     ["FRONT", "REAR-L", "REAR-R"],
-    effectRangeNote: "AB=20で自分以外の大隊全員にSPD+20/攻撃+20を撒く",
+    effectRangeNote: "⚡ 突撃号令=20で自分以外の大隊全員にSPD+20/攻撃+20を撒く",
     effectKind:      "buff",
     headline:        "推奨：どこでも可（軽量バフ役）",
   },
   medic: {
     recommendedRows: ["REAR-L", "REAR-R"],
     effectRange:     ["REAR-L", "REAR-R"],
-    effectRangeNote: "HL=30は所属分隊のみ。配置した分隊の生存者全員を回復",
+    effectRangeNote: "💚 ターン末分隊治癒=30は所属分隊のみ。配置した分隊の生存者全員を回復",
     effectKind:      "heal",
     headline:        "推奨：脆い後衛（自分隊を継続回復）",
   },
   sniper: {
     recommendedRows: ["REAR-L", "REAR-R"],
     effectRange:     ["REAR-L", "REAR-R"],
-    effectRangeNote: "RA=90で後衛時のみフル火力 / 1番手かつ先頭で2連撃発動",
+    effectRangeNote: "RA=90で後衛時のみフル火力 / 🎯 二の矢（1番手かつ先頭で2連撃）が決まれば爆発",
     effectKind:      "attack",
-    headline:        "推奨：後衛(2連撃の砲台)",
+    headline:        "推奨：後衛（二の矢の砲台）",
   },
   sorcerer: {
     recommendedRows: ["REAR-L", "REAR-R"],
@@ -227,12 +234,24 @@ export interface PassiveExplanation {
   readonly description: string;
 }
 
+// ─── UI 表示用ラベル（略称 → 直感的な日本語化） ───────────────────────────
+//
+// ユーザー目視するラベルは日本語に統一。data-testid キー (bdf/sdf/ab/hl/
+// special-double-strike) は不変なので testid 規約は完全保持。
+// HP / SPD / FA / RA など広く認知されている略称はそのまま維持。
+export const PASSIVE_LABEL_JP: Record<string, string> = {
+  bdf: "🛡️ 大隊総守護力",
+  sdf: "🛡️ 分隊守護力",
+  ab:  "⚡ 突撃号令",
+  hl:  "💚 ターン末分隊治癒",
+};
+
 /** ジョブ固有の特殊パッシブ（数値プロパティでは表現できないもの） */
 const JOB_SPECIAL_PASSIVES: Record<string, ReadonlyArray<PassiveExplanation>> = {
   sniper: [
     {
       key: "special-double-strike",
-      label: "🎯 2連撃",
+      label: "🎯 二の矢（2連撃）",
       value: null,
       scope: "イニシアチブ1番手 ∧ 分隊先頭スロット時のみ",
       description: "通常攻撃が 2 回行われる（1 ターン中の追撃）",
@@ -257,37 +276,37 @@ export function explainJobPassives(
   if (d.bdf > 0) {
     out.push({
       key: "bdf",
-      label: "🛡 BDF (Brigade Defense / 大隊軽減)",
+      label: PASSIVE_LABEL_JP.bdf,
       value: d.bdf,
       scope: "FRONT配置時のみ発動 / 効果は大隊全体",
-      description: "大隊全員の被ダメージを軽減（自分以外の分隊にも届く）",
+      description: "大隊全員の受けるダメージを軽減（自分以外の分隊にも届く）",
     });
   }
   if (d.sdf > 0) {
     out.push({
       key: "sdf",
-      label: "🛡 SDF (Squad Defense / 自分隊軽減)",
+      label: PASSIVE_LABEL_JP.sdf,
       value: d.sdf,
       scope: "常時発動 / 効果は所属分隊のみ",
-      description: "自分が所属する分隊の被ダメージを軽減",
+      description: "自分が所属する分隊の受けるダメージを軽減",
     });
   }
   if (d.ab > 0) {
     out.push({
       key: "ab",
-      label: "✨ AB (Ally Buff / 大隊バフ)",
+      label: PASSIVE_LABEL_JP.ab,
       value: d.ab,
       scope: "毎ターン開始時 / 自分以外の大隊全員",
-      description: "速度と攻撃力に値分のバフを撒く（重ね掛け可）",
+      description: "ターン開始時の速度・攻撃バフを撒く（重ね掛け可）",
     });
   }
   if (d.hl > 0) {
     out.push({
       key: "hl",
-      label: "💚 HL (Heal / 自分隊回復)",
+      label: PASSIVE_LABEL_JP.hl,
       value: d.hl,
       scope: "毎ターン終了時 / 所属分隊の生存者全員",
-      description: "HP を値分回復（最大HPでキャップ）",
+      description: "ターン終了時に分隊の HP を回復（最大HPでキャップ）",
     });
   }
 

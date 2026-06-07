@@ -26,13 +26,9 @@
  */
 import type { JSX } from "react";
 import type { RosterUnit, SquadRow } from "../api/types";
-import {
-  formatJob,
-  getJobAbility,
-  getJobFormationGuide,
-  explainJobPassives,
-} from "../utils/job";
+import { formatJob } from "../utils/job";
 import { UnitIcon } from "./UnitIcon";
+import { JobDescriptionSection } from "./JobDescriptionView";
 
 interface Props {
   unit: RosterUnit;
@@ -49,24 +45,9 @@ const ROW_LABEL: Record<SquadRow, string> = {
   "REAR-R": "後衛-右",
 };
 
-/**
- * ジョブの効果種別ごとに、推奨配置マスに表示するアスキー風グリフ。
- * 配色（青/金/緑/朱）と合わせて、視覚的に「これは何の系統か」を伝える。
- */
-const EFFECT_KIND_GLYPH: Record<
-  "buff" | "heal" | "defend" | "attack",
-  string
-> = {
-  buff:   "✨",
-  heal:   "💚",
-  defend: "🛡",
-  attack: "⚔",
-};
-
 export function UnitDetailModal({
   unit, grid, unitsById, onAssign, onClose,
 }: Props): JSX.Element {
-  const ability = getJobAbility(unit.job);
   return (
     <div
       data-testid="unit-detail-modal-backdrop"
@@ -165,201 +146,12 @@ export function UnitDetailModal({
           </div>
         </div>
 
-        {/* ─── ジョブ説明（独立セクション） ──────────────
-              ユニット個人テキスト（名前/血統等）とジョブ固有スキル説明を
-              明確に分離するため、ここから下を独立した「ジョブ説明」ヘッダ
-              として扱う。 */}
-        {ability && (
-          <section
-            data-testid="unit-detail-job-description-section"
-            className="unit-detail-job-description-section"
-          >
-            <h3
-              data-testid="unit-detail-job-description-header"
-              className="unit-detail-job-description-header"
-            >
-              <span className="unit-detail-job-description-header-icon">📖</span>
-              <span className="unit-detail-job-description-header-title">
-                ジョブ説明
-              </span>
-              <span className="unit-detail-job-description-header-jobname">
-                {formatJob(unit.job)}
-              </span>
-              <span className="unit-detail-job-description-header-jobid">
-                ({unit.job})
-              </span>
-            </h3>
-
-            {/* 既存 testid `unit-detail-ability-{job}` をラッパに維持 */}
-            <div
-              data-testid={`unit-detail-ability-${unit.job}`}
-              className="unit-detail-job-description-body"
-            >
-              {/* 📜 役割 */}
-              <div className="unit-detail-job-desc-row unit-detail-job-desc-row-role">
-                <span className="unit-detail-job-desc-label">📜 役割</span>
-                <p
-                  data-testid="unit-detail-ability-role"
-                  className="unit-detail-job-desc-value"
-                >
-                  {ability.role}
-                </p>
-              </div>
-
-              {/* ⚙ 固有パッシブ */}
-              <div
-                data-testid="unit-detail-job-description-passives"
-                className="unit-detail-job-desc-row unit-detail-job-desc-row-passives"
-              >
-                <span className="unit-detail-job-desc-label">⚙ 固有パッシブ</span>
-                <p
-                  data-testid="unit-detail-ability-text"
-                  className="unit-detail-job-passives-summary"
-                >
-                  {ability.ability}
-                </p>
-                {(() => {
-                  const passives = explainJobPassives(unit.job);
-                  if (passives.length === 0) {
-                    return (
-                      <p
-                        data-testid="unit-detail-job-description-passives-empty"
-                        className="unit-detail-job-passives-empty"
-                      >
-                        — 数値プロパティ上のパッシブはなし（純戦闘ステータスで機能）
-                      </p>
-                    );
-                  }
-                  return (
-                    <ul className="unit-detail-job-passive-list">
-                      {passives.map((p) => (
-                        <li
-                          key={p.key}
-                          data-testid={`unit-detail-job-description-passive-${p.key}`}
-                          data-passive-key={p.key}
-                          className="unit-detail-job-passive-item"
-                        >
-                          <div className="unit-detail-job-passive-head">
-                            <span className="unit-detail-job-passive-label">
-                              {p.label}
-                            </span>
-                            {p.value !== null && (
-                              <span className="unit-detail-job-passive-value">
-                                値: <strong>{p.value}</strong>
-                              </span>
-                            )}
-                          </div>
-                          <div className="unit-detail-job-passive-scope">
-                            🎯 {p.scope}
-                          </div>
-                          <div className="unit-detail-job-passive-desc">
-                            {p.description}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  );
-                })()}
-              </div>
-
-              {/* 🗺 推奨配置 + ミニ V 字図 */}
-              {(() => {
-                const guide = getJobFormationGuide(unit.job);
-                if (!guide) return null;
-                return (
-                  <div
-                    data-testid="unit-detail-job-formation-guide"
-                    data-effect-kind={guide.effectKind}
-                    className="unit-detail-job-desc-row unit-detail-job-desc-row-guide"
-                  >
-                    <span className="unit-detail-job-desc-label">🗺 推奨配置</span>
-
-                    {/* 読み取り専用 V 字図（guide variant） */}
-                    <div
-                      className="formation-v-shape formation-v-shape--guide"
-                      data-effect-kind={guide.effectKind}
-                    >
-                      {ROWS.map((row) => {
-                        const squadModifier =
-                          row === "FRONT" ? "front"
-                          : row === "REAR-L" ? "rear-l"
-                          : "rear-r";
-                        const isRecommended = guide.recommendedRows.includes(row);
-                        const isInEffectRange = guide.effectRange.includes(row);
-                        return (
-                          <div
-                            key={row}
-                            data-testid={`unit-detail-job-formation-guide-row-${row}`}
-                            data-row={row}
-                            data-recommended={isRecommended}
-                            data-in-effect-range={isInEffectRange}
-                            className={`formation-v-squad formation-v-squad-${squadModifier}`}
-                          >
-                            <div className="formation-v-squad-header">
-                              {row === "FRONT" ? "⚔ " : "🛡 "}
-                              {ROW_LABEL[row]}
-                              {isRecommended && (
-                                <span className="unit-detail-job-formation-guide-rec-badge">
-                                  ✓ 推奨
-                                </span>
-                              )}
-                            </div>
-                            <div className="formation-v-slot-row">
-                              {[0, 1, 2].map((col) => (
-                                <div
-                                  key={col}
-                                  className="formation-v-slot"
-                                  data-recommended={isRecommended}
-                                >
-                                  {isRecommended
-                                    ? EFFECT_KIND_GLYPH[guide.effectKind]
-                                    : "□"}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div
-                      data-testid="unit-detail-job-formation-guide-headline"
-                      data-effect-kind={guide.effectKind}
-                      className="unit-detail-job-formation-guide-headline"
-                    >
-                      [{guide.headline}]
-                    </div>
-                    <div
-                      data-testid="unit-detail-job-formation-guide-effect-range"
-                      className="unit-detail-job-formation-guide-effect-range"
-                    >
-                      🎯 効果範囲: {guide.effectRangeNote}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 💡 戦術的使い方 */}
-              <div className="unit-detail-job-desc-row unit-detail-job-desc-row-usage">
-                <span className="unit-detail-job-desc-label">💡 戦術的使い方</span>
-                <p
-                  data-testid="unit-detail-ability-usage"
-                  className="unit-detail-job-desc-value"
-                >
-                  {ability.usage}
-                </p>
-              </div>
-
-              {/* フレーバー（ジョブアーキタイプの一言） */}
-              <blockquote
-                data-testid="unit-detail-ability-flavor"
-                className="unit-detail-ability-flavor unit-detail-job-flavor-quote"
-              >
-                「{ability.flavor}」
-              </blockquote>
-            </div>
-          </section>
-        )}
+        {/* ─── ジョブ説明（独立セクション）
+              JobDescriptionSection に完全委譲。本コンポーネントとカタログ用
+              JobManualOverlay の両方で同じ表現を共有する。
+              既存 testid（unit-detail-job-description-*, -ability-*）は
+              View 側で完全保持されている。 */}
+        <JobDescriptionSection jobId={unit.job} />
 
         {/* ─── 任命ミニグリッド ──────────────────────── */}
         <div data-testid="unit-detail-assign-section" className="unit-detail-assign-section">
