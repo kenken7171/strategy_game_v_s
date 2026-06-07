@@ -169,70 +169,83 @@ export function UnitDetailModal({
           </p>
           <div
             data-testid="unit-detail-mini-grid"
-            className="unit-detail-mini-grid"
+            className="unit-detail-mini-grid formation-v-shape formation-v-shape--mini"
           >
-            {ROWS.map((row) => (
-              <div
-                key={row}
-                data-testid={`unit-detail-mini-grid-row-${row}`}
-                className="unit-detail-mini-grid-row"
-              >
-                <span
-                  data-testid={`unit-detail-mini-grid-row-label-${row}`}
-                  className="unit-detail-mini-grid-row-label"
+            {ROWS.map((row) => {
+              const squadModifier =
+                row === "FRONT" ? "front"
+                : row === "REAR-L" ? "rear-l"
+                : "rear-r";
+              return (
+                <div
+                  key={row}
+                  data-testid={`unit-detail-mini-grid-row-${row}`}
+                  data-row={row}
+                  className={`unit-detail-mini-grid-row formation-v-squad formation-v-squad-${squadModifier}`}
                 >
-                  {ROW_LABEL[row]}
-                </span>
-                {[0, 1, 2].map((col) => {
-                  const cell = grid.find((g) => g.row === row && g.col === col);
-                  const occupantId = cell?.unitId ?? null;
-                  const occupant = occupantId ? unitsById.get(occupantId) : null;
-                  const isSelf = occupantId === unit.id;
-                  return (
-                    <button
-                      key={col}
-                      type="button"
-                      data-testid={`formation-assign-btn-${row}-${col}`}
-                      data-occupied={!!occupant && !isSelf}
-                      data-self={isSelf}
-                      onClick={() => onAssign(row, col)}
-                      className={`unit-detail-mini-grid-btn ${
-                        isSelf ? "self" : occupant ? "occupied" : "empty"
-                      }`}
-                    >
-                      <span className="unit-detail-mini-grid-slot-label">
-                        スロット{col + 1}
-                      </span>
-                      {isSelf ? (
-                        <span data-testid={`formation-assign-btn-self-mark-${row}-${col}`}>
-                          ✓ 現在配置中
-                        </span>
-                      ) : occupant ? (
-                        <span
-                          data-testid={`formation-assign-btn-occupant-${row}-${col}`}
-                          className="unit-detail-mini-grid-occupant"
+                  <div
+                    data-testid={`unit-detail-mini-grid-row-label-${row}`}
+                    className="unit-detail-mini-grid-row-label formation-v-squad-header"
+                  >
+                    {row === "FRONT" ? "⚔ " : "🛡 "}
+                    {ROW_LABEL[row]}
+                  </div>
+                  <div
+                    data-testid={`unit-detail-mini-grid-slot-row-${row}`}
+                    className="formation-v-slot-row"
+                  >
+                    {[0, 1, 2].map((col) => {
+                      const cell = grid.find((g) => g.row === row && g.col === col);
+                      const occupantId = cell?.unitId ?? null;
+                      const occupant = occupantId ? unitsById.get(occupantId) : null;
+                      const isSelf = occupantId === unit.id;
+                      return (
+                        <button
+                          key={col}
+                          type="button"
+                          data-testid={`formation-assign-btn-${row}-${col}`}
+                          data-occupied={!!occupant && !isSelf}
+                          data-self={isSelf}
+                          onClick={() => onAssign(row, col)}
+                          className={`formation-v-slot unit-detail-mini-grid-btn ${
+                            isSelf ? "self" : occupant ? "occupied" : "empty"
+                          }`}
                         >
-                          <span
-                            data-testid={`formation-assign-btn-occupant-icon-slot-${row}-${col}`}
-                            className="unit-icon-slot unit-icon-slot-sm"
-                          >
-                            <UnitIcon
-                              jobId={occupant.job}
-                              gender={occupant.gender}
-                              altName={occupant.name}
-                              testIdSuffix={`assign-occupant-${row}-${col}`}
-                            />
+                          <span className="unit-detail-mini-grid-slot-label">
+                            スロット{col + 1}
                           </span>
-                          {occupant.name} を押し戻す
-                        </span>
-                      ) : (
-                        <span>空きマス</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                          {isSelf ? (
+                            <span data-testid={`formation-assign-btn-self-mark-${row}-${col}`}>
+                              ✓ 現在配置中
+                            </span>
+                          ) : occupant ? (
+                            <span
+                              data-testid={`formation-assign-btn-occupant-${row}-${col}`}
+                              className="unit-detail-mini-grid-occupant"
+                            >
+                              <span
+                                data-testid={`formation-assign-btn-occupant-icon-slot-${row}-${col}`}
+                                className="unit-icon-slot unit-icon-slot-sm"
+                              >
+                                <UnitIcon
+                                  jobId={occupant.job}
+                                  gender={occupant.gender}
+                                  altName={occupant.name}
+                                  testIdSuffix={`assign-occupant-${row}-${col}`}
+                                />
+                              </span>
+                              {occupant.name} を押し戻す
+                            </span>
+                          ) : (
+                            <span>空きマス</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

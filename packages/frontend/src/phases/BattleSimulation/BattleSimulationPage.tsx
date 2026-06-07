@@ -415,76 +415,103 @@ export function BattleSimulationPage({ year, phaseHandle }: Props) {
         <EnemyIntentBanner intent={nextIntent} placements={placements} />
       )}
 
-      {/* ★ 3. ライブ陣形グリッド（味方、常時表示） */}
+      {/* ★ 3. ライブ陣形グリッド（V字 + ターゲット分隊の赤枠脈動）
+            敵が予告中（waiting-command）かつ nextIntent.targetRows に含まれる
+            分隊は赤枠＋脈動で「危険地帯」を可視化する。 */}
       {status !== "loading-init" && placements.length > 0 && (
         <div
           data-testid="battle-live-grid-section"
           className="battle-live-grid-section"
         >
           <h3 data-testid="battle-live-grid-title">現在の陣形</h3>
-          <table data-testid="battle-live-grid-table" className="formation-grid battle-live-grid">
-            <thead>
-              <tr>
-                <th>分隊</th>
-                <th>1</th>
-                <th>2</th>
-                <th>3</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ROWS.map((row) => (
-                <tr key={row} data-testid={`battle-live-grid-row-${row}`}>
-                  <th
+          <div
+            data-testid="battle-live-grid-table"
+            className="formation-v-shape formation-v-shape--battle"
+          >
+            {ROWS.map((row) => {
+              const squadModifier =
+                row === "FRONT" ? "front"
+                : row === "REAR-L" ? "rear-l"
+                : "rear-r";
+              // 赤枠 ON 条件: 敵予告フェーズ + targetRows に含まれる
+              const isTargeted =
+                status === "waiting-command" &&
+                winner === null &&
+                nextIntent !== null &&
+                nextIntent.targetRows.includes(row);
+              return (
+                <div
+                  key={row}
+                  data-testid={`battle-live-v-squad-${row}`}
+                  data-row={row}
+                  data-targeted={isTargeted}
+                  className={`formation-v-squad formation-v-squad-${squadModifier}`}
+                >
+                  <div
                     data-testid={`battle-live-grid-row-label-${row}`}
-                    className="formation-grid-row-label"
+                    className="formation-v-squad-header"
                   >
+                    {isTargeted ? "🎯 " : row === "FRONT" ? "⚔ " : "🛡 "}
                     {ROW_LABEL[row]}
-                  </th>
-                  {[0, 1, 2].map((col) => {
-                    const p = placements.find((x) => x.row === row && x.col === col);
-                    return (
-                      <td
-                        key={col}
-                        data-testid={`battle-live-grid-cell-${row}-${col}`}
-                        data-alive={p ? p.hp > 0 : false}
-                        className="formation-grid-cell battle-live-grid-cell"
+                    {isTargeted && (
+                      <span
+                        data-testid={`battle-live-v-squad-targeted-mark-${row}`}
+                        className="battle-live-v-squad-targeted-mark"
                       >
-                        {p ? (
-                          <div
-                            data-testid={`battle-live-grid-unit-${row}-${col}`}
-                            className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
-                          >
-                            <span
-                              data-testid={`battle-live-grid-icon-slot-${row}-${col}`}
-                              className="unit-icon-slot unit-icon-slot-md"
+                        【狙われている】
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    data-testid={`battle-live-v-slot-row-${row}`}
+                    className="formation-v-slot-row"
+                  >
+                    {[0, 1, 2].map((col) => {
+                      const p = placements.find((x) => x.row === row && x.col === col);
+                      return (
+                        <div
+                          key={col}
+                          data-testid={`battle-live-grid-cell-${row}-${col}`}
+                          data-alive={p ? p.hp > 0 : false}
+                          className="formation-v-slot battle-live-grid-cell"
+                        >
+                          {p ? (
+                            <div
+                              data-testid={`battle-live-grid-unit-${row}-${col}`}
+                              className={`battle-live-grid-unit ${p.hp <= 0 ? "fallen" : ""}`}
                             >
-                              <UnitIcon
-                                jobId={p.job}
-                                gender={p.gender}
-                                altName={p.unitName}
-                                testIdSuffix={`battle-live-${row}-${col}`}
-                              />
-                            </span>
-                            <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
-                              {p.unitName}
-                            </span>
-                            <span data-testid={`battle-live-grid-job-${row}-${col}`} className="battle-live-grid-job">
-                              [{formatJob(p.job)}]
-                            </span>
-                            <span data-testid={`battle-live-grid-hp-${row}-${col}`} className="battle-live-grid-hp">
-                              HP {p.hp}/{p.maxHp}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="formation-cell-empty">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                              <span
+                                data-testid={`battle-live-grid-icon-slot-${row}-${col}`}
+                                className="unit-icon-slot unit-icon-slot-md"
+                              >
+                                <UnitIcon
+                                  jobId={p.job}
+                                  gender={p.gender}
+                                  altName={p.unitName}
+                                  testIdSuffix={`battle-live-${row}-${col}`}
+                                />
+                              </span>
+                              <span data-testid={`battle-live-grid-name-${row}-${col}`} className="battle-live-grid-name">
+                                {p.unitName}
+                              </span>
+                              <span data-testid={`battle-live-grid-job-${row}-${col}`} className="battle-live-grid-job">
+                                [{formatJob(p.job)}]
+                              </span>
+                              <span data-testid={`battle-live-grid-hp-${row}-${col}`} className="battle-live-grid-hp">
+                                HP {p.hp}/{p.maxHp}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="formation-cell-empty">—</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
