@@ -171,6 +171,94 @@ export const JOB_ABILITY: Record<JobType, JobAbility> = {
   },
 };
 
+// ─── 配置ガイド（UI の「ジョブ説明」で視覚的解説に使う） ─────────────────
+//
+// 各ジョブの「どこに置くべきか」「効果はどこまで届くか」をシステマティックに
+// 公開する SoT。フロントの UnitDetailModal で、ミニ V 字図のハイライトと
+// "推奨：最前線" などのヘッドラインに使う。
+
+/** 配置ガイドの効果種別。フロント側で配色（青/金/緑/朱）に対応する。 */
+export type JobEffectKind = "buff" | "heal" | "defend" | "attack";
+
+export interface JobFormationGuide {
+  /** 推奨される配置 row。UI で V 字図のハイライト対象になる */
+  readonly recommendedRows: ReadonlyArray<"FRONT" | "REAR-L" | "REAR-R">;
+  /** このジョブの能力（バフ/回復/軽減/攻撃）が届く範囲 */
+  readonly effectRange: ReadonlyArray<"FRONT" | "REAR-L" | "REAR-R">;
+  /** 効果範囲の補足説明（フロントでそのまま表示） */
+  readonly effectRangeNote: string;
+  /** 効果種別。UI のハイライト色を決める */
+  readonly effectKind: JobEffectKind;
+  /** ヘッドライン (例: "推奨：最前線（BDF発動条件）") */
+  readonly headline: string;
+}
+
+export const JOB_FORMATION_GUIDE: Record<JobType, JobFormationGuide> = {
+  iron_wall_knight: {
+    recommendedRows: ["FRONT"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "BDFはFRONT配置時のみ大隊全体に届く / SDFは所属分隊のみ",
+    effectKind:      "defend",
+    headline:        "推奨：最前線（BDF発動条件）",
+  },
+  heavy_infantry: {
+    recommendedRows: ["FRONT"],
+    effectRange:     ["FRONT"],
+    effectRangeNote: "SDF=10で自分隊を軽減 / 高HP+高FAで前線を支える",
+    effectKind:      "attack",
+    headline:        "推奨：最前線（壊れぬ盾）",
+  },
+  standard_bearer: {
+    recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "AB=40で自分以外の大隊全員にSPD+40/攻撃+40を撒く",
+    effectKind:      "buff",
+    headline:        "推奨：どこでも可（大隊全員を強化）",
+  },
+  tactician: {
+    recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "AB=20で自分以外の大隊全員にSPD+20/攻撃+20を撒く",
+    effectKind:      "buff",
+    headline:        "推奨：どこでも可（軽量バフ役）",
+  },
+  medic: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "HL=30は所属分隊のみ。配置した分隊の生存者全員を回復",
+    effectKind:      "heal",
+    headline:        "推奨：脆い後衛（自分隊を継続回復）",
+  },
+  sniper: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "RA=90で後衛時のみフル火力 / 1番手かつ先頭で2連撃発動",
+    effectKind:      "attack",
+    headline:        "推奨：後衛（2連撃の砲台）",
+  },
+  sorcerer: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "RA=120で全職最強の砲台 / HP=40なので前衛は不可",
+    effectKind:      "attack",
+    headline:        "推奨：後衛（高リスク高リターン）",
+  },
+  scout: {
+    recommendedRows: ["REAR-L", "REAR-R", "FRONT"],
+    effectRange:     ["REAR-L", "REAR-R", "FRONT"],
+    effectRangeNote: "FA=RA=40で配置自由 / SPD=60で常時先制取り",
+    effectKind:      "attack",
+    headline:        "推奨：どこでも可（最速の先制削り役）",
+  },
+};
+
+export function getJobFormationGuide(
+  job: string | null | undefined
+): JobFormationGuide | null {
+  if (!job) return null;
+  return (JOB_FORMATION_GUIDE as Record<string, JobFormationGuide>)[job] ?? null;
+}
+
 /** 日本語ラベル（フロント全画面で必須参照） */
 export const JOB_JP: Record<JobType, string> = {
   iron_wall_knight: "鉄壁騎士",

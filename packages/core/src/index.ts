@@ -4,11 +4,14 @@ export { NameGenerator, NAMES, ALL_ORIGINS, TITLES, pickRandomOrigin } from "./d
 export type { NamePool, NameGenerationResult } from "./data/names";
 // ジョブ定義（単一 SoT）と総合強さヘルパー
 export {
-  JOB_DEFAULTS, JOB_JP, JOB_ABILITY, JOB_PASSIVES,
-  ROLE_BONUS, JOB_TARGET_RATING, formatJob,
+  JOB_DEFAULTS, JOB_JP, JOB_ABILITY, JOB_PASSIVES, JOB_FORMATION_GUIDE,
+  ROLE_BONUS, JOB_TARGET_RATING, formatJob, getJobFormationGuide,
   computeBattleStats, totalRating,
 } from "./data/jobs";
-export type { JobDefaults, BattleStats, JobAbility } from "./data/jobs";
+export type {
+  JobDefaults, BattleStats, JobAbility,
+  JobFormationGuide, JobEffectKind,
+} from "./data/jobs";
 export { Brigade } from "./models/Brigade";
 export type {
   YearEvent,

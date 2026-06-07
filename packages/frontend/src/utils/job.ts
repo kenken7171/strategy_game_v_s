@@ -101,3 +101,198 @@ export function getJobAbility(job: string | null | undefined): JobAbilityInfo | 
   if (!job) return null;
   return JOB_ABILITY[job] ?? null;
 }
+
+// ─── JOB_DEFAULTS ミラー（パッシブ値の取り出し用） ──────────────────────────
+//
+// core/data/jobs.ts の JOB_DEFAULTS と同期。BDF/SDF/AB/HL の生値を取り出して
+// 「⚙ 固有パッシブ」セクションの構造化リストに使う。
+// 設定変更時は本ミラーと core 側を両方更新すること（既存パターン）。
+
+export interface JobDefaultsInfo {
+  maxHp: number; speed: number;
+  frontAttack: number; rearAttack: number;
+  bdf: number; sdf: number; ab: number; hl: number;
+}
+export const JOB_DEFAULTS: Record<string, JobDefaultsInfo> = {
+  iron_wall_knight: { maxHp: 250, speed: 10, frontAttack: 50, rearAttack:  10, bdf: 10, sdf: 15, ab:  0, hl:  0 },
+  tactician:        { maxHp: 120, speed: 35, frontAttack: 20, rearAttack:  20, bdf:  0, sdf:  0, ab: 20, hl:  0 },
+  medic:            { maxHp: 100, speed: 25, frontAttack: 10, rearAttack:  10, bdf:  0, sdf:  0, ab:  0, hl: 30 },
+  sniper:           { maxHp:  80, speed: 40, frontAttack: 20, rearAttack:  90, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  sorcerer:         { maxHp:  40, speed: 15, frontAttack: 10, rearAttack: 120, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+  standard_bearer:  { maxHp: 150, speed: 20, frontAttack: 30, rearAttack:  30, bdf:  0, sdf:  5, ab: 40, hl:  0 },
+  heavy_infantry:   { maxHp: 300, speed: 15, frontAttack: 70, rearAttack:  20, bdf:  0, sdf: 10, ab:  0, hl:  0 },
+  scout:            { maxHp:  90, speed: 60, frontAttack: 40, rearAttack:  40, bdf:  0, sdf:  0, ab:  0, hl:  0 },
+};
+
+// ─── JOB_FORMATION_GUIDE ミラー（推奨配置・効果範囲） ──────────────────────
+//
+// core/data/jobs.ts の JOB_FORMATION_GUIDE と完全同期。UnitDetailModal で
+// V 字図のハイライトと「推奨：最前線」ヘッドラインに使う。
+
+export type SquadRowKey = "FRONT" | "REAR-L" | "REAR-R";
+export type JobEffectKind = "buff" | "heal" | "defend" | "attack";
+
+export interface JobFormationGuideInfo {
+  recommendedRows: ReadonlyArray<SquadRowKey>;
+  effectRange:     ReadonlyArray<SquadRowKey>;
+  effectRangeNote: string;
+  effectKind:      JobEffectKind;
+  headline:        string;
+}
+
+export const JOB_FORMATION_GUIDE: Record<string, JobFormationGuideInfo> = {
+  iron_wall_knight: {
+    recommendedRows: ["FRONT"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "BDFはFRONT配置時のみ大隊全体に届く / SDFは所属分隊のみ",
+    effectKind:      "defend",
+    headline:        "推奨：最前線（BDF発動条件）",
+  },
+  heavy_infantry: {
+    recommendedRows: ["FRONT"],
+    effectRange:     ["FRONT"],
+    effectRangeNote: "SDF=10で自分隊を軽減 / 高HP+高FAで前線を支える",
+    effectKind:      "attack",
+    headline:        "推奨：最前線（壊れぬ盾）",
+  },
+  standard_bearer: {
+    recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "AB=40で自分以外の大隊全員にSPD+40/攻撃+40を撒く",
+    effectKind:      "buff",
+    headline:        "推奨：どこでも可（大隊全員を強化）",
+  },
+  tactician: {
+    recommendedRows: ["FRONT", "REAR-L", "REAR-R"],
+    effectRange:     ["FRONT", "REAR-L", "REAR-R"],
+    effectRangeNote: "AB=20で自分以外の大隊全員にSPD+20/攻撃+20を撒く",
+    effectKind:      "buff",
+    headline:        "推奨：どこでも可（軽量バフ役）",
+  },
+  medic: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "HL=30は所属分隊のみ。配置した分隊の生存者全員を回復",
+    effectKind:      "heal",
+    headline:        "推奨：脆い後衛（自分隊を継続回復）",
+  },
+  sniper: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "RA=90で後衛時のみフル火力 / 1番手かつ先頭で2連撃発動",
+    effectKind:      "attack",
+    headline:        "推奨：後衛(2連撃の砲台)",
+  },
+  sorcerer: {
+    recommendedRows: ["REAR-L", "REAR-R"],
+    effectRange:     ["REAR-L", "REAR-R"],
+    effectRangeNote: "RA=120で全職最強の砲台 / HP=40なので前衛は不可",
+    effectKind:      "attack",
+    headline:        "推奨：後衛（高リスク高リターン）",
+  },
+  scout: {
+    recommendedRows: ["REAR-L", "REAR-R", "FRONT"],
+    effectRange:     ["REAR-L", "REAR-R", "FRONT"],
+    effectRangeNote: "FA=RA=40で配置自由 / SPD=60で常時先制取り",
+    effectKind:      "attack",
+    headline:        "推奨：どこでも可（最速の先制削り役）",
+  },
+};
+
+export function getJobFormationGuide(
+  job: string | null | undefined
+): JobFormationGuideInfo | null {
+  if (!job) return null;
+  return JOB_FORMATION_GUIDE[job] ?? null;
+}
+
+// ─── パッシブ解析ヘルパー ─────────────────────────────────────────────────
+//
+// JOB_DEFAULTS から非0の BDF/SDF/AB/HL 値を取り出して構造化リスト化する。
+// UnitDetailModal の「⚙ 固有パッシブ」セクションで反復表示するためのデータ。
+//
+// 値が 0 のパッシブは項目から除外。全項目 0 の純アタッカー職（sniper/sorcerer/
+// scout）は数値プロパティ無しなので、SPECIAL_NOTE の特殊行を返す場合がある。
+
+export interface PassiveExplanation {
+  /** ユニークキー (data-testid 用) — "bdf" | "sdf" | "ab" | "hl" | "special-*" */
+  readonly key: string;
+  /** UI ラベル（絵文字 + 略号 + 補足） */
+  readonly label: string;
+  /** 数値（特殊パッシブで該当なしの場合 null） */
+  readonly value: number | null;
+  /** 発動条件・スコープの一行説明 */
+  readonly scope: string;
+  /** 効果の一行説明 */
+  readonly description: string;
+}
+
+/** ジョブ固有の特殊パッシブ（数値プロパティでは表現できないもの） */
+const JOB_SPECIAL_PASSIVES: Record<string, ReadonlyArray<PassiveExplanation>> = {
+  sniper: [
+    {
+      key: "special-double-strike",
+      label: "🎯 2連撃",
+      value: null,
+      scope: "イニシアチブ1番手 ∧ 分隊先頭スロット時のみ",
+      description: "通常攻撃が 2 回行われる（1 ターン中の追撃）",
+    },
+  ],
+};
+
+/**
+ * 指定ジョブのパッシブ能力を構造化リスト化する。
+ *
+ * 数値プロパティ (bdf/sdf/ab/hl) は非0のものだけを項目化し、加えて
+ * `JOB_SPECIAL_PASSIVES` に登録された特殊行を末尾に連結する。
+ */
+export function explainJobPassives(
+  job: string | null | undefined
+): ReadonlyArray<PassiveExplanation> {
+  if (!job) return [];
+  const d = JOB_DEFAULTS[job];
+  if (!d) return [];
+
+  const out: PassiveExplanation[] = [];
+  if (d.bdf > 0) {
+    out.push({
+      key: "bdf",
+      label: "🛡 BDF (Brigade Defense / 大隊軽減)",
+      value: d.bdf,
+      scope: "FRONT配置時のみ発動 / 効果は大隊全体",
+      description: "大隊全員の被ダメージを軽減（自分以外の分隊にも届く）",
+    });
+  }
+  if (d.sdf > 0) {
+    out.push({
+      key: "sdf",
+      label: "🛡 SDF (Squad Defense / 自分隊軽減)",
+      value: d.sdf,
+      scope: "常時発動 / 効果は所属分隊のみ",
+      description: "自分が所属する分隊の被ダメージを軽減",
+    });
+  }
+  if (d.ab > 0) {
+    out.push({
+      key: "ab",
+      label: "✨ AB (Ally Buff / 大隊バフ)",
+      value: d.ab,
+      scope: "毎ターン開始時 / 自分以外の大隊全員",
+      description: "速度と攻撃力に値分のバフを撒く（重ね掛け可）",
+    });
+  }
+  if (d.hl > 0) {
+    out.push({
+      key: "hl",
+      label: "💚 HL (Heal / 自分隊回復)",
+      value: d.hl,
+      scope: "毎ターン終了時 / 所属分隊の生存者全員",
+      description: "HP を値分回復（最大HPでキャップ）",
+    });
+  }
+
+  const special = JOB_SPECIAL_PASSIVES[job];
+  if (special) out.push(...special);
+
+  return out;
+}
