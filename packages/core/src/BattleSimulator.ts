@@ -2,6 +2,7 @@ import { BattleManager, IntegratedTurnResult } from "./BattleManager";
 import { Enemy, EnemyAction } from "./models/Enemy";
 import { Squad } from "./models/Squad";
 import { Unit } from "./models/Unit";
+import { JOB_PASSIVES } from "./data/jobs";
 import { CHRONICLE_CONFIG } from "./config/ChronicleConfig";
 
 // ─── DynamicEnemy ─────────────────────────────────────────────────────────────
@@ -702,18 +703,21 @@ export class BattleSimulator {
   /**
    * 次ターンの行動順予報を返す。
    *
-   * 各 ally Squad の平均 speed + tactician/standard_bearer の AB バフ総和、
-   * 敵集団の最大 speed を SPD 降順で並べる。BattleManager のイニシアチブ
-   * 計算と近い結果になるが、UI 予報用なので近似値である点に注意。
+   * 各 ally Squad の平均 speed + AB バフ broadcaster（戦術官 / 旗手）の
+   * AB 値総和、敵集団の最大 speed を SPD 降順で並べる。
+   *
+   * BattleManager.evaluateBrigadePassiveBuffs と「同じ述語」で評価することで、
+   * 予報と実ロジックのズレを構造的に防ぐ。
    */
   getInitiativeForecast(): TimelineEntry[] {
     const timeline: TimelineEntry[] = [];
 
-    // ally 全体の AB バフ総和（戦術官 20 / 旗手 40 を含む）
+    // ally 全体の AB バフ総和: JOB_PASSIVES.broadcastsAllyBuff で判定
+    // （現時点では tactician=20 + standard_bearer=40 が加算される）
     let totalAbBuff = 0;
     for (const sq of this.allies) {
       for (const u of sq.units) {
-        if (u.isAlive) totalAbBuff += u.ab;
+        if (JOB_PASSIVES.broadcastsAllyBuff(u)) totalAbBuff += u.ab;
       }
     }
 

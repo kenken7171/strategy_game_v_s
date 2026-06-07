@@ -34,6 +34,77 @@ export const JOB_DEFAULTS: Record<JobType, JobDefaults> = {
   scout:            { maxHp:  90, speed: 60, frontAttack: 40, rearAttack:  40, bdf:  0, sdf:  0, ab:  0, hl:  0 },
 };
 
+// ─── ジョブ・パッシブ能力の述語集約 ───────────────────────────────────────────
+//
+// BattleManager / BattleSimulator から `unit.job === "..."` の文字列マッチを
+// 排除するための述語オブジェクト。これにより:
+//   - ジョブ追加時は本ファイルだけ触れば挙動が広がる
+//   - 戦闘オーケストレータがジョブ名を意識せず宣言的に書ける
+//   - 予報（forecast）と実ロジックが「同じ述語で同じ条件」を共有できる
+//
+// 各述語は「このユニットは今ターン、この能力を発動する資格があるか」を返す
+// ピュアな predicate。副作用なし。
+//
+// スコープ分類（コメントの (X) を参照）:
+//   (A) Brigade Scope   — 大隊全体に常駐する常時パッシブ
+//   (B) Turn Scope      — ターン頭 or ターン末で発動
+//   (C) Action Scope    — 特定行動（攻撃/被弾）の瞬間のみ
+export const JOB_PASSIVES = {
+  /**
+   * (A) 大隊全体に AB バフ（速度+攻撃）を撒く役。
+   *
+   * - tactician      : ab=20、速度値（unit.speed）も合わせて撒く
+   * - standard_bearer: ab=40（旗手）
+   *
+   * いずれも生存しているだけで効果発動する常駐パッシブ。
+   */
+  broadcastsAllyBuff: (u: Unit): boolean =>
+    u.isAlive && (u.job === "tactician" || u.job === "standard_bearer"),
+
+  /**
+   * (C) FRONT 配置時に大隊全体の被ダメを軽減する役（BDF）。
+   *
+   * - iron_wall_knight: bdf=10
+   *
+   * FRONT スロットにいる場合のみ発動。被弾の瞬間にのみ参照される
+   * （damage scope）。
+   */
+  reducesBrigadeDamageWhenFront: (u: Unit): boolean =>
+    u.isAlive && u.job === "iron_wall_knight",
+
+  /**
+   * (C) 自分隊の被ダメを軽減する役（SDF）。
+   *
+   * - iron_wall_knight: sdf=15
+   *
+   * 所属分隊が攻撃を受けた瞬間にのみ参照される。
+   */
+  reducesSquadDamage: (u: Unit): boolean =>
+    u.isAlive && u.job === "iron_wall_knight",
+
+  /**
+   * (B) ターン末に自分隊を回復する役（HL）。
+   *
+   * - medic: hl=30
+   *
+   * 自分隊の生存ユニット全員に対して、HL 値分の回復を maxHp までキャップ
+   * して適用する。
+   */
+  healsSquadAtTurnEnd: (u: Unit): boolean =>
+    u.isAlive && u.job === "medic",
+
+  /**
+   * (C) 行動順 1 番手かつ分隊の先頭スロットにいる時、攻撃を 2 回行う役。
+   *
+   * - sniper: 専用ロジック（数値プロパティではなくジョブ依存）
+   *
+   * 攻撃の瞬間に判定される。isAlive チェックは呼び出し側のオフェンスループで
+   * 既に行っているため、ここでは行わない。
+   */
+  doubleStrikesOnFirstInitiative: (u: Unit): boolean =>
+    u.job === "sniper",
+} as const;
+
 /**
  * 各ジョブの能力解説。フロントの UnitDetailModal で表示される。
  * 単一 SoT として core 側に定義する。

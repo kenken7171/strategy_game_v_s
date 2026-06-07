@@ -1,5 +1,9 @@
 import { Squad } from "./models/Squad";
+import { Unit } from "./models/Unit";
 import { Enemy, EnemyAction } from "./models/Enemy";
+import { JOB_PASSIVES } from "./data/jobs";
+
+// ─── 公開型 ─────────────────────────────────────────────────────────────────
 
 export interface SlotResult {
   readonly hits: number;
@@ -53,6 +57,24 @@ export interface IntegratedTurnResult {
   readonly healLogs: ReadonlyArray<HealLog>;
 }
 
+// ─── BattleManager ─────────────────────────────────────────────────────────
+//
+// 1 ターンの戦闘解決を担うクラス。
+//
+// 設計方針:
+//   - 「ジョブ固有のロジック」は全て data/jobs.ts の `JOB_PASSIVES` 述語に
+//     集約され、本クラスからは文字列マッチ（`unit.job === "..."`）を排除
+//   - `processIntegratedTurn()` 本体はライフサイクルだけを宣言的に並べる
+//     オーケストレータとして書く（個々のジョブを意識しない）
+//
+// ライフサイクル分類:
+//   Phase A : 常駐・大隊バフの計算（Brigade Scope）   = `evaluateBrigadePassiveBuffs`
+//   Phase B : ターン時限バフのクリアと適用（Turn Scope）= `clearTurnScopedBuffs`
+//                                                       / `applyTurnEndHeals`
+//   Phase C : 行動解決と局所スキル（Action/Damage Scope）= `applyEnemyAction`
+//                                                       / `processSquadOffense`
+//                                                         内のサブヘルパー
+
 export class BattleManager {
   private squads: Map<string, Squad>;
   private enemy: Enemy;
@@ -76,31 +98,119 @@ export class BattleManager {
     return this.currentEnemyHp <= 0;
   }
 
-  private computeEffectiveDamage(baseDamage: number, targetSquadId: string): number {
-    let reduction = 0;
+  get turn(): number {
+    return this.currentTurn;
+  }
 
-    // BDF: 鉄壁騎士がFRONTスロットにいる場合、大隊全体のダメージを軽減（多重適用あり）
-    const frontSquad = this.squads.get("FRONT");
-    if (frontSquad) {
-      for (const u of frontSquad.units) {
-        if (u.isAlive && u.job === "iron_wall_knight") {
-          reduction += u.bdf;
+  // ─── Phase A: 常駐パッシブ（Brigade Scope） ─────────────────────────────
+
+  /**
+   * 大隊全体に常駐する AB バフ（速度+攻撃）を撒く全ユニットを評価する。
+   *
+   * 対象は `JOB_PASSIVES.broadcastsAllyBuff` が true を返す全 unit。
+   * 現時点では tactician / standard_bearer が該当（旗手の AB=40 も
+   * 本リファクタで初めて発動するようになる）。
+   *
+   * 各 broadcaster は自分以外の全 squad メンバーに `applyBuff` を撒く。
+   * 自分自身には適用されない（`excludeUnitId` で除外）。
+   */
+  private evaluateBrigadePassiveBuffs(): void {
+    for (const [, squad] of this.squads) {
+      for (const unit of squad.units) {
+        if (!JOB_PASSIVES.broadcastsAllyBuff(unit)) continue;
+        for (const [, otherSquad] of this.squads) {
+          otherSquad.applyBuff(unit.speed, unit.ab, unit.id);
         }
       }
     }
+  }
 
-    // SDF: ターゲット分隊内の鉄壁騎士が自分隊のダメージを軽減
-    const targetSquad = this.squads.get(targetSquadId);
-    if (targetSquad) {
-      for (const u of targetSquad.units) {
-        if (u.isAlive && u.job === "iron_wall_knight") {
-          reduction += u.sdf;
-        }
+  // ─── Phase B: 時限バフのクリアと適用（Turn Scope） ──────────────────────
+
+  /**
+   * 前ターンに撒かれた時限バフを全 squad で一括クリアする。
+   * 必ず Phase A の前に呼ぶ（バフは毎ターン新規に計算される設計）。
+   */
+  private clearTurnScopedBuffs(): void {
+    for (const [, squad] of this.squads) {
+      squad.resetBuffs();
+    }
+  }
+
+  /**
+   * ターン末に発動する自分隊回復を適用する。
+   *
+   * 対象は `JOB_PASSIVES.healsSquadAtTurnEnd` が true を返す unit
+   * （現時点では medic のみ）。同分隊内で複数いれば HL 値が加算される。
+   * 回復は `Squad.applyHeal` 経由で maxHp 上限キャップ付き。
+   */
+  private applyTurnEndHeals(): HealLog[] {
+    const logs: HealLog[] = [];
+    for (const [squadId, squad] of this.squads) {
+      const totalHeal = squad.units
+        .filter((u) => JOB_PASSIVES.healsSquadAtTurnEnd(u))
+        .reduce((sum, u) => sum + u.hl, 0);
+      if (totalHeal > 0) {
+        squad.applyHeal(totalHeal);
+        logs.push({ squadId, healAmount: totalHeal });
+      }
+    }
+    return logs;
+  }
+
+  // ─── Phase C: 局所スキル（Action/Damage Scope） ─────────────────────────
+
+  /**
+   * 被弾ダメージから「軽減」を引いた実効ダメージを計算する。
+   *
+   * 軽減源:
+   *   - 大隊全体軽減 (BDF): FRONT スロットにいて
+   *     `JOB_PASSIVES.reducesBrigadeDamageWhenFront` を満たす unit の bdf 合計
+   *   - 自分隊軽減 (SDF): ターゲット分隊内で
+   *     `JOB_PASSIVES.reducesSquadDamage` を満たす unit の sdf 合計
+   *
+   * 軽減後の最小値は 1（必ず痛みは残す）。
+   */
+  private computeEffectiveDamage(baseDamage: number, targetSquadId: string): number {
+    let reduction = 0;
+
+    const front = this.squads.get("FRONT");
+    if (front) {
+      for (const u of front.units) {
+        if (JOB_PASSIVES.reducesBrigadeDamageWhenFront(u)) reduction += u.bdf;
+      }
+    }
+
+    const target = this.squads.get(targetSquadId);
+    if (target) {
+      for (const u of target.units) {
+        if (JOB_PASSIVES.reducesSquadDamage(u)) reduction += u.sdf;
       }
     }
 
     return Math.max(1, baseDamage - reduction);
   }
+
+  /**
+   * 当該ユニットの今ターンの攻撃回数を返す。
+   *
+   * 通常は 1。`JOB_PASSIVES.doubleStrikesOnFirstInitiative` を満たし、
+   * かつ「行動順 1 番手の分隊」かつ「分隊内の先頭ユニット」のときに 2。
+   */
+  private offenseHitCount(
+    unit: Unit,
+    isFirstInInitiative: boolean,
+    unitIdx: number
+  ): number {
+    const isFirstUnit = unitIdx === 0;
+    const isFirstStrike =
+      isFirstInInitiative &&
+      isFirstUnit &&
+      JOB_PASSIVES.doubleStrikesOnFirstInitiative(unit);
+    return isFirstStrike ? 2 : 1;
+  }
+
+  // ─── 敵アクション解決 ───────────────────────────────────────────────────
 
   applyEnemyAction(action: EnemyAction): ActionResult {
     const { targetSlotIds, hitCount, damage, multiTargetMode } = action;
@@ -184,9 +294,7 @@ export class BattleManager {
     };
   }
 
-  get turn(): number {
-    return this.currentTurn;
-  }
+  // ─── イニシアチブ構築 ───────────────────────────────────────────────────
 
   private buildInitiativeQueue(): InitiativeEntry[] {
     const queue: InitiativeEntry[] = [
@@ -200,31 +308,7 @@ export class BattleManager {
     return queue.sort((a, b) => b.speed - a.speed);
   }
 
-  private applyTacticianBuffs(): void {
-    for (const [, squad] of this.squads) {
-      for (const unit of squad.units) {
-        if (unit.isAlive && unit.job === "tactician") {
-          for (const [, otherSquad] of this.squads) {
-            otherSquad.applyBuff(unit.speed, unit.ab, unit.id);
-          }
-        }
-      }
-    }
-  }
-
-  private applyMedicHealing(): HealLog[] {
-    const logs: HealLog[] = [];
-    for (const [squadId, squad] of this.squads) {
-      const totalHeal = squad.units
-        .filter((u) => u.isAlive && u.job === "medic")
-        .reduce((sum, u) => sum + u.hl, 0);
-      if (totalHeal > 0) {
-        squad.applyHeal(totalHeal);
-        logs.push({ squadId, healAmount: totalHeal });
-      }
-    }
-    return logs;
-  }
+  // ─── 分隊オフェンス（Phase C — Action Scope） ───────────────────────────
 
   processSquadOffense(squadId: string, isFirstInInitiative = false): SquadOffenseResult {
     const squad = this.squads.get(squadId);
@@ -241,12 +325,9 @@ export class BattleManager {
       if (this.currentEnemyHp <= 0) break;
 
       const unit = aliveUnits[unitIdx];
-      const isFirstUnit = unitIdx === 0;
-      const isSniper1st =
-        unit.job === "sniper" && isFirstInInitiative && isFirstUnit;
       const attackPower =
         squadId === "FRONT" ? unit.finalFrontAttack : unit.finalRearAttack;
-      const attackCount = isSniper1st ? 2 : 1;
+      const attackCount = this.offenseHitCount(unit, isFirstInInitiative, unitIdx);
 
       for (let hit = 0; hit < attackCount; hit++) {
         if (this.currentEnemyHp <= 0) break;
@@ -260,7 +341,8 @@ export class BattleManager {
           slotId: squadId,
           attackPower,
           damageDealt,
-          isDoubleAttack: isSniper1st && hit === 1,
+          // 2 回攻撃の 2 発目だけ isDoubleAttack=true（ログ表示用）
+          isDoubleAttack: attackCount === 2 && hit === 1,
         });
         totalDamage += damageDealt;
       }
@@ -274,22 +356,17 @@ export class BattleManager {
     };
   }
 
-  processIntegratedTurn(): IntegratedTurnResult {
-    if (this.isVictory) {
-      throw new Error("Battle is already over (enemy defeated)");
-    }
+  // ─── イニシアチブループ（Phase C をディスパッチするだけ） ──────────────
 
-    // 1. 全バフをリセット
-    for (const [, squad] of this.squads) {
-      squad.resetBuffs();
-    }
-
-    // 2. 戦術官のパッシブバフを適用
-    this.applyTacticianBuffs();
-
-    // 3. イニシアチブキューを構築（finalSpeedが反映されたaverageSpeedを使用）
-    const initiativeOrder = this.buildInitiativeQueue();
-
+  /**
+   * イニシアチブ順に enemy / squad の行動を解決していく純粋なディスパッチャ。
+   * ジョブ固有の知識は持たず、各エントリの type を見て対応メソッドを呼ぶだけ。
+   */
+  private runInitiativeLoop(initiativeOrder: ReadonlyArray<InitiativeEntry>): {
+    enemyActionResult?: ActionResult;
+    squadOffenseResults: SquadOffenseResult[];
+    victory: boolean;
+  } {
     let enemyActionResult: ActionResult | undefined;
     const squadOffenseResults: SquadOffenseResult[] = [];
     let victory = false;
@@ -310,8 +387,35 @@ export class BattleManager {
       }
     }
 
-    // 4. ターン終了：衛生兵の回復を適用
-    const healLogs = this.applyMedicHealing();
+    return { enemyActionResult, squadOffenseResults, victory };
+  }
+
+  // ─── オーケストレータ ──────────────────────────────────────────────────
+
+  /**
+   * 1 ターン全体を進行する。本メソッドはライフサイクルを宣言的に並べるだけで、
+   * 個々のジョブ仕様には触れない（全て JOB_PASSIVES と Phase メソッドに委譲）。
+   */
+  processIntegratedTurn(): IntegratedTurnResult {
+    if (this.isVictory) {
+      throw new Error("Battle is already over (enemy defeated)");
+    }
+
+    // Phase B (start): 前ターンの時限バフをクリア
+    this.clearTurnScopedBuffs();
+
+    // Phase A: 常駐パッシブを評価し AB バフを撒く
+    this.evaluateBrigadePassiveBuffs();
+
+    // 行動順を確定（finalSpeed が Phase A の結果を反映している）
+    const initiativeOrder = this.buildInitiativeQueue();
+
+    // Phase C をディスパッチ
+    const { enemyActionResult, squadOffenseResults, victory } =
+      this.runInitiativeLoop(initiativeOrder);
+
+    // Phase B (end): ターン末の回復
+    const healLogs = this.applyTurnEndHeals();
 
     const turn = this.currentTurn;
     this.currentTurn++;
