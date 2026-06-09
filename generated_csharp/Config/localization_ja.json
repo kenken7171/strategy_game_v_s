@@ -6,6 +6,14 @@
     "lookupRule": "コード側の LocalizationKeys ヘルパーで型安全に組み立てたパスでアクセスする。例: passives.BattalionDefense.label → '🛡️ 大隊総守護力'"
   },
 
+  "phases": {
+    "_note": "ゲーム進行フェーズ（GamePhaseFlow）の表示名。キーは GamePhase.Slug() が払い出す ASCII スラッグと一致する。PhaseNameResolver (Core/Localization) がこのセクションを引いて画面上部のフェーズインジケータへ反映する。",
+    "chronicle": "年代記フェーズ",
+    "guild": "旅団組合フェーズ",
+    "formation": "大隊編成フェーズ",
+    "battle": "戦闘解決フェーズ"
+  },
+
   "passives": {
     "BattalionDefense": {
       "label": "🛡️ 大隊総守護力",

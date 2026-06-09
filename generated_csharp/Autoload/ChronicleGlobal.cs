@@ -45,6 +45,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.GameFlow;
+using ChronicleKnights.Core.Localization;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Persistence;
@@ -152,6 +153,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// その場合 ResolveDisplayName は生のキーをフォールバック表示する。
     /// </summary>
     private NameResolver? _nameResolver;
+
+    /// <summary>
+    /// フェーズスラッグ → 表示用日本語フェーズ名のリゾルバ。LoadLocalization で
+    /// 名前リゾルバと同じ JSON から構築される。未ロード時は null で、その場合
+    /// ResolvePhaseName は生のスラッグをフォールバック表示する。
+    /// </summary>
+    private PhaseNameResolver? _phaseNameResolver;
 
     // ════════════════════════════════════════════════════════════════════════
     //  初期化 API
@@ -481,8 +489,9 @@ public partial class ChronicleGlobal : Godot.Node
 
     /// <summary>
     /// localization 設定（既定 res://Config/localization_ja.json）を読み込み、
-    /// 名前リゾルバを構築する。読み込み・解析に失敗しても例外は投げず false を返す
-    /// （その場合 ResolveDisplayName は生のキーをフォールバック表示する）。
+    /// 名前リゾルバとフェーズ名リゾルバを同じ JSON から一度に構築する。読み込み・
+    /// 解析に失敗しても例外は投げず false を返す（その場合は生のキー／スラッグを
+    /// フォールバック表示する）。
     /// </summary>
     /// <param name="path">読込元パス。null/空なら既定パス。</param>
     public bool LoadLocalization(string? path = null)
@@ -500,12 +509,15 @@ public partial class ChronicleGlobal : Godot.Node
             var json = file.GetAsText();
             if (string.IsNullOrWhiteSpace(json)) return false;
 
+            // 同一の localization 本文から名前・フェーズ名の両リゾルバを構築する
+            // （res:// の読み取りは一度だけ。純粋層へ文字列を渡す層別を保つ）。
             _nameResolver = NameResolver.FromLocalizationJson(json);
+            _phaseNameResolver = PhaseNameResolver.FromLocalizationJson(json);
             return true;
         }
         catch
         {
-            // 設定欠落・破損時もゲームを止めない（生キーフォールバックで継続）。
+            // 設定欠落・破損時もゲームを止めない（生キー／スラッグへフォールバック）。
             return false;
         }
     }
@@ -546,6 +558,33 @@ public partial class ChronicleGlobal : Godot.Node
         ArgumentNullException.ThrowIfNull(unit);
         return ResolveDisplayName(unit.FirstNameKey, unit.LastNameKey);
     }
+
+    /// <summary>
+    /// テスト・CLI 環境用に、構築済みのフェーズ名リゾルバを直接注入する。
+    /// （Godot 非依存の純粋経路でフェーズ表示名解決を差し込みたい場合に使う。）
+    /// </summary>
+    public void ConfigurePhaseNameResolver(PhaseNameResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _phaseNameResolver = resolver;
+    }
+
+    /// <summary>
+    /// 指定フェーズの表示用日本語名を解決する。リゾルバ未ロード時は生のスラッグを
+    /// フォールバック表示する（画面を止めず、未登録フェーズも判別できる）。
+    /// </summary>
+    public string ResolvePhaseName(GamePhase phase)
+    {
+        return _phaseNameResolver is not null
+            ? _phaseNameResolver.Resolve(phase)
+            : phase.Slug();
+    }
+
+    /// <summary>
+    /// 現在フェーズ（CurrentPhase）の表示用日本語名を解決する便宜メソッド。
+    /// 画面上部のフェーズインジケータ更新で使う。
+    /// </summary>
+    public string ResolveCurrentPhaseName() => ResolvePhaseName(CurrentPhase);
 
     // ════════════════════════════════════════════════════════════════════════
     //  読み取り専用クエリヘルパー（UI 利便用）
