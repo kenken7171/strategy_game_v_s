@@ -1,0 +1,37 @@
+<Project Sdk="Godot.NET.Sdk/4.3.0">
+
+  <!-- ===========================================================================
+       Chronicle Knights — 本体プロジェクト (Godot 4 / .NET 8 / C# 12)
+       ---------------------------------------------------------------------------
+       Godot.NET.Sdk を採用したゲーム本体のビルド定義。SDK の既定取り込みにより
+       本 csproj が置かれたディレクトリ (generated_csharp/) 以下の全 *.cs を
+       コンパイル対象とする。したがって以下が自動で本体へ含まれる:
+
+         Core/      … Godot 非依存の純粋ゲームロジック（脳）
+         Autoload/  … ChronicleGlobal（常駐シングルトン / SoT）
+         UI/        … 各フェーズ画面とメイン制御ディレクター（身体）
+
+       ★ 除外方針:
+         Tests/ は xUnit 専用の別アセンブリ（Tests/ChronicleKnights.Tests.csproj が
+         ../Core を独自にコンパイル取り込みする）。本体ビルドへ二重取り込みしない
+         よう Tests/ 配下を明示的に Compile から除外する。
+         .godot/ は Godot が生成するインポートキャッシュ。万一 .cs が紛れても
+         本体へ取り込まないよう除外しておく（安全網）。
+       ========================================================================== -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ChronicleKnights</RootNamespace>
+    <AssemblyName>ChronicleKnights</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <Compile Remove=".godot/**/*.cs" />
+  </ItemGroup>
+
+</Project>

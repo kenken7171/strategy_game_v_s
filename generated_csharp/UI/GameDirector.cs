@@ -36,7 +36,9 @@
 //    - メモリリーク防止: _ExitTree で全シグナルを購読解除
 // =============================================================================
 
+using System;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Bootstrap;
 using ChronicleKnights.Core.GameFlow;
 using Godot;
 
@@ -70,12 +72,55 @@ public partial class GameDirector : Godot.Control
         BuildLayout();
         BuildScreens();
         SubscribeSignals();
+
+        // 新規ゲームのブートストラップ（起動エントリ）。
+        // ★ 画面ノード群を AddChild 済み（= 各 UI が自身の _Ready でシグナル購読済み）
+        //   のこのタイミングで Initialize を呼ぶことで、StateInitialized 等の初回シグナルが
+        //   全 UI へ確実に届き、起動した瞬間に最初の旅団員と予言が描画される。
+        BootstrapNewGameIfNeeded();
+
         RenderCurrentPhase();
     }
 
     public override void _ExitTree()
     {
         UnsubscribeSignals();
+    }
+
+    // ─── 新規ゲーム・ブートストラップ（起動エントリ） ───────────────────────
+    //  ⚠ 最重要: 常駐ノード ChronicleGlobal は生成直後 IsInitialized == false の
+    //  「無（未初期化）」状態で待機している。Initialize がどこからも呼ばれなければ、
+    //  ロスターも予言も空のまま何も描画されない。本メソッドがその唯一の起動契機。
+
+    /// <summary>
+    /// 常駐ノード ChronicleGlobal がまだ初期化されていなければ、新規ゲームの初期状態
+    /// （初期資金・初期ロスター・ターン 1 の予言 3 択）を生成して Initialize へ注入する。
+    ///
+    /// 設計:
+    ///   - 初期ロスターと初期資金の構築は Godot 非依存の純粋ファクトリ
+    ///     NewGameFactory（Core/Bootstrap）へ委譲する（脳と身体の分離・テスト容易性）。
+    ///   - タイムライン（ターン 1 の予言 3 つ）は initialTimeline=null で渡し、
+    ///     Initialize 内で同じ Random から生成させる（乱数列を 1 本に統一）。
+    ///   - 既に初期化済み（IsInitialized == true）なら何もしない。これはセーブ継続ロードや
+    ///     ホットリロードで二重初期化（＝進行中の世界の破棄）を起こさないための安全網。
+    ///
+    /// ★ 将来「つづきから」を実装する際は、本メソッドの先頭で
+    ///   ChronicleGlobal.HasSaveData → LoadGame を試み、無ければ新規ゲームへ
+    ///   フォールバックする分岐を足すだけでよい（起動エントリの単一窓口）。
+    /// </summary>
+    private void BootstrapNewGameIfNeeded()
+    {
+        if (_chronicleGlobal is null) return;
+        if (_chronicleGlobal.IsInitialized) return;
+
+        var rng = new Random();
+        var seed = NewGameFactory.Create(rng);
+
+        _chronicleGlobal.Initialize(
+            initialRoster:   seed.Roster,
+            initialEconomy:  seed.Economy,
+            initialTimeline: null,   // ターン 1 の予言は Initialize が同じ rng で生成する
+            rng:             rng);
     }
 
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────

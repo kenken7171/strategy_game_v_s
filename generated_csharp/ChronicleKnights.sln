@@ -1,0 +1,32 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChronicleKnights", "ChronicleKnights.csproj", "{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChronicleKnights.Tests", "Tests\ChronicleKnights.Tests.csproj", "{F45435D8-BC47-447E-8243-4559CC341C8D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		ExportDebug|Any CPU = ExportDebug|Any CPU
+		ExportRelease|Any CPU = ExportRelease|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
+		{3E3EB1F3-520F-4ADE-AB1A-46908A2C5EA3}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.ExportDebug|Any CPU.Build.0 = Debug|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.ExportRelease|Any CPU.ActiveCfg = Release|Any CPU
+		{F45435D8-BC47-447E-8243-4559CC341C8D}.ExportRelease|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

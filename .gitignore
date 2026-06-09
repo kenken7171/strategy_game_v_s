@@ -7,3 +7,11 @@
 # ルート直下に置かれたアセット原本（packages/frontend/public/image/ に複製済）
 # 配信用は public/image/{jobId}/{gender}.png として管理する
 /image/
+
+# Godot 4 / .NET ビルド成果物・エディタキャッシュ（generated_csharp/）
+# .godot/ は Godot が生成するインポートキャッシュ、bin/obj/ は .NET ビルド出力。
+# project.godot / *.csproj / *.sln / *.tscn / *.uid 等のソースは追跡対象として残す。
+/generated_csharp/.godot/
+/generated_csharp/**/bin/
+/generated_csharp/**/obj/
+/generated_csharp/**/*.csproj.user

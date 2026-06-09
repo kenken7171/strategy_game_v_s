@@ -1,0 +1,37 @@
+; =============================================================================
+;  Chronicle Knights — project.godot
+; -----------------------------------------------------------------------------
+;  Godot 4.x (.NET / C#) プロジェクト定義ファイル。
+;
+;  本ファイルが置かれたディレクトリ (generated_csharp/) が Godot の
+;  プロジェクトルート (= res://) となる。すなわち:
+;    res://Autoload/ChronicleGlobal.cs … 常駐シングルトン (SoT)
+;    res://UI/GameDirector.cs           … メイン制御ディレクター
+;    res://Config/localization_ja.json  … 日本語ローカライズ辞書
+;    res://Main.tscn                    … 起動シーン
+;
+;  ★ [autoload] により /root/ChronicleGlobal が常駐ノードとして自動生成される。
+;    先頭の '*' は「自動ロードを有効化する」マーカー（Godot 規約）。
+;
+;  ★ config/features は開いた Godot エディタが自動更新する。バージョンが
+;    手元のエディタと異なる場合は、エディタ側で読み直せば追従する。
+;
+;  パラメータは Godot エディタ UI から編集するのが正道で、本ファイルの
+;  直接編集は最小限に留める。
+; =============================================================================
+
+config_version=5
+
+[application]
+
+config/name="Chronicle Knights"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.3", "C#", "Forward Plus")
+
+[autoload]
+
+ChronicleGlobal="*res://Autoload/ChronicleGlobal.cs"
+
+[dotnet]
+
+project/assembly_name="ChronicleKnights"

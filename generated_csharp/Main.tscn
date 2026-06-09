@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3]
+
+; =============================================================================
+;  Chronicle Knights — Main.tscn (起動シーン)
+; -----------------------------------------------------------------------------
+;  project.godot の run/main_scene に指定された、ゲーム起動時に最初に読み込まれる
+;  シーン。ルートに画面いっぱいの Control を 1 つ置き、そこへ全体統括司令塔
+;  res://UI/GameDirector.cs (ChronicleKnights.UI.GameDirector) をアタッチする。
+;
+;  起動の流れ:
+;    1. Godot が /root/ChronicleGlobal（Autoload）を生成（SoT 常駐ノード）
+;    2. 本シーンが読み込まれ、GameDirector._Ready() が走る
+;    3. GameDirector がローカライズ読込 → UI 構築 → 新規ゲームのブートストラップ
+;       （ChronicleGlobal.Initialize 呼び出し）まで一気に配線する
+;
+;  これにより起動した瞬間に最初の旅団員と予言が画面へ描画される。
+; =============================================================================
+
+[ext_resource type="Script" path="res://UI/GameDirector.cs" id="1_director"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_director")
