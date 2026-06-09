@@ -309,10 +309,15 @@ public partial class ChronicleGlobal : Godot.Node
             var mother = BattalionRoster.FirstOrDefault(u => u.Id == motherId);
             if (father is null || mother is null) return null;
 
+            // 名前自動生成の重複回避: 現在のロスタ全員のファーストネームキーを渡す。
+            var usedFirstNameKeys = BattalionRoster
+                .Select(u => u.FirstNameKey)
+                .ToHashSet(StringComparer.Ordinal);
+
             try
             {
                 result = MarriageService.ExecuteManualMarriage(
-                    CurrentEconomy, father, mother, newborn, _rng);
+                    CurrentEconomy, father, mother, newborn, _rng, usedFirstNameKeys);
             }
             catch (InvalidOperationException)
             {

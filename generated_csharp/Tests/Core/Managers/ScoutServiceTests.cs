@@ -13,9 +13,11 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Units;
 using Xunit;
 
@@ -25,6 +27,9 @@ public class ScoutServiceTests
 {
     // テストで決定論を得るための固定シード乱数。
     private static Random SeededRng(int seed = 12345) => new(seed);
+
+    // 名前重複回避用の空の使用済みキー集合（直接生成テスト用の便宜ヘルパー）。
+    private static IReadOnlySet<string> NoUsedKeys() => new HashSet<string>(StringComparer.Ordinal);
 
     // 残高だけを設定した経済を作る小ヘルパー（EarnDirect で残高を積む）。
     private static PointsEconomy EconomyWithBalance(int balance)
@@ -54,7 +59,7 @@ public class ScoutServiceTests
     [Fact]
     public void TryScout_AppendsToExistingRoster_PreservingOrder()
     {
-        var existing = ScoutService.CreateOutsiderUnit(SeededRng(1));
+        var existing = ScoutService.CreateOutsiderUnit(SeededRng(1), NoUsedKeys());
         var roster = ImmutableList.Create(existing);
         var economy = EconomyWithBalance(10);
 
@@ -83,8 +88,11 @@ public class ScoutServiceTests
         Assert.False(recruit.IsDead);                       // 生存
         Assert.NotEqual(Guid.Empty, recruit.Id);            // Id 採番済み
         Assert.Contains(recruit.Job, JobMaster.DisplayOrder); // 定義済みジョブ
-        Assert.Equal("name-family-outsider", recruit.LastNameKey);
-        Assert.StartsWith("name-outsider-", recruit.FirstNameKey);
+        // 名前は NameGenerator のローカライズキー規約に従う（プレースホルダは廃止）。
+        Assert.StartsWith("name-family-", recruit.LastNameKey);
+        Assert.StartsWith("name-", recruit.FirstNameKey);
+        // 払い出された文化圏は定義済み Origin のいずれかであり、ユニットへ永続保持される。
+        Assert.Contains(recruit.Origin, NameTaxonomy.AllOrigins);
     }
 
     [Fact]
@@ -92,9 +100,10 @@ public class ScoutServiceTests
     {
         // 多数回生成して、年齢・寿命が常に定数レンジ内に収まることを確認。
         var rng = SeededRng(777);
+        var used = NoUsedKeys();
         for (var i = 0; i < 500; i++)
         {
-            var unit = ScoutService.CreateOutsiderUnit(rng);
+            var unit = ScoutService.CreateOutsiderUnit(rng, used);
 
             Assert.InRange(unit.Age,
                 ScoutService.ScoutMinInitialAge, ScoutService.ScoutMaxInitialAge);
@@ -167,10 +176,13 @@ public class ScoutServiceTests
 
         Assert.NotNull(first);
         Assert.NotNull(second);
-        // Id / 名前キーは Guid.NewGuid 由来で毎回変わるが、乱数依存の
-        // ジョブ・年齢・寿命は同一シードで完全再現する。
+        // Id は Guid.NewGuid 由来で毎回変わるが、乱数依存のジョブ・年齢・寿命に加え、
+        // NameGenerator が払い出す文化圏・名前キーも同一シードで完全再現する。
         Assert.Equal(first!.Recruit.Job, second!.Recruit.Job);
         Assert.Equal(first.Recruit.Age, second.Recruit.Age);
         Assert.Equal(first.Recruit.MaxAge, second.Recruit.MaxAge);
+        Assert.Equal(first.Recruit.Origin, second.Recruit.Origin);
+        Assert.Equal(first.Recruit.FirstNameKey, second.Recruit.FirstNameKey);
+        Assert.Equal(first.Recruit.LastNameKey, second.Recruit.LastNameKey);
     }
 }

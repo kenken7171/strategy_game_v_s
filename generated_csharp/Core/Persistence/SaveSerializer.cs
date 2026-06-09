@@ -39,6 +39,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Timeline;
 using ChronicleKnights.Core.Units;
 
@@ -182,6 +183,7 @@ public static class SaveSerializer
         MaxAge        = u.MaxAge,
         FirstNameKey  = u.FirstNameKey,
         LastNameKey   = u.LastNameKey,
+        Origin        = u.Origin,
         Level         = u.Level,
         MainEquipment = u.MainEquipment is null ? null : ToDto(u.MainEquipment),
         // Guid キーは JSON 互換性のため文字列キー辞書へ正規化
@@ -255,6 +257,7 @@ public static class SaveSerializer
             MaxAge         = d.MaxAge,
             FirstNameKey   = d.FirstNameKey ?? string.Empty,
             LastNameKey    = d.LastNameKey ?? string.Empty,
+            Origin         = d.Origin,
             Level          = d.Level,
             MainEquipment  = d.MainEquipment is null ? null : FromDto(d.MainEquipment),
             BattleAffinity = affinity,
@@ -325,6 +328,8 @@ public static class SaveSerializer
         public int MaxAge { get; set; }
         public string FirstNameKey { get; set; } = string.Empty;
         public string LastNameKey { get; set; } = string.Empty;
+        /// <summary>命名文化圏（血統属性）。旧セーブ互換のため既定 European。</summary>
+        public Origin Origin { get; set; } = Origin.European;
         public int Level { get; set; }
         public EquipmentDto? MainEquipment { get; set; }
         /// <summary>Guid → ポイントの好感度。Guid は文字列キーへ正規化して保存。</summary>

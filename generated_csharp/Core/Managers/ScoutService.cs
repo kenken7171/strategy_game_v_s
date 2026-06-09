@@ -23,8 +23,11 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Units;
 
 namespace ChronicleKnights.Core.Managers;
@@ -87,12 +90,17 @@ public static class ScoutService
     /// <param name="roster">現在の旅団員リスト。</param>
     /// <param name="cost">スカウトに支払うポイント数（非負）。</param>
     /// <param name="rng">外様生成に使う乱数発生器（テストでは seeded を渡せる）。</param>
+    /// <param name="usedFirstNameKeys">
+    /// 名前重複回避のための使用済みファーストネームキー集合。null の場合は
+    /// 現在の roster から自動導出する（呼び出し側の利便性のため）。
+    /// </param>
     /// <returns>成功時は ScoutResult、失敗（残高不足・不正入力）時は null。</returns>
     public static ScoutResult? TryScout(
         PointsEconomy economy,
         ImmutableList<Unit> roster,
         int cost,
-        Random rng)
+        Random rng,
+        IReadOnlySet<string>? usedFirstNameKeys = null)
     {
         ArgumentNullException.ThrowIfNull(economy);
         ArgumentNullException.ThrowIfNull(roster);
@@ -113,7 +121,11 @@ public static class ScoutService
             return null;
         }
 
-        var recruit = CreateOutsiderUnit(rng);
+        // 使用済みキー集合が渡されなければ、現在の roster の実キーから導出する。
+        var used = usedFirstNameKeys
+            ?? roster.Select(u => u.FirstNameKey).ToHashSet(StringComparer.Ordinal);
+
+        var recruit = CreateOutsiderUnit(rng, used);
 
         return new ScoutResult
         {
@@ -128,23 +140,31 @@ public static class ScoutService
     /// <summary>
     /// 血縁関係のない外様ユニット 1 名を乱数生成する純粋ヘルパー。
     ///
-    /// - ジョブ : JobMaster.DisplayOrder から均等乱択
-    /// - 年齢   : 成人かつ即戦力 (ScoutMinInitialAge〜ScoutMaxInitialAge)
-    /// - 寿命   : 個体差 (ScoutMinLifespan〜ScoutMaxLifespan)
-    /// - レベル : Unit.InitialLevel (=1)
+    /// - ジョブ     : JobMaster.DisplayOrder から均等乱択
+    /// - 年齢       : 成人かつ即戦力 (ScoutMinInitialAge〜ScoutMaxInitialAge)
+    /// - 寿命       : 個体差 (ScoutMinLifespan〜ScoutMaxLifespan)
+    /// - レベル     : Unit.InitialLevel (=1)
     /// - 親 / 好感度 / 装備 : 一切なし（外様 = 完全に独立した新規加入）
-    /// - 名前キー : placeholder（将来 NameGenerator 翻訳時に差し替える余白）
+    /// - 名前・文化圏 : NameGenerator.DrawRandom で文化圏・性別を乱択し、
+    ///                重複しないローカライズキーを払い出す。払い出された
+    ///                Origin はユニットの血統属性として永続保持する。
     ///
-    /// テスト容易性のため public。seeded Random を渡せば年齢・ジョブが再現する。
+    /// テスト容易性のため public。seeded Random を渡せば年齢・ジョブ・名前が再現する。
     /// </summary>
-    public static Unit CreateOutsiderUnit(Random rng)
+    /// <param name="rng">外様生成に使う乱数発生器。</param>
+    /// <param name="usedFirstNameKeys">名前重複回避用の使用済みキー集合。</param>
+    public static Unit CreateOutsiderUnit(Random rng, IReadOnlySet<string> usedFirstNameKeys)
     {
         ArgumentNullException.ThrowIfNull(rng);
+        ArgumentNullException.ThrowIfNull(usedFirstNameKeys);
 
         var jobs = JobMaster.DisplayOrder;
         var job = jobs[rng.Next(jobs.Length)];
         var initialAge = rng.Next(ScoutMinInitialAge, ScoutMaxInitialAge + 1);
         var lifespan = rng.Next(ScoutMinLifespan, ScoutMaxLifespan + 1);
+
+        // 文化圏・性別を乱択し、重複しない名前キーを払い出す（外様 = 出自も乱数）。
+        var name = NameGenerator.DrawRandom(usedFirstNameKeys, rng);
 
         return new Unit
         {
@@ -152,8 +172,9 @@ public static class ScoutService
             Job            = job,
             Age            = initialAge,
             MaxAge         = lifespan,
-            FirstNameKey   = $"name-outsider-{Guid.NewGuid().ToString("N")[..8]}",
-            LastNameKey    = "name-family-outsider",
+            FirstNameKey   = name.FirstNameKey,
+            LastNameKey    = name.LastNameKey,
+            Origin         = name.Origin,
             Level          = Unit.InitialLevel,
             MainEquipment  = null,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,

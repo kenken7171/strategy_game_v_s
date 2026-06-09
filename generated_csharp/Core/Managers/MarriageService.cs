@@ -22,8 +22,10 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Units;
 
 namespace ChronicleKnights.Core.Managers;
@@ -37,11 +39,16 @@ namespace ChronicleKnights.Core.Managers;
 /// </summary>
 public sealed record NewbornSpec
 {
-    /// <summary>子の名前 (first) を引く Config キー。</summary>
-    public required string FirstNameKey { get; init; }
+    /// <summary>
+    /// 子の名前 (first) を引く Config キー。null の場合は ExecuteManualMarriage が
+    /// NameGenerator で「両親から継承した文化圏」の重複しないキーを自動生成する。
+    /// </summary>
+    public string? FirstNameKey { get; init; }
 
-    /// <summary>子の名前 (last) を引く Config キー。</summary>
-    public required string LastNameKey { get; init; }
+    /// <summary>
+    /// 子の名前 (last) を引く Config キー。null の場合は自動生成（同上）。
+    /// </summary>
+    public string? LastNameKey { get; init; }
 
     /// <summary>子の初期年齢。タイムスキップで成長することを前提に 0 推奨。</summary>
     public int InitialAge { get; init; } = 0;
@@ -200,12 +207,18 @@ public static class MarriageService
     /// BattleAffinity は空。Job は newborn.OverrideJob で固定可、null なら
     /// 父母から 50%/50% で乱数継承（将来は Affix 重み付け対応の土台）。
     /// </summary>
+    /// <param name="usedFirstNameKeys">
+    /// 名前自動生成時の重複回避に使う使用済みファーストネームキー集合。
+    /// NewbornSpec で名前キーが明示されている場合は参照されない。null の場合は
+    /// 空集合として扱う（呼び出し側で現在の roster から渡すのが望ましい）。
+    /// </param>
     public static MarriageResult ExecuteManualMarriage(
         PointsEconomy economy,
         Unit father,
         Unit mother,
         NewbornSpec newborn,
-        Random rng)
+        Random rng,
+        IReadOnlySet<string>? usedFirstNameKeys = null)
     {
         ArgumentNullException.ThrowIfNull(economy);
         ArgumentNullException.ThrowIfNull(father);
@@ -232,14 +245,27 @@ public static class MarriageService
         var inheritedJob = newborn.OverrideJob
             ?? (rng.NextDouble() < 0.5 ? father.Job : mother.Job);
 
+        // 4. 文化圏は両親のどちらかを 50%/50% で継承（血統系譜の追跡）。
+        var childOrigin = rng.NextDouble() < 0.5 ? father.Origin : mother.Origin;
+
+        // 5. 名前キーは NewbornSpec の明示値を優先し、未指定なら NameGenerator が
+        //    「継承した文化圏」のプールから重複しないキーを払い出す。
+        var used = usedFirstNameKeys ?? new HashSet<string>(StringComparer.Ordinal);
+        var generated = NameGenerator.Draw(
+            childOrigin,
+            NameGenerator.PickRandomGender(rng),
+            used,
+            rng);
+
         var child = new Unit
         {
             Id = Guid.NewGuid(),
             Job = inheritedJob,
             Age = newborn.InitialAge,
             MaxAge = newborn.MaxAge,
-            FirstNameKey = newborn.FirstNameKey,
-            LastNameKey = newborn.LastNameKey,
+            FirstNameKey = newborn.FirstNameKey ?? generated.FirstNameKey,
+            LastNameKey = newborn.LastNameKey ?? generated.LastNameKey,
+            Origin = childOrigin,
             Level = Unit.InitialLevel,
             MainEquipment = newborn.InitialEquipment,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,

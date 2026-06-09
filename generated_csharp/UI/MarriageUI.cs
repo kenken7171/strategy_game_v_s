@@ -382,13 +382,13 @@ public partial class MarriageUI : Godot.Control
         if (!fatherId.HasValue || !motherId.HasValue) return;
         if (fatherId.Value == motherId.Value) return;
 
-        // newborn 仕様: 名前キーは将来 NameGenerator で生成、ここでは placeholder
+        // newborn 仕様: 名前キー（FirstNameKey/LastNameKey）は意図的に未指定とし、
+        // MarriageService が両親から継承した文化圏で重複しないキーを自動生成する。
         var newborn = new NewbornSpec
         {
-            FirstNameKey = $"name-child-{Guid.NewGuid().ToString("N")[..8]}",
-            LastNameKey  = "name-family-pending",
             InitialAge   = 0,
             MaxAge       = ChildDefaultMaxAge,
+            // FirstNameKey / LastNameKey 未指定 → NameGenerator が文化圏継承で自動生成
             // OverrideJob = null → 父母から 50/50 で乱数継承（MarriageService 既定）
             // InitialEquipment = null → 装備なしで誕生（Affix 継承の余白は将来）
         };

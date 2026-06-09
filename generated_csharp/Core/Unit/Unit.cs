@@ -42,6 +42,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;
 
 namespace ChronicleKnights.Core.Units;
 
@@ -100,6 +101,16 @@ public sealed record Unit
     /// 例: "name-european-002" → "Aldridge"。
     /// </summary>
     public required string LastNameKey { get; init; }
+
+    /// <summary>
+    /// ユニットの命名文化圏（血統属性）。名前プールの分離だけでなく、
+    /// スカウト由来・婚姻継承でどの系譜を引いているかを識別・追跡するために
+    /// ユニットへ永続保持する（セーブ対象）。
+    ///
+    /// 既定値は Origin.European（手動入団・既存セーブ互換のための安全側デフォルト）。
+    /// NameGenerator が払い出した GeneratedName.Origin をそのまま格納する想定。
+    /// </summary>
+    public Origin Origin { get; init; } = Origin.European;
 
     /// <summary>
     /// ユニットの現在レベル（1 〜 MaxUnitLevel=3）。

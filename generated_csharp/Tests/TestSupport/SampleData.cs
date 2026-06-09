@@ -16,6 +16,7 @@ using System;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Units;
 
 namespace ChronicleKnights.Tests.TestSupport;
@@ -81,6 +82,7 @@ public static class SampleData
             MaxAge       = 60,
             FirstNameKey = "name-sample-ironwall",
             LastNameKey  = "name-family-sample",
+            Origin       = Origin.Japanese,
             Level        = 3,
             MainEquipment = new Equipment
             {
@@ -103,6 +105,7 @@ public static class SampleData
             MaxAge        = 58,
             FirstNameKey  = "name-sample-sniper",
             LastNameKey   = "name-family-sample",
+            Origin        = Origin.European,
             Level         = 1,
             MainEquipment = null,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,
