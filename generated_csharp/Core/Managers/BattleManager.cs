@@ -25,10 +25,33 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Units;
 
 namespace ChronicleKnights.Core.Managers;
+
+// ─── イニシアチブ枠（行動順の 1 席） ────────────────────────────────────────
+
+/// <summary>
+/// イニシアチブ（行動順）の 1 席を表す不変レコード。大隊の各生存ユニットと
+/// 単体の敵を同じ土俵で速度比較するために用いる。
+///
+/// ★ 敵は数値ステータスを Unit として持たない（C# 版の設計）。よって敵席は
+///   IsEnemy = true / UnitId = Guid.Empty / EffectiveSpeed = 敵速度 で表す。
+/// </summary>
+public sealed record InitiativeSlot
+{
+    /// <summary>この席が敵か（true なら味方ユニットではない）。</summary>
+    public required bool IsEnemy { get; init; }
+
+    /// <summary>味方ユニットの Id。敵席では Guid.Empty。</summary>
+    public required Guid UnitId { get; init; }
+
+    /// <summary>バフ込みの実効速度（行動順のソートキー）。</summary>
+    public required int EffectiveSpeed { get; init; }
+}
 
 // ─── ラストヒット解決結果 ───────────────────────────────────────────────────
 
@@ -301,5 +324,201 @@ public static class BattleManager
         var newA = a.WithAddedAffinity(b.Id, aGain);
         var newB = b.WithAddedAffinity(a.Id, bGain);
         return (newA, newB);
+    }
+
+    // ─── ターン頭バフの撒布（InitiativeBuff パッシブ — Brigade Scope） ──────
+    //  TS 版 BattleManager.evaluateBrigadePassiveBuffs と同じ規約:
+    //    InitiativeBuff パッシブ保有者は、自分以外の全生存ユニットへ
+    //      - 速度バフ = 撒布者の Speed 値
+    //      - 攻撃バフ = 撒布者の InitiativeBuff 値
+    //    を加算する（重ね掛け可能・自己加算なし）。
+
+    /// <summary>
+    /// beneficiary が他ユニットから受け取る速度バフ総和を集計する。
+    /// InitiativeBuff パッシブを持つ「自分以外の生存ユニット」の Speed 値を合算する。
+    /// </summary>
+    /// <param name="beneficiary">バフを受け取る対象ユニット。</param>
+    /// <param name="battalion">大隊の全ユニット（撒布者候補）。</param>
+    public static int CalculateBroadcastSpeedBonus(Unit beneficiary, IReadOnlyList<Unit> battalion)
+    {
+        ArgumentNullException.ThrowIfNull(beneficiary);
+        ArgumentNullException.ThrowIfNull(battalion);
+
+        var total = 0;
+        foreach (var buffer in battalion)
+        {
+            if (buffer.Id == beneficiary.Id) continue;   // 自分には撒かない
+            if (!buffer.IsAlive) continue;
+            if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
+            var def = JobMaster.Find(buffer.Job);
+            if (def is null) continue;
+            total += def.Stats.Speed;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// beneficiary が他ユニットから受け取る攻撃バフ総和を集計する。
+    /// InitiativeBuff パッシブを持つ「自分以外の生存ユニット」の InitiativeBuff 値を合算する。
+    /// </summary>
+    /// <param name="beneficiary">バフを受け取る対象ユニット。</param>
+    /// <param name="battalion">大隊の全ユニット（撒布者候補）。</param>
+    public static int CalculateBroadcastAttackBonus(Unit beneficiary, IReadOnlyList<Unit> battalion)
+    {
+        ArgumentNullException.ThrowIfNull(beneficiary);
+        ArgumentNullException.ThrowIfNull(battalion);
+
+        var total = 0;
+        foreach (var buffer in battalion)
+        {
+            if (buffer.Id == beneficiary.Id) continue;   // 自分には撒かない
+            if (!buffer.IsAlive) continue;
+            if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
+            var def = JobMaster.Find(buffer.Job);
+            if (def is null) continue;
+            total += def.Stats.InitiativeBuff;
+        }
+        return total;
+    }
+
+    // ─── イニシアチブ（行動順）解決 ────────────────────────────────────────
+
+    /// <summary>
+    /// バフ込みの実効速度を返す。計算式: 基礎 Speed + 受け取った速度バフ総和。
+    /// 未知ジョブ（JobMaster に定義なし）の基礎速度は 0 とみなす。
+    /// </summary>
+    public static int ResolveEffectiveSpeed(Unit unit, IReadOnlyList<Unit> battalion)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        ArgumentNullException.ThrowIfNull(battalion);
+
+        var def = JobMaster.Find(unit.Job);
+        var baseSpeed = def?.Stats.Speed ?? 0;
+        return baseSpeed + CalculateBroadcastSpeedBonus(unit, battalion);
+    }
+
+    /// <summary>
+    /// 大隊の全生存ユニットと単体の敵を、実効速度の降順で並べたイニシアチブ順を構築する。
+    ///
+    /// 敵は単一の実効速度 enemySpeed を持つ 1 席として末尾に加えてからソートする。
+    /// 同速度の並びは安定ソート (Enumerable.OrderByDescending) により挿入順を保つため、
+    /// 味方どうし・味方と敵が同速のときは「味方優先」の決定論的なタイブレークになる。
+    /// </summary>
+    /// <param name="battalion">大隊の全ユニット（死亡・寿命到達は自動的に除外）。</param>
+    /// <param name="enemySpeed">敵の実効速度（バフ適用後の最終値を渡す）。</param>
+    public static ImmutableArray<InitiativeSlot> BuildInitiativeOrder(
+        IReadOnlyList<Unit> battalion, int enemySpeed)
+    {
+        ArgumentNullException.ThrowIfNull(battalion);
+
+        var slots = new List<InitiativeSlot>(battalion.Count + 1);
+        foreach (var unit in battalion)
+        {
+            if (!unit.IsAlive) continue;
+            slots.Add(new InitiativeSlot
+            {
+                IsEnemy = false,
+                UnitId = unit.Id,
+                EffectiveSpeed = ResolveEffectiveSpeed(unit, battalion),
+            });
+        }
+
+        slots.Add(new InitiativeSlot
+        {
+            IsEnemy = true,
+            UnitId = Guid.Empty,
+            EffectiveSpeed = enemySpeed,
+        });
+
+        return slots.OrderByDescending(s => s.EffectiveSpeed).ToImmutableArray();
+    }
+
+    // ─── 攻撃反復（ConsecutiveStrike パッシブ — Action Scope） ──────────────
+
+    /// <summary>
+    /// 指定ユニットの 1 ターンの通常攻撃回数を返す。
+    /// ConsecutiveStrike パッシブを持ち、かつイニシアチブ順の先頭がそのユニット自身の
+    /// ときのみ 2 回（二の矢）、それ以外は 1 回。
+    /// </summary>
+    /// <param name="unit">攻撃回数を判定するユニット。</param>
+    /// <param name="order">BuildInitiativeOrder で得た行動順。</param>
+    public static int ResolveAttackRepetitions(Unit unit, ImmutableArray<InitiativeSlot> order)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        if (!JobMaster.HasPassive(unit.Job, PassiveKind.ConsecutiveStrike)) return 1;
+        if (order.IsDefaultOrEmpty) return 1;
+
+        var leader = order[0];
+        return (!leader.IsEnemy && leader.UnitId == unit.Id) ? 2 : 1;
+    }
+
+    /// <summary>
+    /// 指定 row 配置・バフ込みの 1 ターン総攻撃ダメージを返す。
+    /// 計算式: (配置 row の攻撃力 + 受け取った攻撃バフ総和) × 攻撃反復回数。
+    ///
+    /// 配置 row が Front なら FrontAttack、RearLeft / RearRight なら RearAttack を用いる。
+    /// 未知ジョブの場合は 0。
+    /// </summary>
+    /// <param name="unit">攻撃するユニット。</param>
+    /// <param name="row">攻撃時の配置 row。</param>
+    /// <param name="battalion">大隊の全ユニット（攻撃バフ撒布者の集計に使う）。</param>
+    /// <param name="order">行動順（連続攻撃判定に使う）。</param>
+    public static int ResolveOffenseDamage(
+        Unit unit,
+        SquadRow row,
+        IReadOnlyList<Unit> battalion,
+        ImmutableArray<InitiativeSlot> order)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        ArgumentNullException.ThrowIfNull(battalion);
+
+        var def = JobMaster.Find(unit.Job);
+        if (def is null) return 0;
+
+        var rowAttack = row == SquadRow.Front ? def.Stats.FrontAttack : def.Stats.RearAttack;
+        var attackBonus = CalculateBroadcastAttackBonus(unit, battalion);
+        var repetitions = ResolveAttackRepetitions(unit, order);
+        return (rowAttack + attackBonus) * repetitions;
+    }
+
+    // ─── ターン終了回復（TurnEndSquadHeal パッシブ — Turn End Scope） ───────
+
+    /// <summary>
+    /// ターン終了時に分隊が受ける回復総量を集計する。
+    /// TurnEndSquadHeal パッシブを持つ生存ユニット（衛生兵）の回復量を合算する。
+    /// </summary>
+    /// <param name="squadUnits">所属分隊のユニット群。</param>
+    public static int CalculateSquadTurnEndHeal(IReadOnlyList<Unit> squadUnits)
+    {
+        ArgumentNullException.ThrowIfNull(squadUnits);
+
+        var total = 0;
+        foreach (var unit in squadUnits)
+        {
+            if (!unit.IsAlive) continue;
+            if (!JobMaster.HasPassive(unit.Job, PassiveKind.TurnEndSquadHeal)) continue;
+            var def = JobMaster.Find(unit.Job);
+            if (def is null) continue;
+            total += def.Stats.TurnEndSquadHeal;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// 現在 HP に回復量を加え、最大 HP で頭打ちにした新 HP を返す純粋関数。
+    /// 計算式: min(maxHp, currentHp + healAmount)。
+    /// </summary>
+    /// <param name="currentHp">回復前の現在 HP。</param>
+    /// <param name="maxHp">上限となる最大 HP。</param>
+    /// <param name="healAmount">回復量（非負）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">healAmount が負の場合。</exception>
+    public static int ApplyHealClamped(int currentHp, int maxHp, int healAmount)
+    {
+        if (healAmount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(healAmount), healAmount, "heal amount must be non-negative");
+        }
+        return Math.Min(maxHp, currentHp + healAmount);
     }
 }
