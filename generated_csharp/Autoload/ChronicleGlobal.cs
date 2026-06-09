@@ -44,7 +44,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Persistence;
 using ChronicleKnights.Core.Timeline;
 using ChronicleKnights.Core.Units;
@@ -71,6 +73,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalEconomyChanged    = "EconomyChanged";
     public const string SignalTimelineChanged   = "TimelineChanged";
     public const string SignalRosterChanged     = "RosterChanged";
+    public const string SignalPhaseChanged      = "PhaseChanged";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -87,6 +90,12 @@ public partial class ChronicleGlobal : Godot.Node
 
     /// <summary>BattalionRoster が更新された時に発火するシグナル。</summary>
     [Signal] public delegate void RosterChangedEventHandler();
+
+    /// <summary>
+    /// CurrentPhase が遷移した時に発火するシグナル。UI 層がこれを受けて画面を
+    /// 切り替える契機にする（新フェーズは CurrentPhase を読み直して判定）。
+    /// </summary>
+    [Signal] public delegate void PhaseChangedEventHandler();
 
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
@@ -113,6 +122,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// <summary>Initialize が呼ばれて状態が有効化されているか。</summary>
     public bool IsInitialized { get; private set; } = false;
 
+    /// <summary>
+    /// ゲーム進行の現在フェーズ（状態マシン）。外部からは読み取りのみ。
+    /// 遷移は AdvancePhase / TryAdvanceTo 経由でのみ行い、合法性は
+    /// 純粋ロジック GamePhaseFlow が判定する（不正な飛び越し・後退は不可）。
+    /// </summary>
+    public GamePhase CurrentPhase { get; private set; } = GamePhaseFlow.InitialPhase;
+
     // ════════════════════════════════════════════════════════════════════════
     //  注入可能フィールド + スレッド安全用ロック
     // ════════════════════════════════════════════════════════════════════════
@@ -129,6 +145,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// 備える（ユーザー仕様: 「スレッド安全やヌル安全を考慮した堅牢なガード句」）。
     /// </summary>
     private readonly object _stateLock = new();
+
+    /// <summary>
+    /// 名前キー → 表示用日本語文字列のリゾルバ。LoadLocalization で
+    /// res://Config/localization_ja.json から構築される。未ロード時は null で、
+    /// その場合 ResolveDisplayName は生のキーをフォールバック表示する。
+    /// </summary>
+    private NameResolver? _nameResolver;
 
     // ════════════════════════════════════════════════════════════════════════
     //  初期化 API
@@ -163,6 +186,7 @@ public partial class ChronicleGlobal : Godot.Node
             BattalionRoster = initialRoster?.ToImmutableList() ?? ImmutableList<Unit>.Empty;
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
+            CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
             IsInitialized = true;
         }
 
@@ -171,6 +195,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalPhaseChanged);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -271,6 +296,10 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalRosterChanged);
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
+
+        // 予言を選択したら自動的に次フェーズ（Guild）へ。Chronicle 以外で呼ばれた
+        // 場合は状態マシンのガードにより no-op となる（一方通行の安全性）。
+        TryAdvanceTo(GamePhase.Guild);
 
         return selected;
     }
@@ -393,6 +422,132 @@ public partial class ChronicleGlobal : Godot.Node
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  ゲームフェーズ状態マシン（一方通行の遷移）
+    // ════════════════════════════════════════════════════════════════════════
+    //  遷移可否の判断は純粋ロジック GamePhaseFlow に集約する。本クラスは
+    //  「現在フェーズの保持」と「PhaseChanged シグナルの発火」だけを担う。
+    //
+    //    Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──▶（次世代の）Chronicle
+    //
+    //  後退・飛び越し（例 Chronicle → Battle）はすべて拒否される（false 返却）。
+
+    /// <summary>
+    /// 現在フェーズを循環順序で 1 つ進める（Chronicle→Guild→Formation→Battle→Chronicle）。
+    /// 常に合法（構造上、各フェーズの次はただ 1 つ）。遷移後 PhaseChanged を発火する。
+    /// </summary>
+    /// <returns>遷移後の新しいフェーズ。未初期化時は現状維持で何もしない。</returns>
+    public GamePhase AdvancePhase()
+    {
+        GamePhase next;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return CurrentPhase;
+            next = GamePhaseFlow.Next(CurrentPhase);
+            CurrentPhase = next;
+        }
+
+        SafeEmit(SignalPhaseChanged);
+        return next;
+    }
+
+    /// <summary>
+    /// 指定フェーズへの遷移を試みる。合法（現在フェーズのちょうど次）な場合のみ
+    /// 遷移して PhaseChanged を発火し true を返す。不正な飛び越し・後退・自己遷移、
+    /// および未初期化の場合は状態を変えず false を返す（一方通行のガード）。
+    /// </summary>
+    /// <param name="target">遷移先として要求するフェーズ。</param>
+    public bool TryAdvanceTo(GamePhase target)
+    {
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return false;
+            if (!GamePhaseFlow.CanTransition(CurrentPhase, target)) return false;
+            CurrentPhase = target;
+        }
+
+        SafeEmit(SignalPhaseChanged);
+        return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  名前解決（ローカライズ）
+    // ════════════════════════════════════════════════════════════════════════
+    //  純粋層 NameResolver（Core/Naming）に解決ロジックを委ね、本クラスは
+    //  res:// からの localization テキスト読み込み（Godot I/O）だけを担う。
+    //  SaveManager（I/O）と SaveSerializer（純粋）の層別と同じ思想。
+
+    /// <summary>名前テキストを引く既定のローカライズ設定リソースパス。</summary>
+    public const string LocalizationResourcePath = "res://Config/localization_ja.json";
+
+    /// <summary>
+    /// localization 設定（既定 res://Config/localization_ja.json）を読み込み、
+    /// 名前リゾルバを構築する。読み込み・解析に失敗しても例外は投げず false を返す
+    /// （その場合 ResolveDisplayName は生のキーをフォールバック表示する）。
+    /// </summary>
+    /// <param name="path">読込元パス。null/空なら既定パス。</param>
+    public bool LoadLocalization(string? path = null)
+    {
+        var targetPath = string.IsNullOrWhiteSpace(path)
+            ? LocalizationResourcePath
+            : path!;
+
+        try
+        {
+            if (!Godot.FileAccess.FileExists(targetPath)) return false;
+            using var file = Godot.FileAccess.Open(targetPath, Godot.FileAccess.ModeFlags.Read);
+            if (file is null) return false;
+
+            var json = file.GetAsText();
+            if (string.IsNullOrWhiteSpace(json)) return false;
+
+            _nameResolver = NameResolver.FromLocalizationJson(json);
+            return true;
+        }
+        catch
+        {
+            // 設定欠落・破損時もゲームを止めない（生キーフォールバックで継続）。
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// テスト・CLI 環境用に、構築済みの名前リゾルバを直接注入する。
+    /// （Godot 非依存の純粋経路で表示名解決を差し込みたい場合に使う。）
+    /// </summary>
+    public void ConfigureNameResolver(NameResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _nameResolver = resolver;
+    }
+
+    /// <summary>
+    /// ファーストネームキー・ファミリーネームキーから表示用日本語氏名を解決する。
+    /// 複合キー（'@' 連結）は「称号 ＋ 名前 ＋（あれば）姓」へ自動連結される。
+    /// リゾルバ未ロード時は生のキーをそのまま連結して返す（フォールバック）。
+    /// </summary>
+    public string ResolveDisplayName(string firstNameKey, string? lastNameKey = null)
+    {
+        if (_nameResolver is not null)
+        {
+            return _nameResolver.ResolveFullName(firstNameKey, lastNameKey);
+        }
+
+        // フォールバック: リゾルバ未ロードでも落とさず、キーをそのまま見せる。
+        return string.IsNullOrEmpty(lastNameKey)
+            ? firstNameKey
+            : $"{firstNameKey}{lastNameKey}";
+    }
+
+    /// <summary>
+    /// ユニットの表示用日本語氏名を解決する便宜オーバーロード。
+    /// </summary>
+    public string ResolveDisplayName(Unit unit)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        return ResolveDisplayName(unit.FirstNameKey, unit.LastNameKey);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  読み取り専用クエリヘルパー（UI 利便用）
     // ════════════════════════════════════════════════════════════════════════
 
@@ -496,6 +651,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentEconomy  = loaded.Economy;
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
+            CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
             IsInitialized   = true;
         }
 
@@ -503,6 +659,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalPhaseChanged);
 
         return true;
     }
