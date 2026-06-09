@@ -148,6 +148,18 @@ public partial class ChronicleGlobal : Godot.Node
     private readonly object _stateLock = new();
 
     /// <summary>
+    /// Chronicle で選択された予言の SkipYears を、Battle→Chronicle のループ閉幕まで
+    /// 保留しておくための値。これにより「予言で選んだ年数 = この世代の長さ」となり、
+    /// 1 周ぶんの年送り（加齢・完全ロスト・収入・予言再生成）をループの幕引きで
+    /// 一括適用できる（「1 世代 = 時間軸 1 周」の構造的保証）。
+    ///
+    /// ★ Random と同様、セーブには含めない（LoadGame は常に Chronicle から再開する
+    ///   ため、保留年数は世代内の一過性の状態として 0 から始まれば足りる）。
+    ///   常に _stateLock 内でのみ読み書きする。
+    /// </summary>
+    private int _pendingGenerationSkipYears;
+
+    /// <summary>
     /// 名前キー → 表示用日本語文字列のリゾルバ。LoadLocalization で
     /// res://Config/localization_ja.json から構築される。未ロード時は null で、
     /// その場合 ResolveDisplayName は生のキーをフォールバック表示する。
@@ -195,6 +207,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
+            _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
             IsInitialized = true;
         }
 
@@ -265,10 +278,21 @@ public partial class ChronicleGlobal : Godot.Node
     // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// プレイヤーが選択した予言の ID を受領し、以下を一挙に実行する:
-    ///   1. TimelineEngine.ApplyTimeSkipToRoster で全生存ユニットを一斉加齢
-    ///   2. PointsEconomy.EarnFromTimeSkip で定期収入を加算 (SoT #1)
-    ///   3. TimelineEngine.AdvanceToNextTurn で次ターンの予言 3 つを再生成
+    /// プレイヤーが選択した予言の ID を受領し、「この世代の長さ」として確定する。
+    ///
+    /// ★ 重要（「1 世代 = 時間軸 1 周」の構造）:
+    ///   本メソッドは加齢・収入・予言再生成を **ここでは行わない**。選択された予言の
+    ///   SkipYears を <see cref="_pendingGenerationSkipYears"/> に保留するだけに留め、
+    ///   実際の年送り（加齢 → 完全ロスト → 定期収入 → 次予言生成）はループの幕引き、
+    ///   すなわち Battle → Chronicle の遷移時 (<see cref="AdvancePhase"/> →
+    ///   <see cref="AdvanceGenerationLocked"/>) に一括適用する。
+    ///   これにより「Chronicle で選んだ年数ぶんを 1 周かけて戦い抜き、幕引きで一気に
+    ///   時が流れる」という時間軸の周回構造が保証される。
+    ///
+    /// 実行内容:
+    ///   1. 選択予言の妥当性を検証し取り出す
+    ///   2. その SkipYears を保留年数として記録する
+    ///   3. 状態マシンを Guild フェーズへ進める
     ///
     /// 戻り値:
     ///   - Prophecy: 選択された予言（UI が Kind に応じて次の演出を起動するため）
@@ -286,27 +310,16 @@ public partial class ChronicleGlobal : Godot.Node
             if (!IsInitialized || CurrentTimeline is null) return null;
             if (!CurrentTimeline.IsValidSelection(prophecyId)) return null;
 
-            // 1. 選択された予言を取り出し
+            // 選択された予言を取り出し、その SkipYears を「この世代の長さ」として保留。
+            // 実際の年送りはループ幕引き（Battle→Chronicle）でまとめて適用する。
             selected = CurrentTimeline.GetSelectionOrThrow(prophecyId);
-
-            // 2. 全旅団員を一斉加齢（生存ユニットのみ）
-            var newRoster = TimelineEngine.ApplyTimeSkipToRoster(BattalionRoster, selected.SkipYears);
-            BattalionRoster = newRoster.ToImmutableList();
-
-            // 3. 定期収入を加算 (SoT #1)
-            CurrentEconomy = CurrentEconomy.EarnFromTimeSkip(selected.SkipYears);
-
-            // 4. 次ターンの予言 3 つを生成（過去予言は完全破棄）
-            CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
-                TimelineEngine.DefaultGenerator, _rng);
+            _pendingGenerationSkipYears = selected.SkipYears;
         }
-
-        SafeEmit(SignalRosterChanged);
-        SafeEmit(SignalEconomyChanged);
-        SafeEmit(SignalTimelineChanged);
 
         // 予言を選択したら自動的に次フェーズ（Guild）へ。Chronicle 以外で呼ばれた
         // 場合は状態マシンのガードにより no-op となる（一方通行の安全性）。
+        // ※ 年送りは行わないため Roster/Economy/Timeline は変化せず、ここで発火する
+        //   のは PhaseChanged（TryAdvanceTo 内）のみ。
         TryAdvanceTo(GamePhase.Guild);
 
         return selected;
@@ -442,20 +455,91 @@ public partial class ChronicleGlobal : Godot.Node
     /// <summary>
     /// 現在フェーズを循環順序で 1 つ進める（Chronicle→Guild→Formation→Battle→Chronicle）。
     /// 常に合法（構造上、各フェーズの次はただ 1 つ）。遷移後 PhaseChanged を発火する。
+    ///
+    /// ★ ループ幕引きの年送り（「1 世代 = 時間軸 1 周」）:
+    ///   Battle → Chronicle の遷移はゲームループ 1 周の閉幕にあたる。この遷移のときだけ
+    ///   <see cref="AdvanceGenerationLocked"/> を呼び、保留しておいた SkipYears ぶんの
+    ///   年送り（全旅団員の加齢 → 寿命到達/戦闘死の完全ロスト仕分け → 定期収入 →
+    ///   次世代の予言 3 つの再生成）を一括適用する。年送りが起きた場合は、UI が確実に
+    ///   追従できるよう「データ系シグナル（Roster/Economy/Timeline）→ PhaseChanged」
+    ///   の順で発火する（PhaseChanged を最後にすることで、画面切り替え前に新データが
+    ///   確定している）。
     /// </summary>
     /// <returns>遷移後の新しいフェーズ。未初期化時は現状維持で何もしない。</returns>
     public GamePhase AdvancePhase()
     {
         GamePhase next;
+        bool generationAdvanced = false;
+
         lock (_stateLock)
         {
             if (!IsInitialized) return CurrentPhase;
-            next = GamePhaseFlow.Next(CurrentPhase);
+
+            var from = CurrentPhase;
+            next = GamePhaseFlow.Next(from);
+
+            // Battle → Chronicle はループ 1 周の幕引き。ここで世代交代（年送り）を行う。
+            if (from == GamePhase.Battle && next == GamePhase.Chronicle)
+            {
+                AdvanceGenerationLocked();
+                generationAdvanced = true;
+            }
+
             CurrentPhase = next;
+        }
+
+        // ロック解放後にシグナル発火。年送りがあった場合はデータ系を先に流し、
+        // 画面切り替え契機の PhaseChanged を最後に発火する（順序保証）。
+        if (generationAdvanced)
+        {
+            SafeEmit(SignalRosterChanged);
+            SafeEmit(SignalEconomyChanged);
+            SafeEmit(SignalTimelineChanged);
         }
 
         SafeEmit(SignalPhaseChanged);
         return next;
+    }
+
+    /// <summary>
+    /// ゲームループ 1 周の幕引き（Battle→Chronicle）に伴う年送り（世代交代）を、
+    /// 既に取得済みの <see cref="_stateLock"/> 内で適用する純粋な内部処理。
+    /// シグナルは発火しない（呼び出し側 <see cref="AdvancePhase"/> がロック解放後に
+    /// まとめて発火する責務を持つ）。
+    ///
+    /// 適用順序（「1 世代 = 時間軸 1 周」）:
+    ///   1. 保留年数 <see cref="_pendingGenerationSkipYears"/> ぶん全旅団員を加齢し、
+    ///      寿命到達・戦闘死のユニットを完全ロストとして現役ロスタから外す
+    ///      （RosterLifecycle.AdvanceGeneration による加齢→仕分け）。
+    ///   2. 同じ年数ぶんの定期収入を経済へ加算（PointsEconomy.EarnFromTimeSkip）。
+    ///   3. 次世代の予言 3 つを再生成（TimelineEngine.AdvanceToNextTurn）。
+    ///   4. 保留年数を 0 にリセット（次の Chronicle 選択まで持ち越さない）。
+    ///
+    /// ★ 保留年数が 0（防御的初期値）でも安全に動作する: 加齢 0 でも戦闘死ユニットの
+    ///   仕分けは行われ（戦闘後クリーンアップを兼ねる）、EarnFromTimeSkip(0) は例外なく
+    ///   据え置きを返す。
+    /// </summary>
+    private void AdvanceGenerationLocked()
+    {
+        var years = _pendingGenerationSkipYears;
+
+        // 1. 加齢 → 完全ロストの仕分け（純粋層 RosterLifecycle に委譲）。
+        //    現役のみを次世代ロスタへ持ち越す（離脱者は不可逆に外れる）。
+        var advance = RosterLifecycle.AdvanceGeneration(BattalionRoster, years);
+        BattalionRoster = advance.SurvivingRoster.ToImmutableList();
+
+        // 2. 定期収入を加算（SoT #1）。
+        CurrentEconomy = CurrentEconomy.EarnFromTimeSkip(years);
+
+        // 3. 次世代の予言 3 つを再生成（過去予言は完全破棄）。
+        if (CurrentTimeline is not null)
+        {
+            CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
+                TimelineEngine.DefaultGenerator, _rng);
+        }
+
+        // 4. 保留年数をリセット（次の Chronicle 選択で改めて設定される）。
+        _pendingGenerationSkipYears = 0;
     }
 
     /// <summary>
@@ -691,6 +775,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
+            _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
             IsInitialized   = true;
         }
 
