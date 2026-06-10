@@ -51,6 +51,7 @@ public sealed class MasterDataNameResolver
     private const string JobsSectionName          = "jobs";
     private const string ItemsSectionName         = "items";
     private const string ProphecyKindsSectionName = "prophecyKinds";
+    private const string EnemySkillsSectionName   = "enemySkills";
     private const string NameFieldName            = "name";
     private const string IconFieldName            = "icon";
 
@@ -61,20 +62,30 @@ public sealed class MasterDataNameResolver
     private readonly Dictionary<string, string> _prophecyKindNames;
     private readonly Dictionary<string, string> _prophecyKindIcons;
 
+    // ─── 敵スキル名（敵の攻撃予告 AttackIntent.SkillNameKey → 表示テキスト） ──
+    //  ジョブ/アイテムが enum 名をキーに引くのに対し、敵スキルだけは AttackIntentRoller
+    //  が払い出す平坦な ASCII キー（例 "enemy-skill-single-strike"）をそのままキーに引く。
+    private readonly Dictionary<string, string> _skillNames;
+
     /// <summary>
-    /// 4 つの解決辞書を直接注入して構築する。テストや、JSON 以外の供給元から
-    /// 構築したい場合に使う。null キー / 値は安全に無視する。
+    /// 解決辞書を直接注入して構築する。テストや、JSON 以外の供給元から構築したい
+    /// 場合に使う。null キー / 値は安全に無視する。敵スキル名（第 5 引数）は任意で、
+    /// 省略・null の場合は空辞書（=常に生キーへフォールバック）として扱う。
     /// </summary>
     public MasterDataNameResolver(
         IReadOnlyDictionary<string, string> jobNames,
         IReadOnlyDictionary<string, string> itemNames,
         IReadOnlyDictionary<string, string> prophecyKindNames,
-        IReadOnlyDictionary<string, string> prophecyKindIcons)
+        IReadOnlyDictionary<string, string> prophecyKindIcons,
+        IReadOnlyDictionary<string, string>? skillNames = null)
     {
         _jobNames          = Sanitize(jobNames);
         _itemNames         = Sanitize(itemNames);
         _prophecyKindNames = Sanitize(prophecyKindNames);
         _prophecyKindIcons = Sanitize(prophecyKindIcons);
+        _skillNames        = skillNames is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : Sanitize(skillNames);
     }
 
     /// <summary>null/空キー・null 値を除いた Ordinal 辞書へ写し替える防御的コピー。</summary>
@@ -107,6 +118,9 @@ public sealed class MasterDataNameResolver
     /// <summary>登録済み予言種別アイコンエントリ数。</summary>
     public int ProphecyKindIconCount => _prophecyKindIcons.Count;
 
+    /// <summary>登録済み敵スキル名エントリ数。</summary>
+    public int SkillNameCount => _skillNames.Count;
+
     // ─── 構築（localization JSON 文字列から） ─────────────────────────────
 
     /// <summary>
@@ -134,9 +148,10 @@ public sealed class MasterDataNameResolver
         var itemNames         = ExtractField(root, ItemsSectionName,         NameFieldName);
         var prophecyKindNames = ExtractField(root, ProphecyKindsSectionName, NameFieldName);
         var prophecyKindIcons = ExtractField(root, ProphecyKindsSectionName, IconFieldName);
+        var skillNames        = ExtractField(root, EnemySkillsSectionName,   NameFieldName);
 
         return new MasterDataNameResolver(
-            jobNames, itemNames, prophecyKindNames, prophecyKindIcons);
+            jobNames, itemNames, prophecyKindNames, prophecyKindIcons, skillNames);
     }
 
     /// <summary>
@@ -193,6 +208,13 @@ public sealed class MasterDataNameResolver
     /// フォールバック（登録漏れを画面から判別できるようにするため）。
     /// </summary>
     public string ResolveProphecyKindIcon(ProphecyKind kind) => Lookup(_prophecyKindIcons, kind.ToString());
+
+    /// <summary>
+    /// 敵スキル（攻撃予告）の表示用日本語名を、AttackIntent.SkillNameKey（平坦な ASCII
+    /// キー）から解決する。未登録キー・null/空は生キーへフォールバック（登録漏れを
+    /// 画面から判別できるようにするため）。
+    /// </summary>
+    public string ResolveSkillName(string skillNameKey) => Lookup(_skillNames, skillNameKey);
 
     /// <summary>
     /// 辞書引き。未登録キーは生キーをそのまま返す（フォールバック）。null/空は空文字へ。

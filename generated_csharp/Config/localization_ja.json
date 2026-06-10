@@ -195,6 +195,13 @@
     "Rest":          { "icon": "💤", "name": "休息" }
   },
 
+  "enemySkills": {
+    "_note": "敵の攻撃予告（AttackIntent）の表示用スキル名。AttackIntentRoller が払い出す平坦な ASCII キー（enemy-skill-*）をそのままキーに引く。ジョブ/アイテムが enum 名で引くのに対し、敵スキルは enum を持たないためキー＝文字列。コード側（AttackIntentRoller.cs / BattleUI.cs）に日本語は一切ハードコードせず、MasterDataNameResolver.ResolveSkillName が本セクションから解決し、未登録キーは生キーへフォールバックする。",
+    "enemy-skill-single-strike": { "name": "単一分隊強襲" },
+    "enemy-skill-pincer":        { "name": "複数分隊挟撃" },
+    "enemy-skill-total-assault": { "name": "全大隊総攻撃" }
+  },
+
   "names": {
     "_note": "NameGenerator (Core/Naming) が払い出す ASCII ローカライズキーの引き当て先。コード側 (NameCatalog.cs) は一切日本語を持たず、本セクションだけが実テキストの単一の真実 (SoT)。キー命名規約: ファーストネーム=name-{origin}-{gender}-{NNN} / ファミリーネーム=name-family-{origin}-{NNN} / 称号=title-{NNN}（NNN は 3 桁連番）。プール枯渇時の複合キー 'title-NNN@name-...' は表示層が '@' で分解し『称号』＋『名前』を連結する。以下は将来の本翻訳に向けたサンプル初期値（TS 版 data/names.ts 由来）。",
 

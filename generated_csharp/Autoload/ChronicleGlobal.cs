@@ -1023,6 +1023,13 @@ public partial class ChronicleGlobal : Godot.Node
     public string ResolveProphecyKindIcon(ProphecyKind kind)
         => _masterDataNameResolver?.ResolveProphecyKindIcon(kind) ?? kind.ToString();
 
+    /// <summary>
+    /// 敵スキル（攻撃予告）の表示用日本語名を、AttackIntent.SkillNameKey（ASCII キー）
+    /// から解決する。未ロード・未登録時は生キーへフォールバック（① 準拠で日本語は持たない）。
+    /// </summary>
+    public string ResolveSkillName(string skillNameKey)
+        => _masterDataNameResolver?.ResolveSkillName(skillNameKey) ?? skillNameKey;
+
     // ════════════════════════════════════════════════════════════════════════
     //  読み取り専用クエリヘルパー（UI 利便用）
     // ════════════════════════════════════════════════════════════════════════

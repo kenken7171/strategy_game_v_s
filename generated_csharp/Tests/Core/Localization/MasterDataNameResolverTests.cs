@@ -38,6 +38,10 @@ public class MasterDataNameResolverTests
     private const string ProphRewardIcon   = "PROPHECY-REWARD-ICON";
     private const string ProphBattleName   = "PROPHECY-BATTLE-NAME";
     private const string ProphBattleIcon   = "PROPHECY-BATTLE-ICON";
+    private const string SkillSingleValue  = "SKILL-SINGLE-STRIKE";
+    private const string SkillPincerValue  = "SKILL-PINCER";
+    private const string SkillSingleKey    = "enemy-skill-single-strike";
+    private const string SkillPincerKey    = "enemy-skill-pincer";
 
     // jobs / items / prophecyKinds を部分的に持つ最小フィクスチャ。
     //   - キーは enum.ToString()（PascalCase）に一致させる。
@@ -59,6 +63,11 @@ public class MasterDataNameResolverTests
         "RewardPoints": { "icon": "{{ProphRewardIcon}}", "name": "{{ProphRewardName}}" },
         "Battle":       { "icon": "{{ProphBattleIcon}}", "name": "{{ProphBattleName}}" }
       },
+      "enemySkills": {
+        "_note": "敵スキルは enum ではなく平坦な ASCII キーで引く",
+        "{{SkillSingleKey}}": { "name": "{{SkillSingleValue}}" },
+        "{{SkillPincerKey}}": { "name": "{{SkillPincerValue}}" }
+      },
       "ui": { "ignored": "should-not-be-loaded" }
     }
     """;
@@ -78,6 +87,26 @@ public class MasterDataNameResolverTests
         Assert.Equal(2, resolver.ItemNameCount);
         Assert.Equal(2, resolver.ProphecyKindNameCount);
         Assert.Equal(2, resolver.ProphecyKindIconCount);
+        Assert.Equal(2, resolver.SkillNameCount);
+    }
+
+    // ─── 敵スキル名（平坦な ASCII キーで引く・enum 非依存） ──────────────────
+
+    [Theory]
+    [InlineData(SkillSingleKey, SkillSingleValue)]
+    [InlineData(SkillPincerKey, SkillPincerValue)]
+    public void ResolveSkillName_KnownKey_ReturnsDisplayString(string key, string expected)
+    {
+        Assert.Equal(expected, SampleResolver().ResolveSkillName(key));
+    }
+
+    [Fact]
+    public void ResolveSkillName_UnknownKey_FallsBackToRawKey()
+    {
+        // 未登録キーは生キー（ASCII）をそのまま返す（登録漏れを画面から判別可能に）。
+        Assert.Equal(
+            "enemy-skill-total-assault",
+            SampleResolver().ResolveSkillName("enemy-skill-total-assault"));
     }
 
     // ─── 2. 単純解決（既知キー） ────────────────────────────────────────────

@@ -22,21 +22,36 @@
 //    （スケルトン）として備える。盤面・HP・敵カードの再描画自体は BattleChanged
 //    経由の RenderAll が担うため、ログ追記と状態再描画は綺麗に分離される。
 //
-//  ★ data-testid 規律:
-//    各マスには座標から機械生成した ASCII 文字列（battle-slot-{Row}-{Column}）を、
-//    敵カード・コマンド・ログ行にも battle-* の ASCII 命名を機械生成して付与する。
+//  ★ 攻撃予告の可視化（未来を内包したスナップショット）:
+//    CurrentBattle.NextEnemyIntent（常に非 null の「次ターンの敵攻撃」）を読み取り、
+//    RenderEnemyIntent が敵カード直下の予告バナー（battle-enemy-intent-banner）へ
+//    スキル名・パターン種別・威力・対象行チップを描く。さらに RenderBoard は対象行の
+//    マスへ赤枠（StyleBoxFlat）を被せ、self_modulate のアルファをループ Tween で脈動
+//    させて「危険エリア」を物質化する。決着済み（IsConcluded）・非戦闘ではバナーを
+//    伏せ、赤枠も出さない（次ターンが無いため）。
 //
-//  ★ ライフサイクル規律（メモリリーク防止）:
-//    _Ready でシグナルを購読し、_ExitTree で確実に購読解除する。
+//  ★ data-testid 規律:
+//    各マスには座標から機械生成した ASCII 文字列（battle-slot-{Row}-{Column}）を中身の
+//    Label に、予告対象マスにはラッパーへ battle-slot-targeted-{Row}-{Column} を付与する。
+//    予告バナーは battle-enemy-intent-banner、対象行チップは
+//    battle-enemy-intent-target-{Row}。敵カード・コマンド・ログ行にも battle-* の ASCII
+//    命名を機械生成して付与する。
+//
+//  ★ ライフサイクル規律（メモリリーク防止 / Tween ゾンビ化の根絶）:
+//    _Ready でシグナルを購読し、_ExitTree で確実に購読解除する。脈動用 Tween は
+//    _dangerPulseTweens 台帳で一元管理し、RenderAll の【冒頭】と _ExitTree で必ず全
+//    Kill する。これにより「丸ごと再描画」のたびの古い Tween 蓄積（リーク）を構造的に
+//    根絶する。
 //
 //  ★ 日本語ハードコード禁止（設計憲法 ①）:
-//    ジョブ名は ChronicleGlobal.ResolveJobName 経由で localization から解決する。
-//    敵の表示名は現状 EnemyArchetype（ASCII 列挙キー）をそのまま見せ、日本語の
-//    「データ名」をコードに埋め込まない（squadRows と同様、localization 解決は
-//    次段の拡張余地として残す）。画面の地の文（chrome）の日本語は既存 UI と同じ方針。
+//    ジョブ名は ChronicleGlobal.ResolveJobName、敵スキル名は ChronicleGlobal.ResolveSkillName
+//    経由で localization から解決する（コードに日本語の「データ名」を埋めない）。
+//    敵の表示名・攻撃パターン種別は ASCII 列挙キーをそのまま見せる（squadRows と同様、
+//    localization 解決は次段の拡張余地）。画面の地の文（chrome）の日本語は既存 UI と同じ方針。
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Battle;
@@ -65,6 +80,26 @@ public partial class BattleUI : Godot.Control
     /// </summary>
     private const int DemoBattleGenerationYear = 100;
 
+    /// <summary>
+    /// 危険スロット赤枠の脈動 1 山あたりの秒数（明 → 暗 / 暗 → 明 の片道）。
+    /// ループ Tween がこの周期で self_modulate のアルファを上下させ、予告対象行を脈打たせる。
+    /// </summary>
+    private const double DangerPulseHalfPeriodSeconds = 0.55;
+
+    /// <summary>危険脈動が最も淡くなった瞬間のアルファ（赤枠を消し切らず残光させる下限）。</summary>
+    private const float DangerPulseMinimumAlpha = 0.30f;
+
+    /// <summary>危険スロット赤枠の境界線の太さ（px）。</summary>
+    private const int DangerFrameBorderWidth = 3;
+
+    /// <summary>
+    /// 予告危険色（赤）。スロット赤枠（StyleBoxFlat）の境界色であり、同時に「この行へ
+    /// EnemyOffenseEvent が着弾する」という意味論の単一の色源でもある（Req 4 の整合点）。
+    /// 予告の赤枠 → 実際の被弾ログ（EnemyOffenseEvent）が同じ赤で結ばれることで、
+    /// プレイヤーは『予告された行が、まさにその行に着弾した』因果を一目で追える。
+    /// </summary>
+    private static readonly Color DangerFrameColor = new(0.86f, 0.20f, 0.20f);
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -82,9 +117,23 @@ public partial class BattleUI : Godot.Control
     private Button? _commandCounterClockwiseButton;
     private Button? _endButton;
 
+    // ─── 敵攻撃予告バナー（BuildUI で 1 度だけ生成し、毎描画で中身だけ書き換える） ──
+
+    private VBoxContainer? _intentBanner;
+    private Label? _intentHeadlineLabel;
+    private Label? _intentDetailLabel;
+    private HBoxContainer? _intentTargetsRow;
+
     // ─── ログ行の連番（testid の機械生成に使う一過性のカウンタ） ──────────
 
     private int _logEntryCount;
+
+    // ─── 危険スロット赤枠の脈動 Tween（再描画ごとに全 Kill して更地化する） ──
+    //  ★ ゾンビ化・リーク防止規律（最重要）:
+    //    「丸ごと再描画」のたびに古い脈動 Tween が残ると、無効ノードを掴んだまま
+    //    多重起動して蓄積（リーク）する。これを根絶するため、生存中の脈動 Tween は
+    //    この台帳で一元管理し、RenderAll の【冒頭】と _ExitTree で必ず全 Kill する。
+    private readonly List<Tween> _dangerPulseTweens = new();
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -98,6 +147,8 @@ public partial class BattleUI : Godot.Control
 
     public override void _ExitTree()
     {
+        // 退場時も生存中の脈動 Tween を必ず一掃する（リーク防止規律）。
+        KillDangerPulses();
         UnsubscribeSignals();
     }
 
@@ -129,6 +180,27 @@ public partial class BattleUI : Godot.Control
         _enemyHpLabel = new Label();
         _enemyHpLabel.SetMeta(TestIdMetaKey, "battle-enemy-hp");
         enemyCard.AddChild(_enemyHpLabel);
+
+        // ── 敵攻撃予告バナー（未来を内包したスナップショットの可視化） ──
+        //  CurrentBattle.NextEnemyIntent を「読むだけ」で描く。バナー枠は 1 度だけ
+        //  生成し、RenderEnemyIntent が毎描画で見出し・詳細・対象行チップを書き換える。
+        _intentBanner = new VBoxContainer();
+        _intentBanner.AddThemeConstantOverride("separation", 2);
+        _intentBanner.SetMeta(TestIdMetaKey, "battle-enemy-intent-banner");
+        root.AddChild(_intentBanner);
+
+        _intentHeadlineLabel = new Label();
+        _intentHeadlineLabel.SetMeta(TestIdMetaKey, "battle-enemy-intent-headline");
+        _intentBanner.AddChild(_intentHeadlineLabel);
+
+        _intentDetailLabel = new Label();
+        _intentDetailLabel.SetMeta(TestIdMetaKey, "battle-enemy-intent-detail");
+        _intentBanner.AddChild(_intentDetailLabel);
+
+        _intentTargetsRow = new HBoxContainer();
+        _intentTargetsRow.AddThemeConstantOverride("separation", 6);
+        _intentTargetsRow.SetMeta(TestIdMetaKey, "battle-enemy-intent-targets");
+        _intentBanner.AddChild(_intentTargetsRow);
 
         // ── 配置盤面（9 マス。BattleChanged ごとに再構築） ─────────
         root.AddChild(new Label { Text = "── 戦況盤面 ──" });
@@ -217,8 +289,13 @@ public partial class BattleUI : Godot.Control
 
     private void RenderAll()
     {
+        // ★ 再描画の【冒頭】で必ず脈動 Tween を更地化する（ゾンビ化・リーク防止規律）。
+        //   この後の RenderBoard が新しい予告に基づく脈動 Tween を生成し直す。
+        KillDangerPulses();
+
         RenderStatus();
         RenderEnemy();
+        RenderEnemyIntent();
         RenderBoard();
         UpdateCommandAvailability();
     }
@@ -263,6 +340,56 @@ public partial class BattleUI : Godot.Control
             $"HP {enemy.Hp} / {enemy.MaxHp} ({percent}%)  ATK {enemy.Attack}  SPD {enemy.Speed}";
     }
 
+    /// <summary>
+    /// 「未来を内包したスナップショット」CurrentBattle.NextEnemyIntent を読み取り、
+    /// 次ターンの敵攻撃予告（スキル名・パターン種別・威力・対象行）をバナーへ描く。
+    ///
+    /// ★ 単方向・無キャッシュ: 状態は一切持たず、その時の SoT を読むだけ。
+    /// ★ ① 準拠: スキル名は localization（ResolveSkillName）経由で解決し、コードに
+    ///   日本語の「データ名」を埋めない。パターン種別は ASCII enum をそのまま併記する。
+    /// ★ 状態安全ガード: 戦闘が無い／決着済み（IsConcluded）のときはバナーを
+    ///   非表示（Visible = false）にする。予告データの読み取り自体はヌル安全に行う。
+    /// </summary>
+    private void RenderEnemyIntent()
+    {
+        if (_intentBanner is null
+            || _intentHeadlineLabel is null
+            || _intentDetailLabel is null
+            || _intentTargetsRow is null)
+        {
+            return;
+        }
+
+        var battle = _chronicleGlobal?.CurrentBattle;
+
+        // 非戦闘時・決着済みは予告の意味が無いのでバナーごと伏せる（次ターンが無い）。
+        if (battle is null || battle.IsConcluded)
+        {
+            _intentBanner.Visible = false;
+            ClearChildren(_intentTargetsRow);
+            return;
+        }
+
+        _intentBanner.Visible = true;
+
+        var intent = battle.NextEnemyIntent;
+        var skillName = ResolveSkillName(intent.SkillNameKey);
+
+        _intentHeadlineLabel.Text = "⚠ 次の敵攻撃予告";
+        // スキル名（localization 解決）／パターン種別（ASCII enum）／1 体あたり威力を併記。
+        _intentDetailLabel.Text =
+            $"{skillName}（{intent.Kind}） — 対象 {intent.TargetRows.Length} 行 / 1 体あたり {intent.DamagePerUnit} ダメージ";
+
+        // 対象行チップを機械的に組み立てる（battle-enemy-intent-target-{Row}）。
+        ClearChildren(_intentTargetsRow);
+        foreach (var row in intent.TargetRows)
+        {
+            var chip = new Label { Text = $"[{row}]" };
+            chip.SetMeta(TestIdMetaKey, $"battle-enemy-intent-target-{row}");
+            _intentTargetsRow.AddChild(chip);
+        }
+    }
+
     private void RenderBoard()
     {
         if (_boardContainer is null) return;
@@ -272,6 +399,10 @@ public partial class BattleUI : Godot.Control
         var battle = _chronicleGlobal?.CurrentBattle;
         // 非戦闘時も 9 マスの testid を欠かさないよう、空盤面で骨格を描く。
         var board = battle?.Board ?? FormationBoard.Empty();
+
+        // 予告対象マスは赤枠を被せておき、盤面が tree に入った後で脈動 Tween を起動する。
+        // （Node.CreateTween はノードが SceneTree 内にある必要があるため、生成は parenting 後。）
+        var targetedPanels = new List<PanelContainer>();
 
         foreach (var row in FormationBoard.RowOrder)
         {
@@ -287,14 +418,31 @@ public partial class BattleUI : Godot.Control
             for (int column = 0; column < FormationBoard.ColumnsPerRow; column++)
             {
                 var coordinate = new SlotCoordinate(row, column);
-                rowGroup.AddChild(BuildSlotPanel(battle, board, coordinate));
+                var slot = BuildSlotPanel(battle, board, coordinate);
+                rowGroup.AddChild(slot);
+
+                if (IsSlotTargeted(battle, row))
+                {
+                    targetedPanels.Add(slot);
+                }
             }
 
             _boardContainer.AddChild(rowGroup);
         }
+
+        // 盤面が tree へ入った後で脈動 Tween を起動する（更地化済みの台帳へ積み直す）。
+        foreach (var panel in targetedPanels)
+        {
+            StartDangerPulse(panel);
+        }
     }
 
-    private Label BuildSlotPanel(BattleSnapshot? battle, FormationBoard board, SlotCoordinate coordinate)
+    /// <summary>
+    /// 1 マスを PanelContainer で構築する。占有者の氏名・HP を中央の Label に描き、
+    /// 予告対象行のマスには赤枠（StyleBoxFlat）と定型 testid を被せる。脈動 Tween は
+    /// ノードが tree に入ってから <see cref="StartDangerPulse"/> が起動する（二段構え）。
+    /// </summary>
+    private PanelContainer BuildSlotPanel(BattleSnapshot? battle, FormationBoard board, SlotCoordinate coordinate)
     {
         var label = new Label
         {
@@ -302,6 +450,7 @@ public partial class BattleUI : Godot.Control
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        // 既存 E2E 互換: 基底のマス testid は従来どおり中身の Label に載せる。
         label.SetMeta(TestIdMetaKey, SlotTestId(coordinate));
 
         var occupant = board.OccupantAt(coordinate);
@@ -319,7 +468,78 @@ public partial class BattleUI : Godot.Control
             label.Text = "（空）";
         }
 
-        return label;
+        var panel = new PanelContainer();
+        panel.AddChild(label);
+
+        // 予告対象行のマスだけ赤枠 + 定型 ASCII testid を被せる（脈動は parenting 後）。
+        if (IsSlotTargeted(battle, coordinate.Row))
+        {
+            panel.SetMeta(TestIdMetaKey, $"battle-slot-targeted-{coordinate.Row}-{coordinate.Column}");
+            ApplyDangerFrameStyle(panel);
+        }
+
+        return panel;
+    }
+
+    /// <summary>
+    /// このマスの行が「次ターンの敵攻撃予告の対象行」に含まれるか。戦闘中（Ongoing）かつ
+    /// NextEnemyIntent.Targets(row) のときのみ true（決着済み・非戦闘では危険表示しない）。
+    /// </summary>
+    private static bool IsSlotTargeted(BattleSnapshot? battle, SquadRow row)
+        => battle is { Outcome: BattleOutcome.Ongoing } && battle.NextEnemyIntent.Targets(row);
+
+    /// <summary>
+    /// 予告対象マスへ赤枠（StyleBoxFlat）を被せる。境界色は <see cref="DangerFrameColor"/>
+    /// で、これは EnemyOffenseEvent 着弾の意味論と同じ赤（Req 4 の整合点）。脈動は
+    /// self_modulate を上下させるので、ここでは初期アルファを 1.0（不透明）に整える。
+    /// </summary>
+    private static void ApplyDangerFrameStyle(PanelContainer panel)
+    {
+        var frame = new StyleBoxFlat
+        {
+            BgColor     = new Color(DangerFrameColor, 0.08f),  // 内側はごく薄い赤の塗り
+            BorderColor = DangerFrameColor,
+        };
+        frame.SetBorderWidthAll(DangerFrameBorderWidth);
+        panel.AddThemeStyleboxOverride("panel", frame);
+        panel.SelfModulate = Colors.White;
+    }
+
+    /// <summary>
+    /// 予告対象マスの赤枠を、self_modulate のアルファだけ上下させてループ脈動させる。
+    /// self_modulate はパネル自身の StyleBox を染めるが子（文字）は染めないため、
+    /// 枠は脈打っても文字は褪せない。生成した Tween は台帳へ登録し、次回 RenderAll 冒頭の
+    /// <see cref="KillDangerPulses"/> で必ず Kill する（ゾンビ化・リーク防止規律）。
+    /// </summary>
+    private void StartDangerPulse(PanelContainer panel)
+    {
+        var tween = panel.CreateTween();
+        tween.SetLoops();
+        tween.TweenProperty(panel, "self_modulate:a", DangerPulseMinimumAlpha, DangerPulseHalfPeriodSeconds)
+             .SetTrans(Tween.TransitionType.Sine)
+             .SetEase(Tween.EaseType.InOut);
+        tween.TweenProperty(panel, "self_modulate:a", 1.0f, DangerPulseHalfPeriodSeconds)
+             .SetTrans(Tween.TransitionType.Sine)
+             .SetEase(Tween.EaseType.InOut);
+
+        _dangerPulseTweens.Add(tween);
+    }
+
+    /// <summary>
+    /// 生存中の脈動 Tween をすべて明示的に Kill して台帳を更地化する。RenderAll の冒頭
+    /// および _ExitTree で必ず呼び、「丸ごと再描画」のたびに古い Tween が無効ノードを
+    /// 掴んだまま多重蓄積（リーク）するのを構造的に根絶する。
+    /// </summary>
+    private void KillDangerPulses()
+    {
+        foreach (var tween in _dangerPulseTweens)
+        {
+            if (tween is not null && tween.IsValid())
+            {
+                tween.Kill();
+            }
+        }
+        _dangerPulseTweens.Clear();
     }
 
     // ─── コマンド操作（すべて ChronicleGlobal の API を呼ぶだけ） ─────────
@@ -398,6 +618,10 @@ public partial class BattleUI : Godot.Control
         {
             AppendLogLine(DescribeEvent(battleEvent), $"battle-log-entry-{_logEntryCount}");
             // 将来の演出フック: イベント種別に応じて Tween / SE をここで起動する。
+            //   特に EnemyOffenseEvent の着弾フラッシュは、予告で赤く脈動していた対象行
+            //   （DangerFrameColor）と同じ赤で焚くことで、「予告された行 → 実際に着弾した
+            //   行」の因果を色で結ぶ。赤枠（予告）と着弾フラッシュ（実弾）は単一の
+            //   DangerFrameColor を共有し、意味論を一致させる（Req 4 の整合点）。
         }
     }
 
