@@ -44,6 +44,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Localization;
@@ -76,6 +77,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalTimelineChanged   = "TimelineChanged";
     public const string SignalRosterChanged     = "RosterChanged";
     public const string SignalPhaseChanged      = "PhaseChanged";
+    public const string SignalFormationChanged  = "FormationChanged";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -98,6 +100,12 @@ public partial class ChronicleGlobal : Godot.Node
     /// 切り替える契機にする（新フェーズは CurrentPhase を読み直して判定）。
     /// </summary>
     [Signal] public delegate void PhaseChangedEventHandler();
+
+    /// <summary>
+    /// CurrentFormation（V字3×3編成盤面）が更新された時に発火するシグナル。
+    /// 編成画面 UI がこれを受け、盤面を丸ごと読み直して 9 マスを再描画する。
+    /// </summary>
+    [Signal] public delegate void FormationChangedEventHandler();
 
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
@@ -130,6 +138,18 @@ public partial class ChronicleGlobal : Godot.Node
     /// 純粋ロジック GamePhaseFlow が判定する（不正な飛び越し・後退は不可）。
     /// </summary>
     public GamePhase CurrentPhase { get; private set; } = GamePhaseFlow.InitialPhase;
+
+    /// <summary>
+    /// V字 3×3 編成盤面の現在状態。常にちょうど 9 スロットを内包する完全不変レコード。
+    /// 盤面は Unit 実体を持たず OccupantId(Guid?) のみを保持する薄い参照レイヤであり、
+    /// 正本は <see cref="BattalionRoster"/> 側にある（単一 SoT・設計憲法 ③）。
+    ///
+    /// 外部からは読み取りのみ。不変レコードゆえ、ゲッタは現在のスナップショット参照を
+    /// そのまま安全に返せる（参照読み取りはアトミックで、内容は変更不能）。更新は
+    /// PlaceUnitOnFormation / ClearFormationSlot / SwapFormationSlots / RotateFormation
+    /// 経由のみ。ロスタから完全ロストしたユニットは世代交代の中で自動的に掃き出される。
+    /// </summary>
+    public FormationBoard CurrentFormation { get; private set; } = FormationBoard.Empty();
 
     // ════════════════════════════════════════════════════════════════════════
     //  注入可能フィールド + スレッド安全用ロック
@@ -215,6 +235,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
+            CurrentFormation = FormationBoard.Empty();  // 新規開始は空盤面から
             _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
             IsInitialized = true;
         }
@@ -224,6 +245,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
     }
 
@@ -478,6 +500,7 @@ public partial class ChronicleGlobal : Godot.Node
     {
         GamePhase next;
         bool generationAdvanced = false;
+        bool formationChanged = false;
 
         lock (_stateLock)
         {
@@ -489,7 +512,7 @@ public partial class ChronicleGlobal : Godot.Node
             // Battle → Chronicle はループ 1 周の幕引き。ここで世代交代（年送り）を行う。
             if (from == GamePhase.Battle && next == GamePhase.Chronicle)
             {
-                AdvanceGenerationLocked();
+                formationChanged = AdvanceGenerationLocked();
                 generationAdvanced = true;
             }
 
@@ -503,6 +526,8 @@ public partial class ChronicleGlobal : Godot.Node
             SafeEmit(SignalRosterChanged);
             SafeEmit(SignalEconomyChanged);
             SafeEmit(SignalTimelineChanged);
+            // 完全ロストで盤面から掃き出しが発生した時だけ FormationChanged を流す。
+            if (formationChanged) SafeEmit(SignalFormationChanged);
         }
 
         SafeEmit(SignalPhaseChanged);
@@ -527,7 +552,7 @@ public partial class ChronicleGlobal : Godot.Node
     ///   仕分けは行われ（戦闘後クリーンアップを兼ねる）、EarnFromTimeSkip(0) は例外なく
     ///   据え置きを返す。
     /// </summary>
-    private void AdvanceGenerationLocked()
+    private bool AdvanceGenerationLocked()
     {
         var years = _pendingGenerationSkipYears;
 
@@ -536,18 +561,25 @@ public partial class ChronicleGlobal : Godot.Node
         var advance = RosterLifecycle.AdvanceGeneration(BattalionRoster, years);
         BattalionRoster = advance.SurvivingRoster.ToImmutableList();
 
-        // 2. 定期収入を加算（SoT #1）。
+        // 2. ロスタ整合フック: 完全ロストしたユニットの ID を盤面からも掃き出す。
+        //    盤面が常にロスタ実在 ID のみを参照する不変条件をここで回復する。
+        bool formationChanged = ReconcileFormationWithRosterLocked();
+
+        // 3. 定期収入を加算（SoT #1）。
         CurrentEconomy = CurrentEconomy.EarnFromTimeSkip(years);
 
-        // 3. 次世代の予言 3 つを再生成（過去予言は完全破棄）。
+        // 4. 次世代の予言 3 つを再生成（過去予言は完全破棄）。
         if (CurrentTimeline is not null)
         {
             CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
                 TimelineEngine.DefaultGenerator, _rng);
         }
 
-        // 4. 保留年数をリセット（次の Chronicle 選択で改めて設定される）。
+        // 5. 保留年数をリセット（次の Chronicle 選択で改めて設定される）。
         _pendingGenerationSkipYears = 0;
+
+        // 盤面に掃き出しが起きたかを呼び出し側へ返す（FormationChanged 発火の判断材料）。
+        return formationChanged;
     }
 
     /// <summary>
@@ -566,6 +598,117 @@ public partial class ChronicleGlobal : Godot.Node
         }
 
         SafeEmit(SignalPhaseChanged);
+        return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  V字編成盤面（FormationBoard）の操作 API
+    // ════════════════════════════════════════════════════════════════════════
+    //  盤面は Unit 実体を持たず OccupantId(Guid?) だけを保持する薄い参照レイヤ
+    //  （正本は BattalionRoster 側・単一 SoT・設計憲法 ③）。以下 4 操作はいずれも
+    //  「① 純粋な不変メソッドで次盤面を生成 → ② _stateLock 内で原子的に差し替え →
+    //  ③【ロックを解放してから】FormationChanged を SafeEmit」という単方向フローを
+    //  厳守する。ロック保持中に EmitSignal を呼ばないため、シグナル受信側 UI が
+    //  CurrentFormation を読み直しても再入ロックは発生せず、デッドロックの余地がない。
+    //
+    //  変化が無い操作（同一座標スワップ・空席クリア等、純粋層が this を返すケース）は
+    //  参照同一性で検出して発火を抑止し、余計な再描画を起こさない。
+
+    /// <summary>
+    /// 指定座標へユニットを配置する。同一 ID が別マスに居れば自動退去する
+    /// （盤面上で同一ユニットが二重に現れない不変条件を純粋層が保証）。ロスタに
+    /// 実在しない ID は無視する（盤面が常に実在 ID のみを参照する整合の即時保証）。
+    /// </summary>
+    public void PlaceUnitOnFormation(SlotCoordinate coordinate, Guid unitId)
+    {
+        bool changed = false;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return;
+            if (!BattalionRoster.Exists(u => u.Id == unitId)) return;
+
+            var next = CurrentFormation.WithUnitAt(coordinate, unitId);
+            if (!ReferenceEquals(next, CurrentFormation))
+            {
+                CurrentFormation = next;
+                changed = true;
+            }
+        }
+
+        if (changed) SafeEmit(SignalFormationChanged);
+    }
+
+    /// <summary>指定座標の占有者を取り除く。元から空席なら何もしない（発火もしない）。</summary>
+    public void ClearFormationSlot(SlotCoordinate coordinate)
+    {
+        bool changed = false;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return;
+
+            var next = CurrentFormation.ClearedAt(coordinate);
+            if (!ReferenceEquals(next, CurrentFormation))
+            {
+                CurrentFormation = next;
+                changed = true;
+            }
+        }
+
+        if (changed) SafeEmit(SignalFormationChanged);
+    }
+
+    /// <summary>2 座標の占有者を入れ替える。同一座標なら何もしない（発火もしない）。</summary>
+    public void SwapFormationSlots(SlotCoordinate first, SlotCoordinate second)
+    {
+        bool changed = false;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return;
+
+            var next = CurrentFormation.SwapSlots(first, second);
+            if (!ReferenceEquals(next, CurrentFormation))
+            {
+                CurrentFormation = next;
+                changed = true;
+            }
+        }
+
+        if (changed) SafeEmit(SignalFormationChanged);
+    }
+
+    /// <summary>
+    /// 分隊（行）単位で占有者の三つ組をローテーションする（列順 0/1/2 は完全保持）。
+    /// </summary>
+    public void RotateFormation(RotationDirection direction)
+    {
+        bool changed = false;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return;
+
+            var next = CurrentFormation.Rotated(direction);
+            if (!ReferenceEquals(next, CurrentFormation))
+            {
+                CurrentFormation = next;
+                changed = true;
+            }
+        }
+
+        if (changed) SafeEmit(SignalFormationChanged);
+    }
+
+    /// <summary>
+    /// 現在のロスタに実在しない占有者を盤面から掃き出す整合フック。既に取得済みの
+    /// <see cref="_stateLock"/> 内から呼ぶこと（シグナルはここでは発火せず、呼び出し側が
+    /// ロック解放後に発火する責務を持つ）。掃き出しが起きたら true を返す。
+    /// </summary>
+    private bool ReconcileFormationWithRosterLocked()
+    {
+        var validIds = BattalionRoster.Select(u => u.Id).ToHashSet();
+        var next = CurrentFormation.RetainingUnits(validIds);
+        if (ReferenceEquals(next, CurrentFormation)) return false;
+
+        CurrentFormation = next;
         return true;
     }
 
@@ -827,6 +970,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
+            CurrentFormation = FormationBoard.Empty();     // 盤面は永続化せずロードは空盤面から
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
             IsInitialized   = true;
         }
@@ -835,6 +979,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
 
         return true;

@@ -17,6 +17,7 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;   // SquadRow（V 字分隊行）の正本はジョブ定義側にある
@@ -323,6 +324,68 @@ public class FormationBoardTests
 
         Assert.Throws<ArgumentOutOfRangeException>(
             () => board.OccupantAt(At(SquadRow.Front, 5)));
+    }
+
+    // ─── 7. ロスタ整合フック（RetainingUnits） ─────────────────────────────
+
+    [Fact]
+    public void RetainingUnits_EvictsOccupantsNotInValidSet()
+    {
+        var board = FormationBoard.Empty()
+            .WithUnitAt(At(SquadRow.Front, 0), UnitA)
+            .WithUnitAt(At(SquadRow.RearLeft, 0), UnitB)
+            .WithUnitAt(At(SquadRow.RearRight, 0), UnitC);
+
+        // UnitB だけが有効。A と C は盤面から掃き出される。
+        var valid = new HashSet<Guid> { UnitB };
+        var reconciled = board.RetainingUnits(valid);
+
+        Assert.Null(reconciled.OccupantAt(At(SquadRow.Front, 0)));
+        Assert.Equal(UnitB, reconciled.OccupantAt(At(SquadRow.RearLeft, 0)));
+        Assert.Null(reconciled.OccupantAt(At(SquadRow.RearRight, 0)));
+        Assert.Equal(1, reconciled.OccupiedCount);
+
+        // 元盤面は不変（イミュータブル保証）。
+        Assert.Equal(3, board.OccupiedCount);
+    }
+
+    [Fact]
+    public void RetainingUnits_AllOccupantsValid_ReturnsSameInstance()
+    {
+        var board = FormationBoard.Empty()
+            .WithUnitAt(At(SquadRow.Front, 0), UnitA)
+            .WithUnitAt(At(SquadRow.RearLeft, 0), UnitB);
+
+        // 掃き出し対象が無ければ自身をそのまま返す（余計なシグナル発火を避ける契約）。
+        var valid = new HashSet<Guid> { UnitA, UnitB, UnitC };
+        Assert.Same(board, board.RetainingUnits(valid));
+    }
+
+    [Fact]
+    public void RetainingUnits_EmptyBoard_ReturnsSameInstance()
+    {
+        var board = FormationBoard.Empty();
+        Assert.Same(board, board.RetainingUnits(new HashSet<Guid> { UnitA }));
+    }
+
+    [Fact]
+    public void RetainingUnits_EmptyValidSet_ClearsEntireBoard()
+    {
+        var board = FormationBoard.Empty()
+            .WithUnitAt(At(SquadRow.Front, 0), UnitA)
+            .WithUnitAt(At(SquadRow.RearRight, 2), UnitB);
+
+        var reconciled = board.RetainingUnits(new HashSet<Guid>());
+
+        Assert.True(reconciled.IsEmpty);
+        Assert.Equal(2, board.OccupiedCount); // 元盤面は不変
+    }
+
+    [Fact]
+    public void RetainingUnits_NullSet_Throws()
+    {
+        var board = FormationBoard.Empty();
+        Assert.Throws<ArgumentNullException>(() => board.RetainingUnits(null!));
     }
 
     // 9 個の相異なる決定的 Guid を払い出す（テスト内専用ヘルパー）。

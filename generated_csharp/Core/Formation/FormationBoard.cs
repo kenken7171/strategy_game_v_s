@@ -39,6 +39,7 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Job;
 
@@ -297,6 +298,32 @@ public sealed record FormationBoard
         if (slot.IsEmpty) return this;
 
         return this with { Slots = Slots.SetItem(index, slot with { OccupantId = null }) };
+    }
+
+    /// <summary>
+    /// 指定の有効 ID 集合に含まれない占有者をすべて空席化した新しい盤面を返す。
+    /// ロスタから完全ロスト（寿命到達・戦闘死・退団）したユニットの ID を盤面から
+    /// 安全に掃き出す「ロスタ整合フック」用。掃き出す対象が一つも無ければ自身を
+    /// そのまま返す（不要な再生成と余計なシグナル発火を避ける）。
+    /// </summary>
+    /// <param name="validUnitIds">盤面に残してよいユニット ID の集合。</param>
+    public FormationBoard RetainingUnits(IReadOnlySet<Guid> validUnitIds)
+    {
+        ArgumentNullException.ThrowIfNull(validUnitIds);
+
+        ImmutableArray<FormationSlot>.Builder? builder = null;
+        for (int i = 0; i < Slots.Length; i++)
+        {
+            var slot = Slots[i];
+            if (slot.OccupantId is { } id && !validUnitIds.Contains(id))
+            {
+                // 退去対象を 1 件以上見つけた時だけビルダーを起こす（無変更時は this 返却）。
+                builder ??= Slots.ToBuilder();
+                builder[i] = slot with { OccupantId = null };
+            }
+        }
+
+        return builder is null ? this : this with { Slots = builder.ToImmutable() };
     }
 
     /// <summary>
