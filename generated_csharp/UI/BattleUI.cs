@@ -56,6 +56,7 @@ using System.Collections.Immutable;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Formation;
+using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Units;
 using Godot;
@@ -572,7 +573,28 @@ public partial class BattleUI : Godot.Control
         AppendTurnEvents(events);
     }
 
-    /// <summary>戦闘終了: 結末をロスタへ反映して非戦闘状態へ戻すよう EndBattle を依頼する。</summary>
+    /// <summary>
+    /// 戦闘終了 → 拠点への帰還（ゲームループの結節点）。
+    ///
+    /// ★ ループ 1 周の閉塞:
+    ///   まず EndBattle で戦闘後の参加者複製（戦死・成長・装備変化）を正本ロスタへ
+    ///   書き戻し、戦果決算（LastBattleSpoils）を確定して非戦闘状態へ戻す。続いて
+    ///   「勝敗が確定（BattalionVictory / BattalionDefeat）」かつ「現在フェーズが Battle」
+    ///   のときだけ AdvancePhase を物理的に連結して呼び、Battle → Chronicle へ前進させる。
+    ///   この遷移を引き金に ChronicleGlobal 内部（_stateLock 下）で AdvanceGenerationLocked
+    ///   が芋づる式に駆動し、加齢 → 完全ロストの最終仕分け → 盤面の自動掃き出し → 収入 →
+    ///   次世代の予言再生成までが「一連の単方向の因果」としてノンストップで走る。
+    ///
+    /// ★ 撤退（未決着）との区別:
+    ///   まだ決着していない（Ongoing）状態での終了は「途中撤退」とみなし、戦闘状態の
+    ///   クリアだけに留めてフェーズは進めない（年送り・世代交代を起こさない）。
+    ///
+    /// ★ 順序の意味:
+    ///   EndBattle が _stateLock を取得・解放して BattleChanged を発火し終えた後で
+    ///   AdvancePhase を呼ぶため、ロックは入れ子にならず参照デッドロックは生じない。
+    ///   また「書き戻し（ロスタ正本化）→ AdvancePhase（完全ロスト仕分け）」の順序により、
+    ///   戦闘死マーク済みのロスタを世代交代が正しく掃き出せる因果順を保証する。
+    /// </summary>
     private void OnEndPressed()
     {
         if (_chronicleGlobal is null) return;
@@ -585,6 +607,17 @@ public partial class BattleUI : Godot.Control
             _                              => "戦闘を終了",
         };
         AppendLogLine($"戦闘終了: {outcomeText}", "battle-log-end");
+
+        // 勝敗が確定した戦闘のみ、拠点（Chronicle）へフェーズを前進させて世代交代を駆動する。
+        // 現在フェーズが Battle であることを併せて確認し、非戦闘フェーズからの誤前進を防ぐ。
+        var isConcluded = outcome is BattleOutcome.BattalionVictory or BattleOutcome.BattalionDefeat;
+        if (isConcluded && _chronicleGlobal.CurrentPhase == GamePhase.Battle)
+        {
+            var nextPhase = _chronicleGlobal.AdvancePhase();
+            AppendLogLine(
+                $"拠点へ帰還: フェーズを {nextPhase} へ前進（世代交代を適用）",
+                "battle-log-return-to-base");
+        }
     }
 
     // ─── コマンド可否（戦闘状態から導出。UI はキャッシュしない） ──────────

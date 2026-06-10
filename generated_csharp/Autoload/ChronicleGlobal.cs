@@ -169,6 +169,14 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     public BattleSnapshot? CurrentBattle { get; private set; }
 
+    /// <summary>
+    /// 直近の戦闘の戦果決算（開戦時と終了時の参加者静止画を Guid 突合した不変差分）。
+    /// 非戦闘時・初期状態は <see cref="BattleSpoils.Empty"/>。<see cref="EndBattle"/> の
+    /// ロック内で確定し、以後は読み取り専用。次段の戦果決算スクリーン（無状態 UI）が
+    /// これを読み取るだけの公開スナップショットになる（戦果のロスタ正本化とは関心分離）。
+    /// </summary>
+    public BattleSpoils LastBattleSpoils { get; private set; } = BattleSpoils.Empty;
+
     // ════════════════════════════════════════════════════════════════════════
     //  注入可能フィールド + スレッド安全用ロック
     // ════════════════════════════════════════════════════════════════════════
@@ -188,6 +196,17 @@ public partial class ChronicleGlobal : Godot.Node
     /// ★ セーブには含めない（Random は永続化しない設計に準拠）。
     /// </summary>
     private Random _battleRng = new();
+
+    /// <summary>
+    /// 開戦時の参加者静止画（Id → Unit）。<see cref="StartBattle"/> で捕捉し、
+    /// <see cref="EndBattle"/> で終了時の <see cref="BattleSnapshot.Combatants"/> と
+    /// Guid 突合して <see cref="LastBattleSpoils"/> を算出するための「開戦時の基準点」。
+    /// 戦果決算は「開戦時 → 終了時」の差分なので、開戦の瞬間を別途保持する必要がある
+    /// （CurrentBattle は最新ターンへ毎回差し替わり、開戦時の値を失うため）。常に
+    /// <see cref="_stateLock"/> 内でのみ読み書きする。★ セーブには含めない（一過性）。
+    /// </summary>
+    private ImmutableDictionary<Guid, Unit> _battleOpeningCombatants =
+        ImmutableDictionary<Guid, Unit>.Empty;
 
     /// <summary>
     /// 状態 (3 プロパティ) を一括差し替えする際の排他ロック。Godot のゲーム
@@ -267,6 +286,8 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle = null;                       // 新規開始時は非戦闘状態
             _battleRng = new Random();                  // 戦闘乱数は StartBattle で再シード
             _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
+            _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty; // 戦果基準点も更地
+            LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
             IsInitialized = true;
         }
 
@@ -784,6 +805,10 @@ public partial class ChronicleGlobal : Godot.Node
 
             snapshot = BattleResolver.CreateInitial(CurrentFormation, BattalionRoster, enemy, _battleRng);
             CurrentBattle = snapshot;
+
+            // 戦果決算の基準点として、開戦の瞬間の参加者静止画を別途捕捉しておく
+            // （CurrentBattle は以後のターンで毎回差し替わるため、開戦時の値はここで確保）。
+            _battleOpeningCombatants = snapshot.Combatants;
         }
 
         SafeEmit(SignalBattleChanged);
@@ -846,6 +871,13 @@ public partial class ChronicleGlobal : Godot.Node
             if (!IsInitialized || CurrentBattle is null) return BattleOutcome.Ongoing;
 
             outcome = CurrentBattle.Outcome;
+
+            // 戦果決算（開戦時 vs 終了時の Guid 突合）を、ロスタ書き戻しの直前に確定する。
+            //   - ここで両静止画はまだ手元にある（_battleOpeningCombatants と CurrentBattle）。
+            //   - 純粋ファクトリ BattleSpoils.FromBattle に委譲し、本クラスは保持だけ担う。
+            //   - 書き戻し（ロスタ正本化）とは関心分離: あちらは状態確定、こちらは差分提示。
+            LastBattleSpoils = BattleSpoils.FromBattle(
+                _battleOpeningCombatants, CurrentBattle.Combatants, outcome);
 
             // 戦闘後の参加者複製（戦死・成長・装備変化込み）を正本ロスタへ書き戻す。
             var combatants = CurrentBattle.Combatants;
