@@ -44,6 +44,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
@@ -78,6 +79,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalRosterChanged     = "RosterChanged";
     public const string SignalPhaseChanged      = "PhaseChanged";
     public const string SignalFormationChanged  = "FormationChanged";
+    public const string SignalBattleChanged     = "BattleChanged";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -106,6 +108,14 @@ public partial class ChronicleGlobal : Godot.Node
     /// 編成画面 UI がこれを受け、盤面を丸ごと読み直して 9 マスを再描画する。
     /// </summary>
     [Signal] public delegate void FormationChangedEventHandler();
+
+    /// <summary>
+    /// CurrentBattle（1 ターン戦闘解決リゾルバの現在スナップショット）が更新された時に
+    /// 発火するシグナル。戦闘開始・各ターン解決・戦闘終了（null 化）のいずれでも流れる。
+    /// 戦闘画面 UI がこれを受け、CurrentBattle を丸ごと読み直して 9 マスの生存・HP・敵カードを
+    /// 再描画する。非戦闘状態（CurrentBattle == null）への遷移もこのシグナルで通知される。
+    /// </summary>
+    [Signal] public delegate void BattleChangedEventHandler();
 
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
@@ -151,6 +161,14 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     public FormationBoard CurrentFormation { get; private set; } = FormationBoard.Empty();
 
+    /// <summary>
+    /// 現在進行中の戦闘の不変スナップショット。非戦闘時および初期状態は null。
+    /// 戦闘の唯一の真実（SoT）であり、外部からは読み取りのみ。更新は
+    /// <see cref="StartBattle"/> / <see cref="ResolveBattleTurn"/> / <see cref="EndBattle"/>
+    /// 経由のみ。不変レコードゆえ参照読み取りはアトミックで安全（内容は変更不能）。
+    /// </summary>
+    public BattleSnapshot? CurrentBattle { get; private set; }
+
     // ════════════════════════════════════════════════════════════════════════
     //  注入可能フィールド + スレッド安全用ロック
     // ════════════════════════════════════════════════════════════════════════
@@ -160,6 +178,16 @@ public partial class ChronicleGlobal : Godot.Node
     /// テストでは seeded Random を渡すことで再現性を確保できる。
     /// </summary>
     private Random _rng = new();
+
+    /// <summary>
+    /// 戦闘セッション専用の乱数発生器。世代進行用の <see cref="_rng"/> とは独立した
+    /// ストリームを持ち、1 つの戦闘ごとに <see cref="StartBattle"/> で改めてシードされる。
+    /// これにより「同一の開始局面＋同一シードなら、何ターン解決しても全環境で同一結果」
+    /// という戦闘の決定論チェーンを 1 戦闘の幕開けから幕引きまで貫通させる。常に
+    /// <see cref="_stateLock"/> 内でのみ読み書きする（ResolveBattleTurn でリゾルバへ注入）。
+    /// ★ セーブには含めない（Random は永続化しない設計に準拠）。
+    /// </summary>
+    private Random _battleRng = new();
 
     /// <summary>
     /// 状態 (3 プロパティ) を一括差し替えする際の排他ロック。Godot のゲーム
@@ -236,6 +264,8 @@ public partial class ChronicleGlobal : Godot.Node
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
             CurrentFormation = FormationBoard.Empty();  // 新規開始は空盤面から
+            CurrentBattle = null;                       // 新規開始時は非戦闘状態
+            _battleRng = new Random();                  // 戦闘乱数は StartBattle で再シード
             _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
             IsInitialized = true;
         }
@@ -713,6 +743,134 @@ public partial class ChronicleGlobal : Godot.Node
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  戦闘ライフサイクル（BattleResolver の常駐統合）
+    // ════════════════════════════════════════════════════════════════════════
+    //  純粋層 BattleResolver（盤面・攻防純関数・敵を接着する 1 ターン解決器）を
+    //  常駐 SoT へ昇格させ、非戦闘 ⇄ 戦闘のライフサイクルを統治する 3 つの薄い API を
+    //  公開する。いずれも編成 API と同じ単方向フロー規律を厳守する:
+    //    ① 純粋な BattleResolver を呼んで次スナップショットを生成
+    //    ② _stateLock 内で CurrentBattle を原子的に差し替え
+    //    ③【ロックを解放してから】BattleChanged を SafeEmit
+    //  ロック保持中に EmitSignal を呼ばないため、シグナル受信側 UI が CurrentBattle を
+    //  読み直しても再入ロックは発生せず、デッドロックの余地がない。非戦闘時
+    //  （CurrentBattle == null）でも全 API がヌル安全に振る舞う（戦闘外呼び出しは no-op）。
+
+    /// <summary>
+    /// 現在の編成盤面（<see cref="CurrentFormation"/>）とロスタ（<see cref="BattalionRoster"/>）、
+    /// および与えられた敵から初期戦闘スナップショットを生成し、戦闘を開始する。
+    ///
+    /// 戦闘専用乱数 <see cref="_battleRng"/> をここで改めてシードし、この戦闘の決定論
+    /// チェーンの起点を確定する。再現性のため <paramref name="battleSeed"/> を明示できる
+    /// （省略時は世代用 <see cref="_rng"/> から 1 つ引いた値を種にして、ゲーム全体の
+    /// 単一シード再現性を保ったまま戦闘ストリームを独立させる）。
+    ///
+    /// 戻り値:
+    ///   - BattleSnapshot: 開始直後の初期スナップショット（TurnNumber 0 / Outcome Ongoing）
+    ///   - null: 未初期化、または <paramref name="enemy"/> が null（ヌル安全に弾く）
+    /// </summary>
+    /// <param name="enemy">対戦相手の敵スナップショット（null 不可）。</param>
+    /// <param name="battleSeed">戦闘乱数の種（null なら世代用乱数から決定論的に導出）。</param>
+    public BattleSnapshot? StartBattle(EnemyState enemy, int? battleSeed = null)
+    {
+        if (enemy is null) return null;
+
+        BattleSnapshot snapshot;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // この戦闘専用の独立した乱数ストリームを（再）シードする。
+            _battleRng = battleSeed is { } seed ? new Random(seed) : new Random(_rng.Next());
+
+            snapshot = BattleResolver.CreateInitial(CurrentFormation, BattalionRoster, enemy);
+            CurrentBattle = snapshot;
+        }
+
+        SafeEmit(SignalBattleChanged);
+        return snapshot;
+    }
+
+    /// <summary>
+    /// 選択された陣形回転（無作戦なら null）を適用して 1 ターンを解決し、CurrentBattle を
+    /// 次のスナップショットへ原子的に差し替える。確率要素には戦闘専用乱数
+    /// <see cref="_battleRng"/> を注入する（グローバル乱数は一切使わない・決定論保証）。
+    ///
+    /// UI のアニメーション・ログ再生の受け皿とするため、リゾルバが返した不変イベント
+    /// ログ配列（<see cref="ImmutableArray{BattleEvent}"/>）をそのまま呼び出し元へ返す。
+    ///
+    /// 戻り値:
+    ///   - 発生順のイベントログ（このターンに起きた出来事）
+    ///   - 空配列: 未初期化、非戦闘時（CurrentBattle == null）、または既に決着済み
+    ///     （いずれもヌル安全な no-op として扱い、状態は変えない）
+    /// </summary>
+    /// <param name="rotation">ターン冒頭に適用する回転作戦（無作戦なら null）。</param>
+    public ImmutableArray<BattleEvent> ResolveBattleTurn(RotationDirection? rotation)
+    {
+        BattleTurnResult result;
+        lock (_stateLock)
+        {
+            if (!IsInitialized || CurrentBattle is null)
+            {
+                return ImmutableArray<BattleEvent>.Empty;
+            }
+
+            result = BattleResolver.ResolveTurn(CurrentBattle, rotation, _battleRng);
+            CurrentBattle = result.Snapshot;
+        }
+
+        SafeEmit(SignalBattleChanged);
+        return result.Events;
+    }
+
+    /// <summary>
+    /// 戦闘を終了し、その結末（勝敗）をロスタへ反映してから CurrentBattle を null へ
+    /// 安全にクリアし、非戦闘状態へ遷移する。
+    ///
+    /// 戦闘は <see cref="BattleSnapshot.Combatants"/> 上の Unit 複製に対して進行する
+    /// （完全ロストや、とどめによるラストヒット成長は複製側へ記録される）。本メソッドは
+    /// その戦闘後の複製を ID で突き合わせて <see cref="BattalionRoster"/> 本体へ書き戻し、
+    /// 戦闘の結果（戦死・成長・装備変化）を世代の正本へ確定させる。書き戻しが起きた場合
+    /// のみ RosterChanged を流し、最後に必ず BattleChanged を流して UI を非戦闘描画へ導く。
+    ///
+    /// 戻り値:
+    ///   - 終了時点の決着状態（BattalionVictory / BattalionDefeat / Ongoing）
+    ///   - Ongoing: 未初期化、または非戦闘時に呼ばれた場合（ヌル安全な no-op）
+    /// </summary>
+    public BattleOutcome EndBattle()
+    {
+        bool rosterChanged = false;
+        BattleOutcome outcome;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized || CurrentBattle is null) return BattleOutcome.Ongoing;
+
+            outcome = CurrentBattle.Outcome;
+
+            // 戦闘後の参加者複製（戦死・成長・装備変化込み）を正本ロスタへ書き戻す。
+            var combatants = CurrentBattle.Combatants;
+            var mergedRoster = BattalionRoster;
+            for (int index = 0; index < mergedRoster.Count; index++)
+            {
+                var rosterUnit = mergedRoster[index];
+                if (combatants.TryGetValue(rosterUnit.Id, out var afterBattle)
+                    && !ReferenceEquals(afterBattle, rosterUnit))
+                {
+                    mergedRoster = mergedRoster.SetItem(index, afterBattle);
+                    rosterChanged = true;
+                }
+            }
+
+            BattalionRoster = mergedRoster;
+            CurrentBattle = null; // 非戦闘状態へ
+        }
+
+        if (rosterChanged) SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalBattleChanged);
+        return outcome;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  名前解決（ローカライズ）
     // ════════════════════════════════════════════════════════════════════════
     //  純粋層 NameResolver（Core/Naming）に解決ロジックを委ね、本クラスは
@@ -971,6 +1129,8 @@ public partial class ChronicleGlobal : Godot.Node
             BattalionRoster = loaded.Roster;
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
             CurrentFormation = FormationBoard.Empty();     // 盤面は永続化せずロードは空盤面から
+            CurrentBattle   = null;              // 戦闘は永続化しない（ロード再開は非戦闘状態）
+            _battleRng      = new Random();       // 戦闘乱数は次の StartBattle で再シード
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
             IsInitialized   = true;
         }
