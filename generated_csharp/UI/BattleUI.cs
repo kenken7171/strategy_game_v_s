@@ -118,11 +118,16 @@ public partial class BattleUI : Godot.Control
     private Button? _commandCounterClockwiseButton;
     private Button? _endButton;
 
-    // ─── 戦果決算スクリーン（決着時に前面展開するモーダル / 無状態の従属ノード） ──
-    //  ★ 案A の規律: 決着後 EndBattle で LastBattleSpoils を確定したら、AdvancePhase を
-    //    即時には呼ばず本モーダルを前面展開する。プレイヤーが「次代へ（OK）」を押した
-    //    瞬間のハンドラ（OnSpoilsConfirmed）で初めて AdvancePhase を駆動し、世代交代の
-    //    消滅副作用（完全ロストの掃き出し）の前に戦果と死者を安全に提示しきる。
+    // ─── 三段フローの従属モーダル（決着時に順に前面展開する無状態ノード） ──────
+    //  ★ 三段フローの規律（戦闘 → とどめ → 決算 → 世代交代）:
+    //    ① 決着後 EndBattle で戦闘後ロスタを正本化（決算はまだ確定しない・遅延算出）。
+    //    ② とどめの儀式（LastHitCeremonyScreen）を前面展開し、生存者から 1 名を必ず
+    //       選ばせて ResolveLastHit を解決する。
+    //    ③ 儀式の Confirmed を受けて FinalizeBattleSpoils（統合台帳の確定）→ 戦果決算
+    //       スクリーン（BattleSpoilsScreen）を前面展開する。
+    //    ④ 決算の Confirmed を受けて初めて AdvancePhase を駆動し、世代交代の消滅副作用
+    //       （完全ロストの掃き出し）の前に戦果と死者を安全に提示しきる。
+    private LastHitCeremonyScreen? _lastHitScreen;
     private BattleSpoilsScreen? _spoilsScreen;
 
     // ─── 敵攻撃予告バナー（BuildUI で 1 度だけ生成し、毎描画で中身だけ書き換える） ──
@@ -157,7 +162,8 @@ public partial class BattleUI : Godot.Control
     {
         // 退場時も生存中の脈動 Tween を必ず一掃する（リーク防止規律）。
         KillDangerPulses();
-        // 決算モーダルが前面展開中のまま退場する場合に備え、購読を解いて確実に解放する。
+        // 従属モーダルが前面展開中のまま退場する場合に備え、購読を解いて確実に解放する。
+        DismissLastHitCeremony();
         DismissSpoilsScreen();
         UnsubscribeSignals();
     }
@@ -583,32 +589,34 @@ public partial class BattleUI : Godot.Control
     }
 
     /// <summary>
-    /// 戦闘終了 → 戦果決算の提示 → 拠点への帰還（ゲームループの結節点・案A）。
+    /// 戦闘終了 → とどめの儀式 → 戦果決算 → 拠点への帰還（ゲームループの結節点・三段フロー）。
     ///
-    /// ★ 案A の規律（決算確認後に AdvancePhase を呼ぶ）:
-    ///   まず EndBattle で戦闘後の参加者複製（戦死・成長・装備変化）を正本ロスタへ
-    ///   書き戻し、戦果決算（LastBattleSpoils）を確定して非戦闘状態へ戻す。⚠️ここでは
-    ///   まだ AdvancePhase を呼ばない。「勝敗が確定（BattalionVictory / BattalionDefeat）」
-    ///   かつ「現在フェーズが Battle」のときは、戦果決算スクリーン（BattleSpoilsScreen）を
-    ///   前面展開してプレイヤーに死者と戦果を提示する。AdvancePhase は決算スクリーンの
-    ///   「次代へ（OK）」ボタン押下ハンドラ（OnSpoilsConfirmed）で初めて駆動する。
+    /// ★ 三段フローの規律（戦闘 → とどめ → 決算 → 世代交代）:
+    ///   まず EndBattle で戦闘後の参加者複製（戦死・成長・装備変化）を正本ロスタへ書き戻し、
+    ///   非戦闘状態へ戻す。⚠️ここでは戦果決算をまだ確定しない（統合台帳化のため遅延算出）。
+    ///   「勝敗が確定（BattalionVictory / BattalionDefeat）」かつ「現在フェーズが Battle」の
+    ///   ときは、まず とどめの儀式（LastHitCeremonyScreen）を前面展開する。儀式が
+    ///   Confirmed を発火したら FinalizeBattleSpoils で統合台帳を確定し、戦果決算スクリーン
+    ///   （BattleSpoilsScreen）を前面展開する。AdvancePhase は決算の「次代へ（OK）」押下
+    ///   ハンドラ（OnSpoilsConfirmed）で初めて駆動する。
     ///
-    /// ★ なぜ決算を AdvancePhase の前に挟むのか:
-    ///   AdvancePhase → AdvanceGenerationLocked は加齢 → 完全ロストの最終仕分け →
-    ///   盤面の自動掃き出し（消滅副作用）を芋づる式に起こす。死者を含む戦果は、その
-    ///   消滅副作用が走る前に確定済みの LastBattleSpoils から読み取って提示しきる必要が
-    ///   ある。決算 → 確認 → AdvancePhase の順序が、死者の名前解決と戦果提示を保証する。
+    /// ★ なぜ「とどめ → 決算 → AdvancePhase」の順序か:
+    ///   とどめ（ResolveLastHit）はラストヒットを取った 1 名へ昇級・装備進化/Lv5 破壊・
+    ///   強奪を刻む。これを EndBattle 後・決算確定前に挟むことで、戦果決算（統合台帳）が
+    ///   「戦闘中の成長」と「とどめの成長/喪失」の両方を 1 枚に合算できる。さらに
+    ///   AdvancePhase → AdvanceGenerationLocked は加齢 → 完全ロストの最終仕分け → 盤面の
+    ///   自動掃き出し（消滅副作用）を芋づる式に起こすため、死者を含む戦果は消滅副作用の
+    ///   前に確定済み LastBattleSpoils から提示しきる必要がある。
     ///
     /// ★ 撤退（未決着）との区別:
     ///   まだ決着していない（Ongoing）状態での終了は「途中撤退」とみなし、戦闘状態の
-    ///   クリアだけに留めて決算も提示せずフェーズも進めない（年送り・世代交代を起こさない）。
+    ///   クリアだけに留めて儀式も決算も提示せずフェーズも進めない（世代交代を起こさない）。
     ///
     /// ★ Tween ライフサイクルの安全（脈動リーク防止）:
     ///   EndBattle は _stateLock を取得・解放した後 BattleChanged を同期発火する。これを
     ///   受けて RenderAll が走り、その【冒頭】の KillDangerPulses が危険スロット赤枠の
-    ///   脈動 Tween を全 Kill する。したがって決算モーダルを前面展開する時点で盤面は
-    ///   既に脈動クリーンであり、以後 AdvancePhase で画面を切り替えてもゾンビ Tween は
-    ///   残らない。ロックも入れ子にならず参照デッドロックは生じない。
+    ///   脈動 Tween を全 Kill する。したがってモーダルを前面展開する時点で盤面は既に脈動
+    ///   クリーンであり、以後 AdvancePhase で画面を切り替えてもゾンビ Tween は残らない。
     /// </summary>
     private void OnEndPressed()
     {
@@ -623,17 +631,74 @@ public partial class BattleUI : Godot.Control
         };
         AppendLogLine($"戦闘終了: {outcomeText}", "battle-log-end");
 
-        // 勝敗が確定した戦闘のみ戦果決算を前面展開する。現在フェーズが Battle であることを
-        // 併せて確認し、非戦闘フェーズからの誤起動を防ぐ。AdvancePhase はここでは呼ばない。
+        // 勝敗が確定した戦闘のみ三段フローへ進む。現在フェーズが Battle であることを併せて
+        // 確認し、非戦闘フェーズからの誤起動を防ぐ。まずは とどめの儀式を前面展開する。
         var isConcluded = outcome is BattleOutcome.BattalionVictory or BattleOutcome.BattalionDefeat;
         if (isConcluded && _chronicleGlobal.CurrentPhase == GamePhase.Battle)
         {
-            ShowSpoilsScreen();
+            ShowLastHitCeremony();
         }
     }
 
     /// <summary>
-    /// 戦果決算スクリーンを前面展開する（案A の心臓部）。
+    /// とどめの儀式（三段フロー第 2 段）を前面展開する。
+    ///
+    /// 無状態の LastHitCeremonyScreen を新規生成して子に加える。スクリーンは生存者から
+    /// 1 名を必ず選ばせて ChronicleGlobal.ResolveLastHit を内部で解決し、見届けると
+    /// Confirmed を 1 度だけ発火する。多重起動・取り残しを避けるため、生存中の旧モーダルが
+    /// あれば先に確実に解放してから展開する。
+    /// </summary>
+    private void ShowLastHitCeremony()
+    {
+        // 旧モーダルが取り残されていれば購読を解いて解放（多重展開・リーク防止）。
+        DismissLastHitCeremony();
+
+        var screen = new LastHitCeremonyScreen();
+        screen.Confirmed += OnLastHitConfirmed;
+        _lastHitScreen = screen;
+        AddChild(screen);
+    }
+
+    /// <summary>
+    /// とどめの儀式「戦果へ」押下ハンドラ（三段フロー第 2 段 → 第 3 段の結節点）。
+    ///
+    /// 儀式（ResolveLastHit）が済んだこの時点で、正本ロスタには「戦闘中の成長」も
+    /// 「とどめの成長/喪失」も両方が刻まれている。ここで FinalizeBattleSpoils を呼び、
+    /// 開戦時 × とどめ完了後ロスタの差分を統合台帳として確定してから、戦果決算スクリーンを
+    /// 前面展開する。儀式スクリーンは Confirmed を高々 1 度しか発火しない（自身で QueueFree
+    /// 済み）。本体側も CurrentPhase == Battle を再確認してから進める。
+    /// </summary>
+    private void OnLastHitConfirmed()
+    {
+        // スクリーンは自身で QueueFree 済み。参照だけ手放す（購読も同時に失効する）。
+        _lastHitScreen = null;
+
+        if (_chronicleGlobal is null) return;
+        if (_chronicleGlobal.CurrentPhase != GamePhase.Battle) return;
+
+        // 統合台帳を確定（開戦時 × とどめ完了後ロスタの差分）してから決算を提示する。
+        _chronicleGlobal.FinalizeBattleSpoils();
+        ShowSpoilsScreen();
+    }
+
+    /// <summary>
+    /// 前面展開中の とどめの儀式モーダルがあれば購読を解いて確実に解放する。退場時および
+    /// 新規展開の直前に呼び、ゾンビノード・購読の二重接続・リークを根絶する。
+    /// </summary>
+    private void DismissLastHitCeremony()
+    {
+        if (_lastHitScreen is null) return;
+
+        if (GodotObject.IsInstanceValid(_lastHitScreen))
+        {
+            _lastHitScreen.Confirmed -= OnLastHitConfirmed;
+            _lastHitScreen.QueueFree();
+        }
+        _lastHitScreen = null;
+    }
+
+    /// <summary>
+    /// 戦果決算スクリーンを前面展開する（三段フロー第 3 段）。
     ///
     /// 無状態の BattleSpoilsScreen を新規生成して子に加える。スクリーンは
     /// ChronicleGlobal.LastBattleSpoils を一方向に読むだけで自分では状態を持たない。

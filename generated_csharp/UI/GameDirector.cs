@@ -179,7 +179,7 @@ public partial class GameDirector : Godot.Control
         GamePhase.Chronicle => new TimelineUI(),     // 拠点A: 予言・歴史進行
         GamePhase.Guild     => new MarriageUI(),      // 拠点B: 婚姻・スカウト
         GamePhase.Formation => new FormationUI(),     // 大隊編成
-        GamePhase.Battle    => new BattleResultUI(),  // 拠点C: 戦闘結果解決
+        GamePhase.Battle    => new BattleUI(),        // 戦闘: ターン制戦闘 → とどめ → 決算（三段）
         _ => new Godot.Control(),                     // 未知フェーズの安全網（空画面）
     };
 

@@ -1075,7 +1075,7 @@ public partial class ChronicleGlobal : Godot.Node
     // ════════════════════════════════════════════════════════════════════════
     //  純粋層 MasterDataNameResolver（Core/Localization）に解決ロジックを委ね、
     //  本クラスは res:// 読込（Godot I/O）と「未ロード時は enum 名フォールバック」の
-    //  ガードだけを担う。各 UI（TimelineUI / FormationUI / MarriageUI / BattleResultUI）は
+    //  ガードだけを担う。各 UI（TimelineUI / FormationUI / MarriageUI / BattleUI）は
     //  これらのメソッド経由で表示名を引き、コード側に日本語・絵文字を一切持たない。
 
     /// <summary>
