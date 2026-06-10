@@ -42,7 +42,8 @@ public sealed record RotationPerformedEvent(RotationDirection Direction) : Battl
 public sealed record AllyOffenseEvent(Guid AttackerId, int Damage, int EnemyHpAfter) : BattleEvent;
 
 /// <summary>
-/// 敵が指定の行（最小コアでは FRONT 固定）へ攻撃した。
+/// 敵が予告（NextEnemyIntent）の対象行へ攻撃した。狙う行は SingleStrike / Pincer /
+/// TotalAssault の予告パターンに従って動的に決まり、対象行 1 つにつき 1 イベントを積む。
 /// </summary>
 /// <param name="TargetRow">攻撃対象となった分隊行。</param>
 /// <param name="DamagePerUnit">防御軽減後・1 ユニットあたりの被ダメージ。</param>

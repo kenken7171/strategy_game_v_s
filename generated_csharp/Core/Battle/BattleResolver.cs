@@ -18,11 +18,12 @@
 //      ④ 席の解決    : 行動順に各席を処理する。
 //                        - 味方席 → ResolveOffenseDamage → 敵へ被ダメージ。
 //                                    とどめなら ExecuteLastHit で成長を解決。
-//                        - 敵席   → 最小コアでは FRONT 行を固定で狙い、
+//                        - 敵席   → 予告（NextEnemyIntent）の対象行を辿って攻撃。
 //                                    ResolveIncomingDamage で軽減 → HP マップ更新。
 //                                    HP 0 到達は ApplyLethalDamage で完全ロスト。
 //      ⑤ ターン終了回復: CalculateSquadTurnEndHeal + ApplyHealClamped を分隊ごとに。
 //      ⑥ 決着判定    : 敵撃破→勝利 / 味方全滅→敗北 / それ以外→継続。
+//      ⑦ 次手の先読み: 継続時のみ次ターンの敵攻撃予告を再ロールして次静止画へ封入。
 //
 //  ⚠ 決定論の絶対保証（設計憲法・要件②）:
 //    戦闘中の確率要素（ラストヒットの Lv5 装備破壊判定など）に使う乱数は、
@@ -49,25 +50,26 @@ namespace ChronicleKnights.Core.Battle;
 /// </summary>
 public static class BattleResolver
 {
-    /// <summary>敵が最小コアで固定的に狙う行（将来は攻撃パターンで拡張）。</summary>
-    public const SquadRow EnemyTargetRow = SquadRow.Front;
-
     // ─── 初期スナップショット生成 ─────────────────────────────────────────
 
     /// <summary>
     /// 戦闘開始時の静止画を生成する。盤面に配置済みのロスタ員だけを参加者とし、
     /// 各ユニットの現在 HP を所属ジョブの最大 HP（JobMaster 由来）で満たす。
+    /// 併せて「初手の敵攻撃予告」を <paramref name="rng"/> から決定論的にロールし、
+    /// 開始直後から先読み（NextEnemyIntent）が成立した静止画を返す。
     /// </summary>
     /// <param name="board">戦闘開始時の配置盤面。</param>
     /// <param name="roster">参加候補のユニット群（盤面に居る者のみ採用される）。</param>
     /// <param name="enemy">対戦相手の敵スナップショット。</param>
+    /// <param name="rng">初手予告の抽選に使う外部注入の乱数発生器（null 不可）。</param>
     /// <exception cref="ArgumentNullException">いずれかの引数が null の場合。</exception>
     public static BattleSnapshot CreateInitial(
-        FormationBoard board, IReadOnlyCollection<Unit> roster, EnemyState enemy)
+        FormationBoard board, IReadOnlyCollection<Unit> roster, EnemyState enemy, Random rng)
     {
         ArgumentNullException.ThrowIfNull(board);
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(enemy);
+        ArgumentNullException.ThrowIfNull(rng);
 
         var combatants = ImmutableDictionary.CreateBuilder<Guid, Unit>();
         var hitPoints = ImmutableDictionary.CreateBuilder<Guid, int>();
@@ -85,6 +87,7 @@ public static class BattleResolver
             Combatants = combatants.ToImmutable(),
             UnitHitPoints = hitPoints.ToImmutable(),
             Enemy = enemy,
+            NextEnemyIntent = AttackIntentRoller.Roll(enemy, rng), // 初手の予告を先読み
             TurnNumber = 0,
             Outcome = BattleOutcome.Ongoing,
         };
@@ -126,6 +129,7 @@ public static class BattleResolver
         var combatants = current.Combatants;
         var hitPoints = current.UnitHitPoints;
         var enemy = current.Enemy;
+        var intent = current.NextEnemyIntent; // このターンに敵が放つと予告された攻撃
         var outcome = BattleOutcome.Ongoing;
 
         // ── ② 写像 + ③ 行動順構築 ──────────────────────────────────────
@@ -143,7 +147,7 @@ public static class BattleResolver
                 if (enemy.IsDefeated) continue;
 
                 (combatants, hitPoints) =
-                    ResolveEnemyOffense(board, combatants, hitPoints, enemy, events);
+                    ResolveEnemyOffense(board, combatants, hitPoints, intent, events);
 
                 // 敵の一撃で大隊が全滅したら敗北確定。
                 if (!AliveBattalion(board, combatants).Any())
@@ -194,12 +198,20 @@ public static class BattleResolver
             events.Add(new BattleConcludedEvent(outcome));
         }
 
+        // ── ⑦ 次ターンの敵攻撃を先読み（要件②③） ──────────────────────
+        //   ダメージ解決・回復が済んだ後に、次の予告を決定論的に再ロールして封入する。
+        //   決着済みなら次ターンは存在しないので、直前の予告を据え置く（rng も消費しない）。
+        var nextIntent = outcome == BattleOutcome.Ongoing
+            ? AttackIntentRoller.Roll(enemy, rng)
+            : intent;
+
         var nextSnapshot = new BattleSnapshot
         {
             Board = board,
             Combatants = combatants,
             UnitHitPoints = hitPoints,
             Enemy = enemy,
+            NextEnemyIntent = nextIntent,
             TurnNumber = current.TurnNumber + 1,
             Outcome = outcome,
         };
@@ -210,39 +222,54 @@ public static class BattleResolver
     // ─── 内部ヘルパー ───────────────────────────────────────────────────
 
     /// <summary>
-    /// 敵の攻撃（最小コアでは FRONT 行固定）を解決し、更新後の参加者・HP マップを返す。
-    /// 軽減後ダメージは行内で一定（防御は行のメンバーで決まる）なので 1 度だけ算出し、
-    /// FRONT 行の各生存ユニットへ適用する。HP 0 到達は ApplyLethalDamage で完全ロスト。
+    /// 敵の攻撃を、予告レコード（<paramref name="intent"/>）が指定する対象行へ動的に
+    /// 解決し、更新後の参加者・HP マップを返す。従来の FRONT 固定は廃し、SingleStrike /
+    /// Pincer / TotalAssault のいずれの予告でも TargetRows をそのまま辿る。
+    ///
+    /// 軽減の意味論:
+    ///   - 大隊防御（鉄壁騎士の全体軽減など）は「FRONT 行の生存メンバー」が担うため、
+    ///     どの行を狙われても FRONT 行を基準に算出する（行をまたいで効く正しい挙動）。
+    ///   - 分隊防御は「狙われた行の生存メンバー」が担う。
+    ///   両者を合算して被ダメージを軽減する（BattleManager.ResolveIncomingDamage へ委譲）。
+    /// 同時打撃の整合のため、大隊防御の基準となる FRONT 行は打撃開始時点で 1 度だけ捕捉する。
+    /// HP 0 到達は ApplyLethalDamage で完全ロスト。
     /// </summary>
     private static (ImmutableDictionary<Guid, Unit>, ImmutableDictionary<Guid, int>)
         ResolveEnemyOffense(
             FormationBoard board,
             ImmutableDictionary<Guid, Unit> combatants,
             ImmutableDictionary<Guid, int> hitPoints,
-            EnemyState enemy,
+            AttackIntent intent,
             ImmutableArray<BattleEvent>.Builder events)
     {
-        var frontRowUnits = AliveUnitsInRow(board, combatants, EnemyTargetRow);
+        // 大隊防御の供給源は FRONT 行（同時打撃なので開始時点の編成で 1 度だけ捕捉）。
+        var battalionDefenders = AliveUnitsInRow(board, combatants, SquadRow.Front);
 
-        // frontRowUnits が大隊防御（FRONT 配置時）と対象分隊防御の双方を担う。
-        var damagePerUnit = BattleManager.ResolveIncomingDamage(
-            enemy.Attack, frontRowUnits, frontRowUnits);
-        events.Add(new EnemyOffenseEvent(EnemyTargetRow, damagePerUnit));
-
-        foreach (var unit in frontRowUnits)
+        foreach (var row in intent.TargetRows)
         {
-            var currentHp = hitPoints.TryGetValue(unit.Id, out var hp) ? hp : 0;
-            var nextHp = Math.Max(0, currentHp - damagePerUnit);
-            hitPoints = hitPoints.SetItem(unit.Id, nextHp);
+            var targetSquadUnits = AliveUnitsInRow(board, combatants, row);
+            if (targetSquadUnits.IsDefaultOrEmpty) continue; // 無人の行は素通り（誰も傷つかない）
 
-            if (nextHp == 0)
+            // 基礎威力（intent.DamagePerUnit）を大隊防御＋対象分隊防御で軽減する。
+            var damagePerUnit = BattleManager.ResolveIncomingDamage(
+                intent.DamagePerUnit, battalionDefenders, targetSquadUnits);
+            events.Add(new EnemyOffenseEvent(row, damagePerUnit));
+
+            foreach (var unit in targetSquadUnits)
             {
-                combatants = combatants.SetItem(unit.Id, BattleManager.ApplyLethalDamage(unit));
-                events.Add(new UnitDefeatedEvent(unit.Id));
-            }
-            else
-            {
-                events.Add(new UnitDamagedEvent(unit.Id, damagePerUnit, nextHp));
+                var currentHp = hitPoints.TryGetValue(unit.Id, out var hp) ? hp : 0;
+                var nextHp = Math.Max(0, currentHp - damagePerUnit);
+                hitPoints = hitPoints.SetItem(unit.Id, nextHp);
+
+                if (nextHp == 0)
+                {
+                    combatants = combatants.SetItem(unit.Id, BattleManager.ApplyLethalDamage(unit));
+                    events.Add(new UnitDefeatedEvent(unit.Id));
+                }
+                else
+                {
+                    events.Add(new UnitDamagedEvent(unit.Id, damagePerUnit, nextHp));
+                }
             }
         }
 

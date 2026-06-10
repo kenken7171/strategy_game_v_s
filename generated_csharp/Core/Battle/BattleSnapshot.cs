@@ -80,6 +80,14 @@ public sealed record BattleSnapshot
     /// <summary>敵 1 体の不変スナップショット（HP/ATK/SPD を自前で保持）。</summary>
     public required EnemyState Enemy { get; init; }
 
+    /// <summary>
+    /// 次ターンに敵が放つ攻撃の予告（先読み。常に非 null）。この静止画の「未来」を
+    /// 1 つだけ内包し、UI はこれを読んで攻撃予告バナーや危険エリアの赤枠脈動を描く。
+    /// CreateInitial が初手を、ResolveTurn が各ターン解決後に次手を決定論的にロールして
+    /// 封入する。決着済みスナップショットでは直前の予告を据え置く（次ターンは無いため）。
+    /// </summary>
+    public required AttackIntent NextEnemyIntent { get; init; }
+
     /// <summary>これまでに解決したターン数（初期 0、ResolveTurn ごとに +1）。</summary>
     public required int TurnNumber { get; init; }
 

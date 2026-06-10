@@ -782,7 +782,7 @@ public partial class ChronicleGlobal : Godot.Node
             // この戦闘専用の独立した乱数ストリームを（再）シードする。
             _battleRng = battleSeed is { } seed ? new Random(seed) : new Random(_rng.Next());
 
-            snapshot = BattleResolver.CreateInitial(CurrentFormation, BattalionRoster, enemy);
+            snapshot = BattleResolver.CreateInitial(CurrentFormation, BattalionRoster, enemy, _battleRng);
             CurrentBattle = snapshot;
         }
 
