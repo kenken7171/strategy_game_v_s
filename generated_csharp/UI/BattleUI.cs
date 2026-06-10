@@ -118,6 +118,13 @@ public partial class BattleUI : Godot.Control
     private Button? _commandCounterClockwiseButton;
     private Button? _endButton;
 
+    // ─── 戦果決算スクリーン（決着時に前面展開するモーダル / 無状態の従属ノード） ──
+    //  ★ 案A の規律: 決着後 EndBattle で LastBattleSpoils を確定したら、AdvancePhase を
+    //    即時には呼ばず本モーダルを前面展開する。プレイヤーが「次代へ（OK）」を押した
+    //    瞬間のハンドラ（OnSpoilsConfirmed）で初めて AdvancePhase を駆動し、世代交代の
+    //    消滅副作用（完全ロストの掃き出し）の前に戦果と死者を安全に提示しきる。
+    private BattleSpoilsScreen? _spoilsScreen;
+
     // ─── 敵攻撃予告バナー（BuildUI で 1 度だけ生成し、毎描画で中身だけ書き換える） ──
 
     private VBoxContainer? _intentBanner;
@@ -150,6 +157,8 @@ public partial class BattleUI : Godot.Control
     {
         // 退場時も生存中の脈動 Tween を必ず一掃する（リーク防止規律）。
         KillDangerPulses();
+        // 決算モーダルが前面展開中のまま退場する場合に備え、購読を解いて確実に解放する。
+        DismissSpoilsScreen();
         UnsubscribeSignals();
     }
 
@@ -574,26 +583,32 @@ public partial class BattleUI : Godot.Control
     }
 
     /// <summary>
-    /// 戦闘終了 → 拠点への帰還（ゲームループの結節点）。
+    /// 戦闘終了 → 戦果決算の提示 → 拠点への帰還（ゲームループの結節点・案A）。
     ///
-    /// ★ ループ 1 周の閉塞:
+    /// ★ 案A の規律（決算確認後に AdvancePhase を呼ぶ）:
     ///   まず EndBattle で戦闘後の参加者複製（戦死・成長・装備変化）を正本ロスタへ
-    ///   書き戻し、戦果決算（LastBattleSpoils）を確定して非戦闘状態へ戻す。続いて
-    ///   「勝敗が確定（BattalionVictory / BattalionDefeat）」かつ「現在フェーズが Battle」
-    ///   のときだけ AdvancePhase を物理的に連結して呼び、Battle → Chronicle へ前進させる。
-    ///   この遷移を引き金に ChronicleGlobal 内部（_stateLock 下）で AdvanceGenerationLocked
-    ///   が芋づる式に駆動し、加齢 → 完全ロストの最終仕分け → 盤面の自動掃き出し → 収入 →
-    ///   次世代の予言再生成までが「一連の単方向の因果」としてノンストップで走る。
+    ///   書き戻し、戦果決算（LastBattleSpoils）を確定して非戦闘状態へ戻す。⚠️ここでは
+    ///   まだ AdvancePhase を呼ばない。「勝敗が確定（BattalionVictory / BattalionDefeat）」
+    ///   かつ「現在フェーズが Battle」のときは、戦果決算スクリーン（BattleSpoilsScreen）を
+    ///   前面展開してプレイヤーに死者と戦果を提示する。AdvancePhase は決算スクリーンの
+    ///   「次代へ（OK）」ボタン押下ハンドラ（OnSpoilsConfirmed）で初めて駆動する。
+    ///
+    /// ★ なぜ決算を AdvancePhase の前に挟むのか:
+    ///   AdvancePhase → AdvanceGenerationLocked は加齢 → 完全ロストの最終仕分け →
+    ///   盤面の自動掃き出し（消滅副作用）を芋づる式に起こす。死者を含む戦果は、その
+    ///   消滅副作用が走る前に確定済みの LastBattleSpoils から読み取って提示しきる必要が
+    ///   ある。決算 → 確認 → AdvancePhase の順序が、死者の名前解決と戦果提示を保証する。
     ///
     /// ★ 撤退（未決着）との区別:
     ///   まだ決着していない（Ongoing）状態での終了は「途中撤退」とみなし、戦闘状態の
-    ///   クリアだけに留めてフェーズは進めない（年送り・世代交代を起こさない）。
+    ///   クリアだけに留めて決算も提示せずフェーズも進めない（年送り・世代交代を起こさない）。
     ///
-    /// ★ 順序の意味:
-    ///   EndBattle が _stateLock を取得・解放して BattleChanged を発火し終えた後で
-    ///   AdvancePhase を呼ぶため、ロックは入れ子にならず参照デッドロックは生じない。
-    ///   また「書き戻し（ロスタ正本化）→ AdvancePhase（完全ロスト仕分け）」の順序により、
-    ///   戦闘死マーク済みのロスタを世代交代が正しく掃き出せる因果順を保証する。
+    /// ★ Tween ライフサイクルの安全（脈動リーク防止）:
+    ///   EndBattle は _stateLock を取得・解放した後 BattleChanged を同期発火する。これを
+    ///   受けて RenderAll が走り、その【冒頭】の KillDangerPulses が危険スロット赤枠の
+    ///   脈動 Tween を全 Kill する。したがって決算モーダルを前面展開する時点で盤面は
+    ///   既に脈動クリーンであり、以後 AdvancePhase で画面を切り替えてもゾンビ Tween は
+    ///   残らない。ロックも入れ子にならず参照デッドロックは生じない。
     /// </summary>
     private void OnEndPressed()
     {
@@ -608,16 +623,70 @@ public partial class BattleUI : Godot.Control
         };
         AppendLogLine($"戦闘終了: {outcomeText}", "battle-log-end");
 
-        // 勝敗が確定した戦闘のみ、拠点（Chronicle）へフェーズを前進させて世代交代を駆動する。
-        // 現在フェーズが Battle であることを併せて確認し、非戦闘フェーズからの誤前進を防ぐ。
+        // 勝敗が確定した戦闘のみ戦果決算を前面展開する。現在フェーズが Battle であることを
+        // 併せて確認し、非戦闘フェーズからの誤起動を防ぐ。AdvancePhase はここでは呼ばない。
         var isConcluded = outcome is BattleOutcome.BattalionVictory or BattleOutcome.BattalionDefeat;
         if (isConcluded && _chronicleGlobal.CurrentPhase == GamePhase.Battle)
         {
-            var nextPhase = _chronicleGlobal.AdvancePhase();
-            AppendLogLine(
-                $"拠点へ帰還: フェーズを {nextPhase} へ前進（世代交代を適用）",
-                "battle-log-return-to-base");
+            ShowSpoilsScreen();
         }
+    }
+
+    /// <summary>
+    /// 戦果決算スクリーンを前面展開する（案A の心臓部）。
+    ///
+    /// 無状態の BattleSpoilsScreen を新規生成して子に加える。スクリーンは
+    /// ChronicleGlobal.LastBattleSpoils を一方向に読むだけで自分では状態を持たない。
+    /// 多重起動・前回モーダルの取り残しを避けるため、生存中の旧モーダルがあれば先に
+    /// 確実に解放してから展開する。
+    /// </summary>
+    private void ShowSpoilsScreen()
+    {
+        // 旧モーダルが取り残されていれば購読を解いて解放（多重展開・リーク防止）。
+        DismissSpoilsScreen();
+
+        var screen = new BattleSpoilsScreen();
+        screen.Confirmed += OnSpoilsConfirmed;
+        _spoilsScreen = screen;
+        AddChild(screen);
+    }
+
+    /// <summary>
+    /// 決算スクリーン「次代へ（OK）」押下ハンドラ。ここで初めて AdvancePhase を駆動し、
+    /// Battle → Chronicle へ正規遷移させて世代交代（完全ロストの掃き出し・加齢・収入・
+    /// 次世代予言）を一連の単方向の因果としてノンストップで走らせる。
+    ///
+    /// スクリーンは Confirmed を高々 1 度しか発火しない（自身で QueueFree 済み）。本体側も
+    /// CurrentPhase == Battle を再確認してから前進し、二重前進を二重に防ぐ。
+    /// </summary>
+    private void OnSpoilsConfirmed()
+    {
+        // スクリーンは自身で QueueFree 済み。参照だけ手放す（購読も同時に失効する）。
+        _spoilsScreen = null;
+
+        if (_chronicleGlobal is null) return;
+        if (_chronicleGlobal.CurrentPhase != GamePhase.Battle) return;
+
+        var nextPhase = _chronicleGlobal.AdvancePhase();
+        AppendLogLine(
+            $"拠点へ帰還: フェーズを {nextPhase} へ前進（世代交代を適用）",
+            "battle-log-return-to-base");
+    }
+
+    /// <summary>
+    /// 前面展開中の決算モーダルがあれば購読を解いて確実に解放する。退場時および
+    /// 新規展開の直前に呼び、ゾンビノード・購読の二重接続・リークを根絶する。
+    /// </summary>
+    private void DismissSpoilsScreen()
+    {
+        if (_spoilsScreen is null) return;
+
+        if (GodotObject.IsInstanceValid(_spoilsScreen))
+        {
+            _spoilsScreen.Confirmed -= OnSpoilsConfirmed;
+            _spoilsScreen.QueueFree();
+        }
+        _spoilsScreen = null;
     }
 
     // ─── コマンド可否（戦闘状態から導出。UI はキャッシュしない） ──────────
