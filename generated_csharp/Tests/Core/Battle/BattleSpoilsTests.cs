@@ -356,4 +356,82 @@ public class BattleSpoilsTests
         Assert.Equal(2, final[id].Level);
         Assert.Equal(3, final[id].MainEquipment!.Level);
     }
+
+    // ─── 9. 統合台帳（遅延算出: 戦闘中の成長 + とどめの成長を 1 枚へ合算） ─────
+    //
+    //  ChronicleGlobal は決算の確定を EndBattle ではなく FinalizeBattleSpoils へ
+    //  遅延させ、「開戦時の参加者静止画」と「とどめ完了後の正本ロスタ」を突合する。
+    //  これにより 1 枚の台帳が「ターン制戦闘の成長」と「とどめ(ResolveLastHit)の
+    //  成長/喪失」の両方を含む。以下はその純粋層の算術（FromBattle が終了側に
+    //  post-last-hit ロスタを受け取れば両フェーズを合算する）を検証する。
+    //  終了側辞書は FinalizeBattleSpoils と同じく ToImmutableDictionary(u => u.Id)
+    //  相当（テストでは Combatants ヘルパ）で組み立てる。
+
+    [Fact]
+    public void FromBattle_IntegratedLedger_SumsBattleThenLastHitGrowth()
+    {
+        // 開戦 Lv1 → 戦闘中に Lv2 → とどめで Lv3。開戦時 vs とどめ完了後を突合すると、
+        // 両フェーズぶんが 1 件の昇級（1 → 3）として 1 枚の台帳へ合算される。
+        var id = Guid.NewGuid();
+        var opening = MakeUnit(id);                          // Lv1（開戦時の基準点）
+        var afterBattle = opening with { Level = 2 };        // 戦闘中の成長（EndBattle 書き戻し）
+        var afterLastHit = afterBattle with { Level = 3 };   // とどめの成長（ResolveLastHit）
+
+        // FinalizeBattleSpoils は「開戦時」と「とどめ完了後ロスタ」を突合する。
+        var spoils = BattleSpoils.FromBattle(
+            Combatants(opening), Combatants(afterLastHit), BattleOutcome.BattalionVictory);
+
+        var gain = Assert.Single(spoils.UnitLevelGains);
+        Assert.Equal(id, gain.UnitId);
+        Assert.Equal(1, gain.FromLevel);   // 開戦時の素のレベル
+        Assert.Equal(3, gain.ToLevel);     // 戦闘中 + とどめ の到達レベル
+    }
+
+    [Fact]
+    public void FromBattle_IntegratedLedger_CapturesLastHitOnlyGrowth()
+    {
+        // ★ 遅延算出の核心（退行防止）:
+        //   戦闘中は無成長で、とどめだけで Lv2 → Lv3 へ昇級したケース。
+        //   旧実装（EndBattle 時に「開戦時 vs 戦闘後 combatants」を突合）は、とどめが
+        //   まだ走っていないため昇級を取りこぼす（Lv2 == Lv2 で差分ゼロ）。
+        //   遅延算出（開戦時 vs とどめ完了後ロスタ）なら、とどめ単独の成長も確実に拾う。
+        var id = Guid.NewGuid();
+        var opening = MakeUnit(id) with { Level = 2 };       // 開戦 Lv2
+        var afterBattle = opening with { };                  // 戦闘中は無成長（Lv2 のまま）
+        var afterLastHit = afterBattle with { Level = 3 };   // とどめで Lv2 → Lv3
+
+        // 旧来の突合相手（戦闘後 combatants）では昇級は現れない（取りこぼしの証左）。
+        var legacy = BattleSpoils.FromBattle(
+            Combatants(opening), Combatants(afterBattle), BattleOutcome.BattalionVictory);
+        Assert.Empty(legacy.UnitLevelGains);
+
+        // 統合台帳（とどめ完了後ロスタ）なら、とどめ単独の昇級を確実に台帳へ載せる。
+        var ledger = BattleSpoils.FromBattle(
+            Combatants(opening), Combatants(afterLastHit), BattleOutcome.BattalionVictory);
+
+        var gain = Assert.Single(ledger.UnitLevelGains);
+        Assert.Equal(id, gain.UnitId);
+        Assert.Equal(2, gain.FromLevel);
+        Assert.Equal(3, gain.ToLevel);
+        Assert.True(ledger.HasAnySpoils);
+    }
+
+    [Fact]
+    public void FromBattle_IntegratedLedger_CapturesLastHitEquipmentEvolution()
+    {
+        // とどめによる装備進化（Lv1 → Lv2）も、開戦時 vs とどめ完了後の突合で 1 枚へ載る。
+        var id = Guid.NewGuid();
+        var opening = MakeUnit(id) with { MainEquipment = MakeEquipment(ItemId.SwordKnight, 1) };
+        var afterBattle = opening with { };                  // 戦闘中は装備不変
+        var afterLastHit = afterBattle with { MainEquipment = MakeEquipment(ItemId.SwordKnight, 2) };
+
+        var spoils = BattleSpoils.FromBattle(
+            Combatants(opening), Combatants(afterLastHit), BattleOutcome.BattalionVictory);
+
+        var evolution = Assert.Single(spoils.EquipmentEvolutions);
+        Assert.Equal(id, evolution.UnitId);
+        Assert.Equal(ItemId.SwordKnight, evolution.ItemId);
+        Assert.Equal(1, evolution.FromLevel);
+        Assert.Equal(2, evolution.ToLevel);
+    }
 }

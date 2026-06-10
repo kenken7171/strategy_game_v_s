@@ -170,10 +170,13 @@ public partial class ChronicleGlobal : Godot.Node
     public BattleSnapshot? CurrentBattle { get; private set; }
 
     /// <summary>
-    /// 直近の戦闘の戦果決算（開戦時と終了時の参加者静止画を Guid 突合した不変差分）。
-    /// 非戦闘時・初期状態は <see cref="BattleSpoils.Empty"/>。<see cref="EndBattle"/> の
-    /// ロック内で確定し、以後は読み取り専用。次段の戦果決算スクリーン（無状態 UI）が
-    /// これを読み取るだけの公開スナップショットになる（戦果のロスタ正本化とは関心分離）。
+    /// 直近の戦闘の戦果決算（統合台帳: 開戦時と「とどめ完了後のロスタ」を Guid 突合した
+    /// 不変差分）。非戦闘時・初期状態は <see cref="BattleSpoils.Empty"/>。
+    /// <see cref="FinalizeBattleSpoils"/> のロック内で確定し、以後は読み取り専用。
+    /// ターン制戦闘の成長と、とどめ（<see cref="ResolveLastHit"/>）の成長/喪失を 1 枚へ
+    /// 合算するため、確定は <see cref="EndBattle"/> ではなくとどめ完了後まで遅延する。
+    /// 次段の戦果決算スクリーン（無状態 UI）がこれを読み取るだけの公開スナップショットに
+    /// なる（戦果のロスタ正本化とは関心分離）。
     /// </summary>
     public BattleSpoils LastBattleSpoils { get; private set; } = BattleSpoils.Empty;
 
@@ -199,14 +202,26 @@ public partial class ChronicleGlobal : Godot.Node
 
     /// <summary>
     /// 開戦時の参加者静止画（Id → Unit）。<see cref="StartBattle"/> で捕捉し、
-    /// <see cref="EndBattle"/> で終了時の <see cref="BattleSnapshot.Combatants"/> と
-    /// Guid 突合して <see cref="LastBattleSpoils"/> を算出するための「開戦時の基準点」。
-    /// 戦果決算は「開戦時 → 終了時」の差分なので、開戦の瞬間を別途保持する必要がある
-    /// （CurrentBattle は最新ターンへ毎回差し替わり、開戦時の値を失うため）。常に
-    /// <see cref="_stateLock"/> 内でのみ読み書きする。★ セーブには含めない（一過性）。
+    /// <see cref="FinalizeBattleSpoils"/> で「とどめ完了後の正本ロスタ」と Guid 突合して
+    /// <see cref="LastBattleSpoils"/>（統合台帳）を算出するための「開戦時の基準点」。
+    /// 戦果決算は「開戦時 → とどめ完了後」の差分なので、開戦の瞬間を別途保持する必要が
+    /// ある（CurrentBattle は最新ターンへ毎回差し替わり、開戦時の値を失うため）。
+    /// <see cref="EndBattle"/> を越えて生かし、<see cref="FinalizeBattleSpoils"/> 確定時に
+    /// 解放する。常に <see cref="_stateLock"/> 内でのみ読み書きする。
+    /// ★ セーブには含めない（一過性）。
     /// </summary>
     private ImmutableDictionary<Guid, Unit> _battleOpeningCombatants =
         ImmutableDictionary<Guid, Unit>.Empty;
+
+    /// <summary>
+    /// <see cref="EndBattle"/> 時点で確定した決着状態を、<see cref="FinalizeBattleSpoils"/>
+    /// まで保留しておくための値。戦果決算（統合台帳）は「ターン制戦闘 → とどめ
+    /// （<see cref="ResolveLastHit"/>）」の両成長を 1 枚に合算するため、決算の確定を
+    /// とどめ完了まで遅延させる。その際 Outcome は戦闘終了の瞬間に凍結しておく必要が
+    /// あるので、ここで EndBattle 時の結末を退避する。常に <see cref="_stateLock"/> 内
+    /// でのみ読み書きする。★ セーブには含めない（一過性）。
+    /// </summary>
+    private BattleOutcome _lastBattleOutcome = BattleOutcome.Ongoing;
 
     /// <summary>
     /// 状態 (3 プロパティ) を一括差し替えする際の排他ロック。Godot のゲーム
@@ -287,6 +302,7 @@ public partial class ChronicleGlobal : Godot.Node
             _battleRng = new Random();                  // 戦闘乱数は StartBattle で再シード
             _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty; // 戦果基準点も更地
+            _lastBattleOutcome = BattleOutcome.Ongoing; // 退避中の決着状態も更地
             LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
             IsInitialized = true;
         }
@@ -872,12 +888,12 @@ public partial class ChronicleGlobal : Godot.Node
 
             outcome = CurrentBattle.Outcome;
 
-            // 戦果決算（開戦時 vs 終了時の Guid 突合）を、ロスタ書き戻しの直前に確定する。
-            //   - ここで両静止画はまだ手元にある（_battleOpeningCombatants と CurrentBattle）。
-            //   - 純粋ファクトリ BattleSpoils.FromBattle に委譲し、本クラスは保持だけ担う。
-            //   - 書き戻し（ロスタ正本化）とは関心分離: あちらは状態確定、こちらは差分提示。
-            LastBattleSpoils = BattleSpoils.FromBattle(
-                _battleOpeningCombatants, CurrentBattle.Combatants, outcome);
+            // ★ 戦果決算（統合台帳）はここでは確定しない。決算は「ターン制戦闘の成長」と
+            //   「とどめ（ResolveLastHit）の成長/喪失」を 1 枚に合算する統合台帳であり、
+            //   とどめは EndBattle の後に解決されるため、決算の確定は FinalizeBattleSpoils
+            //   へ遅延させる。ここでは決着状態だけを凍結して退避し、開戦時の基準点
+            //   （_battleOpeningCombatants）はとどめ完了まで生かす。
+            _lastBattleOutcome = outcome;
 
             // 戦闘後の参加者複製（戦死・成長・装備変化込み）を正本ロスタへ書き戻す。
             var combatants = CurrentBattle.Combatants;
@@ -900,6 +916,47 @@ public partial class ChronicleGlobal : Godot.Node
         if (rosterChanged) SafeEmit(SignalRosterChanged);
         SafeEmit(SignalBattleChanged);
         return outcome;
+    }
+
+    /// <summary>
+    /// 戦果決算（統合台帳）を確定する。開戦時の参加者静止画
+    /// （<see cref="_battleOpeningCombatants"/>）と「現在の正本ロスタ」を Guid 突合し、
+    /// この 1 戦闘で起きた全変化を 1 枚へ集約して <see cref="LastBattleSpoils"/> へ確定する。
+    ///
+    /// ★ 呼ぶタイミング（統合台帳の要）:
+    ///   <see cref="EndBattle"/>（ターン制戦闘の成長/戦死をロスタへ書き戻し）→
+    ///   <see cref="ResolveLastHit"/>（とどめの昇級/装備進化/Lv5 破壊/強奪をロスタへ反映）
+    ///   の後に呼ぶ。こうすると現在のロスタには「戦闘中の成長」も「とどめの成長/喪失」も
+    ///   両方が刻まれており、開戦時との差分が両者を合算した 1 枚の台帳になる。
+    ///
+    /// 副作用と冪等性:
+    ///   - 確定後、開戦時基準点を解放する（次戦闘の <see cref="StartBattle"/> が再捕捉）。
+    ///   - 基準点が既に空（未戦闘・確定済みの二重呼び出し）なら現在値を保ったまま no-op で
+    ///     返す（ヌル安全フォールバック・画面が落ちない方針）。
+    ///
+    /// 戻り値:
+    ///   - 確定した戦果決算（呼び出し元の無状態 UI がそのまま提示に使える）。
+    ///   - 未初期化・基準点なしの場合は現在の <see cref="LastBattleSpoils"/> をそのまま返す。
+    /// </summary>
+    public BattleSpoils FinalizeBattleSpoils()
+    {
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return LastBattleSpoils;
+
+            // 基準点が無い（未戦闘 or 既に確定済み）なら現在値を維持して no-op。
+            if (_battleOpeningCombatants.IsEmpty) return LastBattleSpoils;
+
+            LastBattleSpoils = BattleSpoils.FromBattle(
+                _battleOpeningCombatants,
+                BattalionRoster.ToImmutableDictionary(unit => unit.Id),
+                _lastBattleOutcome);
+
+            // 統合台帳を確定したので開戦時基準点を解放（次戦闘の StartBattle が再捕捉する）。
+            _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty;
+
+            return LastBattleSpoils;
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════
