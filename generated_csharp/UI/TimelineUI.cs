@@ -38,7 +38,9 @@
 // =============================================================================
 
 using System;
+using System.Collections.Immutable;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Timeline;
 using Godot;
@@ -54,6 +56,12 @@ public partial class TimelineUI : Godot.Control
 
     private const int ProphecyOptionCount = 3;
 
+    /// <summary>data-testid を載せる Godot メタキー（instructions.md の testid 規約に準拠）。</summary>
+    private const string TestIdMetaKey = "data_testid";
+
+    /// <summary>年代記ナレーションに一度に表示する最大行数（古い行はスクロールで辿れる）。</summary>
+    private const int MaxNarrationLines = 60;
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -64,6 +72,9 @@ public partial class TimelineUI : Godot.Control
     private Label? _turnLabel;
     private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
+
+    /// <summary>年代記ナレーションの各行を収める器（無状態：毎回 SoT から丸ごと再描画）。</summary>
+    private VBoxContainer? _narrationLinesBox;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -87,28 +98,34 @@ public partial class TimelineUI : Godot.Control
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 16);
+        root.SetMeta(TestIdMetaKey, "chronicle-timeline-root");
         AddChild(root);
 
         // ── ヘッダー：タイトル + 残高 + ターン番号 ──────────────────
         var header = new HBoxContainer();
         header.AddThemeConstantOverride("separation", 24);
+        header.SetMeta(TestIdMetaKey, "chronicle-timeline-header");
         root.AddChild(header);
 
         var titleLabel = new Label
         {
             Text = "📖 予言タイムライン",
         };
+        titleLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-title");
         header.AddChild(titleLabel);
 
         _balanceLabel = new Label();
+        _balanceLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-balance");
         header.AddChild(_balanceLabel);
 
         _turnLabel = new Label();
+        _turnLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-turn");
         header.AddChild(_turnLabel);
 
         // ── ボディ：3 予言ボタン ───────────────────────────────────
         var body = new HBoxContainer();
         body.AddThemeConstantOverride("separation", 12);
+        body.SetMeta(TestIdMetaKey, "chronicle-prophecy-body");
         root.AddChild(body);
 
         for (int i = 0; i < ProphecyOptionCount; i++)
@@ -117,11 +134,13 @@ public partial class TimelineUI : Godot.Control
 
             var card = new VBoxContainer();
             card.AddThemeConstantOverride("separation", 4);
+            card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
 
             var btn = new Button
             {
                 CustomMinimumSize = new Vector2(220, 120),
             };
+            btn.SetMeta(TestIdMetaKey, $"chronicle-prophecy-button-{captured}");
             btn.Pressed += () => OnProphecyButtonPressed(captured);
             card.AddChild(btn);
 
@@ -129,12 +148,52 @@ public partial class TimelineUI : Godot.Control
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
+            detail.SetMeta(TestIdMetaKey, $"chronicle-prophecy-detail-{captured}");
             card.AddChild(detail);
 
             _prophecyButtons[i] = btn;
             _prophecyDetailLabels[i] = detail;
             body.AddChild(card);
         }
+
+        BuildNarrationPanel(root);
+    }
+
+    /// <summary>
+    /// 旅団年代記（引退 / 戦死 / 昇級のナレーション）を表示する無状態パネルを構築する。
+    /// ここでは器（タイトル・スクロール領域・行コンテナ）だけを組み、各行の中身は
+    /// <see cref="RenderNarration"/> が SoT（<see cref="ChronicleGlobal.GetChronicleLog"/>）から
+    /// 丸ごと読み直して毎回再生成する（キャッシュを一切持たない単方向データフロー）。
+    /// </summary>
+    private void BuildNarrationPanel(Control root)
+    {
+        var panel = new VBoxContainer();
+        panel.AddThemeConstantOverride("separation", 6);
+        panel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        panel.SetMeta(TestIdMetaKey, "chronicle-narration-panel");
+        root.AddChild(panel);
+
+        var title = new Label
+        {
+            Text = "📜 旅団年代記",
+        };
+        title.SetMeta(TestIdMetaKey, "chronicle-narration-title");
+        panel.AddChild(title);
+
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(0, 220),
+        };
+        scroll.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        scroll.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        scroll.SetMeta(TestIdMetaKey, "chronicle-narration-scroll");
+        panel.AddChild(scroll);
+
+        _narrationLinesBox = new VBoxContainer();
+        _narrationLinesBox.AddThemeConstantOverride("separation", 2);
+        _narrationLinesBox.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _narrationLinesBox.SetMeta(TestIdMetaKey, "chronicle-narration-lines");
+        scroll.AddChild(_narrationLinesBox);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -165,8 +224,17 @@ public partial class TimelineUI : Godot.Control
     // ─── シグナルハンドラ ─────────────────────────────────────────────────
 
     private void OnEconomyChanged()    => RenderBalance();
-    private void OnTimelineChanged()   => RenderProphecies();
     private void OnStateInitialized()  => RenderAll();
+
+    /// <summary>
+    /// タイムライン更新シグナル。世代交代（Battle→Chronicle）でも必ず発火し、旅団史が
+    /// 伸びるのはこの瞬間だけなので、予言ボタンと年代記ナレーションを併せて再描画する。
+    /// </summary>
+    private void OnTimelineChanged()
+    {
+        RenderProphecies();
+        RenderNarration();
+    }
 
     // ─── 描画 ─────────────────────────────────────────────────────────────
 
@@ -174,6 +242,7 @@ public partial class TimelineUI : Godot.Control
     {
         RenderBalance();
         RenderProphecies();
+        RenderNarration();
     }
 
     private void RenderBalance()
@@ -219,6 +288,86 @@ public partial class TimelineUI : Godot.Control
                 detail.Text = "";
             }
         }
+    }
+
+    /// <summary>
+    /// 旅団年代記（引退 / 戦死 / 昇級のナレーション）を SoT から丸ごと読み直して再描画する。
+    ///
+    /// 無状態・単方向データフローの規律:
+    ///   - ログは一切キャッシュしない。毎回 <see cref="ChronicleGlobal.GetChronicleLog"/> から
+    ///     完全不変スナップショットを取得し、行コンテナを全消去してから組み直す。
+    ///   - 行ノードは素朴な <see cref="Label"/> のみ（Tween・タイマー・購読を一切持たない）ため、
+    ///     QueueFree による全消去でゾンビ Tween やリーク購読が残らない。
+    ///   - 新しい出来事ほど上に来るよう逆順（新 → 旧）で並べ、直近の歴史を最初に見せる。
+    ///   - 表示名・ジョブ名は localization 経由で解決し、日本語データ名をハードコードしない
+    ///     （ナレーションの定型文＝クロームは設計憲法上ハードコード可）。
+    /// </summary>
+    private void RenderNarration()
+    {
+        if (_narrationLinesBox is null) return;
+
+        // 既存行を全消去（素朴な Label のみなので QueueFree で安全に破棄できる）。
+        foreach (var child in _narrationLinesBox.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        var log = _chronicleGlobal?.GetChronicleLog() ?? ImmutableArray<ChronicleLogEntry>.Empty;
+
+        // 無履歴: 空状態ラベルを 1 つだけ置く（testid 付与・突合可能に）。
+        if (log.IsEmpty)
+        {
+            var empty = new Label
+            {
+                Text = "（旅団の歴史はまだ刻まれていない）",
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            empty.SetMeta(TestIdMetaKey, "chronicle-log-empty");
+            _narrationLinesBox.AddChild(empty);
+            return;
+        }
+
+        // 新しい出来事ほど上に来るよう逆順で描く（直近の歴史を最初に見せる）。
+        // 表示行数の上限を設け、古い行はスクロールではなく単に省略する（描画コスト抑制）。
+        int shown = 0;
+        for (int i = log.Length - 1; i >= 0 && shown < MaxNarrationLines; i--, shown++)
+        {
+            var line = new Label
+            {
+                Text = FormatEntry(log[i]),
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            };
+            line.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            // testid は「新しい行ほど小さい番号」で安定させる（0 = 最新）。
+            line.SetMeta(TestIdMetaKey, $"chronicle-log-line-{shown}");
+            _narrationLinesBox.AddChild(line);
+        }
+    }
+
+    /// <summary>
+    /// 1 件の年代記イベントを 1 行のナレーション文へ整形する。ユニット名・ジョブ名は
+    /// localization 経由（<see cref="ChronicleGlobal.ResolveDisplayName"/> /
+    /// <see cref="ChronicleGlobal.ResolveJobName"/>）で解決し、日本語データ名をハードコードしない。
+    /// 解決器が無い（テスト等で未注入）場合は ASCII キー / enum 名へ安全にフォールバックする。
+    /// </summary>
+    private string FormatEntry(ChronicleLogEntry entry)
+    {
+        var name = _chronicleGlobal?.ResolveDisplayName(entry.UnitFirstNameKey, entry.UnitLastNameKey)
+                   ?? entry.UnitFirstNameKey;
+        var jobName = _chronicleGlobal?.ResolveJobName(entry.Job)
+                      ?? entry.Job.ToString();
+
+        return entry.Kind switch
+        {
+            ChronicleEventKind.Retired =>
+                $"📜 〈ターン{entry.Generation}〉{name}（{jobName}・{entry.Age}歳）は天寿を全うし、静かに旅団を去った。",
+            ChronicleEventKind.KilledInAction =>
+                $"⚔️ 〈ターン{entry.Generation}〉{name}（{jobName}・{entry.Age}歳）は戦野に斃れ、その名は伝説となった。",
+            ChronicleEventKind.LevelGained =>
+                $"⬆️ 〈ターン{entry.Generation}〉{name}（{jobName}）は研鑽の末、Lv{entry.FromLevel} から Lv{entry.ToLevel} へと成長した。",
+            _ =>
+                $"・〈ターン{entry.Generation}〉{name}（{jobName}）",
+        };
     }
 
     // ─── ボタンアクション ─────────────────────────────────────────────────

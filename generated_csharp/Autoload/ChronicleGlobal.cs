@@ -45,6 +45,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.Battle;
+using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
@@ -180,6 +181,30 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     public BattleSpoils LastBattleSpoils { get; private set; } = BattleSpoils.Empty;
 
+    /// <summary>
+    /// 旅団史（年代記ナレーション）の累積ログ。世代交代（<see cref="AdvanceGenerationLocked"/>）の
+    /// たびに、その世代の損失（引退 / 戦死）と成長（昇級）を不変イベントとして追記していく。
+    /// 完全不変（ImmutableArray）ゆえ参照読み取りはアトミックで安全。書き込みは
+    /// <see cref="RecordGenerationChronicleLocked"/> 経由のみ（常に <see cref="_stateLock"/> 内）。
+    /// 外部へは <see cref="GetChronicleLog"/> がロック下のスナップショットとして開放する。
+    /// ★ セーブには含めない（ロード再開時は空から再蓄積する）。
+    /// </summary>
+    private ImmutableArray<ChronicleLogEntry> _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty;
+
+    /// <summary>
+    /// 旅団史（年代記ナレーション）の現在スナップショットを <see cref="_stateLock"/> 下で安全に
+    /// 読み出す。返すのは完全不変の <see cref="ImmutableArray{T}"/>（古い→新しいの時系列順）で、
+    /// UI 層はこれを丸ごと読んでナレーション領域を無状態に再描画する（単方向データフロー）。
+    /// 未初期化・無履歴でも空配列を返すヌル安全 API。
+    /// </summary>
+    public ImmutableArray<ChronicleLogEntry> GetChronicleLog()
+    {
+        lock (_stateLock)
+        {
+            return _chronicleLog;
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  注入可能フィールド + スレッド安全用ロック
     // ════════════════════════════════════════════════════════════════════════
@@ -304,6 +329,7 @@ public partial class ChronicleGlobal : Godot.Node
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty; // 戦果基準点も更地
             _lastBattleOutcome = BattleOutcome.Ongoing; // 退避中の決着状態も更地
             LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
+            _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史も白紙から
             IsInitialized = true;
         }
 
@@ -626,6 +652,12 @@ public partial class ChronicleGlobal : Godot.Node
         // 1. 加齢 → 完全ロストの仕分け（純粋層 RosterLifecycle に委譲）。
         //    現役のみを次世代ロスタへ持ち越す（離脱者は不可逆に外れる）。
         var advance = RosterLifecycle.AdvanceGeneration(BattalionRoster, years);
+
+        // 1.5 年代記ナレーション: この世代の損失（引退 / 戦死）と成長（昇級）を不変イベントへ
+        //     写し取り旅団史へ追記する。⚠️ 損失ユニットはこの直後に BattalionRoster から
+        //     不可逆に外れるため、名前キー等を「外れる前」のこのタイミングで確定捕捉する。
+        RecordGenerationChronicleLocked(advance);
+
         BattalionRoster = advance.SurvivingRoster.ToImmutableList();
 
         // 2. ロスタ整合フック: 完全ロストしたユニットの ID を盤面からも掃き出す。
@@ -647,6 +679,50 @@ public partial class ChronicleGlobal : Godot.Node
 
         // 盤面に掃き出しが起きたかを呼び出し側へ返す（FormationChanged 発火の判断材料）。
         return formationChanged;
+    }
+
+    /// <summary>
+    /// この世代の世代交代で起きた損失（引退 / 戦死）と成長（昇級）を、純粋層 <see cref="ChronicleLog"/>
+    /// で不変イベント列へ写し取り、旅団史 <see cref="_chronicleLog"/> へ追記する。
+    /// <see cref="AdvanceGenerationLocked"/> の内部（<see cref="_stateLock"/> 保持中）からのみ呼ばれる。
+    ///
+    /// ★ 呼び出しタイミングの規律:
+    ///   損失ユニットはこの直後に <see cref="BattalionRoster"/> から不可逆に外れるため、
+    ///   <paramref name="advance"/>.DepartedRoster（外れる前の静止画）から名前キー・ジョブ・年齢を
+    ///   その場で確定捕捉する。これにより UI はロスタ実在に依存せず過去の喪失も描ける。
+    ///
+    /// ★ 世代見出しと成長の出所:
+    ///   世代番号はタイムライン前進前の現ターン（<see cref="CurrentTimeline"/>.Turn）を用いる。
+    ///   成長（昇級）は直近の戦闘で確定済みの <see cref="LastBattleSpoils"/>（統合台帳）から拾う。
+    ///   世代交代はちょうど 1 戦闘の決着・決算確定の直後に 1 度だけ走るため、同じ戦果が二重に
+    ///   記録されることはない（戦果と世代交代は 1 : 1 に対応する）。
+    ///
+    /// ★ 昇級者の名前解決:
+    ///   <see cref="LastBattleSpoils"/> は突合キー(UnitId)と前後レベルしか持たないため、生存者と
+    ///   離脱者を併せた Id→Unit の辞書を組んで名前・ジョブを引き当てる（戦闘で育った後に斃れた
+    ///   者の名も解決できるよう両者を含める）。
+    /// </summary>
+    /// <param name="advance">この世代の加齢・仕分け結果（離脱者と生存者を内包）。</param>
+    private void RecordGenerationChronicleLocked(GenerationAdvanceResult advance)
+    {
+        // 世代見出し: タイムライン前進前の現ターン（無ければ防御的に 0）。
+        var generation = CurrentTimeline?.Turn ?? 0;
+
+        // 昇級者の名前解決用に、生存者＋離脱者を Id で引ける辞書を組む。
+        var lookupBuilder = ImmutableDictionary.CreateBuilder<Guid, Unit>();
+        foreach (var unit in advance.SurvivingRoster) lookupBuilder[unit.Id] = unit;
+        foreach (var unit in advance.DepartedRoster)  lookupBuilder[unit.Id] = unit;
+
+        var entries = ChronicleLog.BuildGenerationEntries(
+            generation,
+            advance.DepartedRoster,
+            LastBattleSpoils,
+            lookupBuilder.ToImmutable());
+
+        if (!entries.IsEmpty)
+        {
+            _chronicleLog = _chronicleLog.AddRange(entries);
+        }
     }
 
     /// <summary>
@@ -1228,6 +1304,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle   = null;              // 戦闘は永続化しない（ロード再開は非戦闘状態）
             _battleRng      = new Random();       // 戦闘乱数は次の StartBattle で再シード
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
+            _chronicleLog   = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史は永続化せず空から再蓄積
             IsInitialized   = true;
         }
 
