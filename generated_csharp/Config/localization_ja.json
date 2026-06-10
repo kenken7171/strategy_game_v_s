@@ -186,6 +186,15 @@
     }
   },
 
+  "prophecyKinds": {
+    "_note": "予言タイムライン（TimelineEngine / TimelineUI）で 3 択提示される予言の種類 (ProphecyKind enum) の表示テキスト。icon（先頭の絵文字）と name（日本語ラベル）を分離して保持する。コード側 (TimelineUI.cs) には日本語も絵文字も一切ハードコードせず、enum 名 (ToString) をキーに本セクションから引く。MasterDataNameResolver (Core/Localization) が icon / name を解決し、未登録キーは生キーへフォールバックする。",
+    "RewardPoints":  { "icon": "💰", "name": "報酬獲得" },
+    "Battle":        { "icon": "⚔",  "name": "戦闘発生" },
+    "ScoutReward":   { "icon": "👥", "name": "新人加入" },
+    "EquipmentDrop": { "icon": "📦", "name": "装備入手" },
+    "Rest":          { "icon": "💤", "name": "休息" }
+  },
+
   "names": {
     "_note": "NameGenerator (Core/Naming) が払い出す ASCII ローカライズキーの引き当て先。コード側 (NameCatalog.cs) は一切日本語を持たず、本セクションだけが実テキストの単一の真実 (SoT)。キー命名規約: ファーストネーム=name-{origin}-{gender}-{NNN} / ファミリーネーム=name-family-{origin}-{NNN} / 称号=title-{NNN}（NNN は 3 桁連番）。プール枯渇時の複合キー 'title-NNN@name-...' は表示層が '@' で分解し『称号』＋『名前』を連結する。以下は将来の本翻訳に向けたサンプル初期値（TS 版 data/names.ts 由来）。",
 

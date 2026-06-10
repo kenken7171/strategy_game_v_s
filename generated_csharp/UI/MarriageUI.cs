@@ -347,7 +347,7 @@ public partial class MarriageUI : Godot.Control
                 var row = new HBoxContainer();
                 row.AddChild(new Label
                 {
-                    Text = $"👶 {FormatJob(unit.Job)} (Age {unit.Age} / {AdultAge})",
+                    Text = $"👶 {JobName(unit.Job)} (Age {unit.Age} / {AdultAge})",
                 });
                 _minorChildrenContainer.AddChild(row);
             }
@@ -358,7 +358,7 @@ public partial class MarriageUI : Godot.Control
                 var row = new HBoxContainer();
                 row.AddChild(new Label
                 {
-                    Text = $"🎓 {FormatJob(unit.Job)} (Age {unit.Age})",
+                    Text = $"🎓 {JobName(unit.Job)} (Age {unit.Age})",
                 });
                 var enlistBtn = new Button { Text = "0 pt で正式加入" };
                 var capturedId = unit.Id;
@@ -423,7 +423,7 @@ public partial class MarriageUI : Godot.Control
 
         GD.Print(
             $"[MarriageUI] ⚔ 外様スカウト成立 ({ScoutCost} pt) / " +
-            $"{FormatJob(recruited.Job)} (Age {recruited.Age}) Id={recruited.Id}");
+            $"{JobName(recruited.Job)} (Age {recruited.Age}) Id={recruited.Id}");
         // 残高・父母セレクタ・家系図の再描画はシグナル経由で自動
     }
 
@@ -460,28 +460,24 @@ public partial class MarriageUI : Godot.Control
         }
     }
 
-    private static string FormatUnitDisplay(Unit unit)
+    private string FormatUnitDisplay(Unit unit)
     {
         var equip = unit.MainEquipment is null
             ? "—"
-            : $"{unit.MainEquipment.ItemId} Lv{unit.MainEquipment.Level}";
-        return $"{FormatJob(unit.Job)} Lv{unit.Level} (Age {unit.Age}) / 装備: {equip}";
+            : $"{ItemName(unit.MainEquipment.ItemId)} Lv{unit.MainEquipment.Level}";
+        return $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) / 装備: {equip}";
     }
 
-    // ─── ローカライゼーション補助（TODO: JSON 化の余白） ──────────────────
-    // 将来 localization_ja.json から jobs.{JobId}.name を引く LocalizationService
-    // に置き換える。
+    // ─── ローカライゼーション ─────────────────────────────────────────────
+    // ジョブ名・アイテム名の表示テキストは ChronicleGlobal.ResolveJobName /
+    // ResolveItemName（内部で純粋層 MasterDataNameResolver が localization_ja.json の
+    // jobs.{JobId}.name / items.{ItemId}.name を引く）に委譲する。本ファイルには
+    // 日本語・絵文字を一切ハードコードしない（設計憲法 ①）。Autoload 未取得時は
+    // enum 名（ToString）へフォールバックして画面を落とさない。
 
-    private static string FormatJob(JobId job) => job switch
-    {
-        JobId.IronWallKnight => "鉄壁騎士",
-        JobId.HeavyInfantry  => "重装歩兵",
-        JobId.StandardBearer => "旗手",
-        JobId.Tactician      => "戦術官",
-        JobId.Medic          => "衛生兵",
-        JobId.Sniper         => "狙撃兵",
-        JobId.Sorcerer       => "呪術師",
-        JobId.Scout          => "斥候",
-        _ => job.ToString(),
-    };
+    private string JobName(JobId job)
+        => _chronicleGlobal?.ResolveJobName(job) ?? job.ToString();
+
+    private string ItemName(ItemId item)
+        => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();
 }

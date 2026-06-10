@@ -31,8 +31,9 @@
 //  クリーン設計:
 //    - 略称 (BDF/SDF/AB/HL) 完全未使用
 //    - 状態は ChronicleGlobal から読むだけ、保持しない (SoT 違反防止)
-//    - 日本語ラベルは localization_ja.json から引く設計の余白として、
-//      FormatProphecyKind / FormatBalance 等のヘルパーに集約 (TODO 化)
+//    - 予言種別のアイコン・表示名は ChronicleGlobal.ResolveProphecyKindIcon /
+//      ResolveProphecyKindName 経由で localization_ja.json から解決（日本語・絵文字を
+//      本ファイルへ一切ハードコードしない／設計憲法 ①）
 //    - メモリリーク防止: _ExitTree で全シグナルを購読解除
 // =============================================================================
 
@@ -206,8 +207,8 @@ public partial class TimelineUI : Godot.Control
                 var p = options[i];
                 btn.Disabled = false;
                 btn.Text =
-                    $"{FormatProphecyKindIcon(p.Kind)}\n" +
-                    $"{FormatProphecyKindLabel(p.Kind)}\n" +
+                    $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)}\n" +
+                    $"{_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
                     $"値: {p.Value}";
                 detail.Text = $"⏳ {p.SkipYears} 年経過";
             }
@@ -238,27 +239,9 @@ public partial class TimelineUI : Godot.Control
         }
     }
 
-    // ─── ローカライゼーション補助（TODO: JSON 化の余白） ──────────────────
-    // 将来 localization_ja.json をロードする LocalizationService を作成したら、
-    // 以下のヘルパーは LocalizationService.Get(key) に置き換える。
-
-    private static string FormatProphecyKindLabel(ProphecyKind kind) => kind switch
-    {
-        ProphecyKind.RewardPoints  => "報酬獲得",
-        ProphecyKind.Battle        => "戦闘発生",
-        ProphecyKind.ScoutReward   => "新人加入",
-        ProphecyKind.EquipmentDrop => "装備入手",
-        ProphecyKind.Rest          => "休息",
-        _ => kind.ToString(),
-    };
-
-    private static string FormatProphecyKindIcon(ProphecyKind kind) => kind switch
-    {
-        ProphecyKind.RewardPoints  => "💰",
-        ProphecyKind.Battle        => "⚔",
-        ProphecyKind.ScoutReward   => "👥",
-        ProphecyKind.EquipmentDrop => "📦",
-        ProphecyKind.Rest          => "💤",
-        _ => "❓",
-    };
+    // ─── ローカライゼーション ─────────────────────────────────────────────
+    // 予言種別のアイコン・表示名は ChronicleGlobal.ResolveProphecyKindIcon /
+    // ResolveProphecyKindName（内部で純粋層 MasterDataNameResolver が
+    // localization_ja.json の prophecyKinds セクションを引く）に委譲する。
+    // 本ファイルには日本語・絵文字を一切ハードコードしない（設計憲法 ①）。
 }

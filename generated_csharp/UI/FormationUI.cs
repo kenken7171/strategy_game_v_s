@@ -152,26 +152,14 @@ public partial class FormationUI : Godot.Control
             {
                 Text =
                     $"・{displayName}  " +
-                    $"[{FormatJob(unit.Job)}]  Lv{unit.Level}  Age {unit.Age}  ({eligibility})",
+                    $"[{_chronicleGlobal.ResolveJobName(unit.Job)}]  Lv{unit.Level}  Age {unit.Age}  ({eligibility})",
             };
             _rosterContainer.AddChild(row);
         }
     }
 
-    // ─── ローカライゼーション補助（TODO: JSON 化の余白） ──────────────────
-    // 将来 localization_ja.json の jobs.{JobId}.name を引く LocalizationService に
-    // 置き換える。現状は他 UI（MarriageUI / BattleResultUI）と同じ変換規約に揃える。
-
-    private static string FormatJob(JobId job) => job switch
-    {
-        JobId.IronWallKnight => "鉄壁騎士",
-        JobId.HeavyInfantry  => "重装歩兵",
-        JobId.StandardBearer => "旗手",
-        JobId.Tactician      => "戦術官",
-        JobId.Medic          => "衛生兵",
-        JobId.Sniper         => "狙撃兵",
-        JobId.Sorcerer       => "呪術師",
-        JobId.Scout          => "斥候",
-        _ => job.ToString(),
-    };
+    // ─── ローカライゼーション ─────────────────────────────────────────────
+    // ジョブの表示名は ChronicleGlobal.ResolveJobName（内部で純粋層
+    // MasterDataNameResolver が localization_ja.json の jobs.{JobId}.name を引く）に
+    // 委譲する。本ファイルには日本語を一切ハードコードしない（設計憲法 ①）。
 }

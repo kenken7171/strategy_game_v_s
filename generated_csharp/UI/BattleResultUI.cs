@@ -269,7 +269,7 @@ public partial class BattleResultUI : Godot.Control
         // ── 2. 装備の進化 / 破壊 / 強欲 ─────────────────────────
         if (preEquipment is not null)
         {
-            var itemDisplay = FormatItem(preEquipment.ItemId);
+            var itemDisplay = ItemName(preEquipment.ItemId);
 
             if (result.ItemDestroyed)
             {
@@ -344,38 +344,24 @@ public partial class BattleResultUI : Godot.Control
 
     // ─── ヘルパー ─────────────────────────────────────────────────────────
 
-    private static string FormatUnitDisplay(Unit unit)
+    private string FormatUnitDisplay(Unit unit)
     {
         var equip = unit.MainEquipment is null
             ? "[装備なし]"
-            : $"[{FormatItem(unit.MainEquipment.ItemId)} Lv{unit.MainEquipment.Level}]";
-        return $"{FormatJob(unit.Job)} Lv{unit.Level} (Age {unit.Age}) {equip}";
+            : $"[{ItemName(unit.MainEquipment.ItemId)} Lv{unit.MainEquipment.Level}]";
+        return $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) {equip}";
     }
 
-    // ─── ローカライゼーション補助（TODO: JSON 化の余白） ──────────────────
-    // 将来 localization_ja.json の jobs.{JobId}.name / items.{ItemId}.name を
-    // 引く LocalizationService に置き換える。
+    // ─── ローカライゼーション ─────────────────────────────────────────────
+    // ジョブ名・アイテム名の表示テキストは ChronicleGlobal.ResolveJobName /
+    // ResolveItemName（内部で純粋層 MasterDataNameResolver が localization_ja.json の
+    // jobs.{JobId}.name / items.{ItemId}.name を引く）に委譲する。本ファイルには
+    // 日本語・絵文字を一切ハードコードしない（設計憲法 ①）。Autoload 未取得時は
+    // enum 名（ToString）へフォールバックして画面を落とさない。
 
-    private static string FormatJob(JobId job) => job switch
-    {
-        JobId.IronWallKnight => "鉄壁騎士",
-        JobId.HeavyInfantry  => "重装歩兵",
-        JobId.StandardBearer => "旗手",
-        JobId.Tactician      => "戦術官",
-        JobId.Medic          => "衛生兵",
-        JobId.Sniper         => "狙撃兵",
-        JobId.Sorcerer       => "呪術師",
-        JobId.Scout          => "斥候",
-        _ => job.ToString(),
-    };
+    private string JobName(JobId job)
+        => _chronicleGlobal?.ResolveJobName(job) ?? job.ToString();
 
-    private static string FormatItem(ItemId item) => item switch
-    {
-        ItemId.SwordKnight  => "🛡️ 誓いの聖剣",
-        ItemId.BowSniper    => "🎯 必中の魔弓",
-        ItemId.StaffMage    => "⚡ 賢者の破滅杖",
-        ItemId.RingPurelove => "💞 絆の誓輪",
-        ItemId.CoinGreed    => "🪙 強欲の古銭",
-        _ => item.ToString(),
-    };
+    private string ItemName(ItemId item)
+        => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();
 }
