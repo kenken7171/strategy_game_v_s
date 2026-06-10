@@ -565,6 +565,57 @@ public partial class ChronicleGlobal : Godot.Node
         return recruited;
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    //  人事: 戦力外通告（手動解雇）
+    // ────────────────────────────────────────────────────────────────────────
+    //  設計憲法「旅団の新陳代謝はプレイヤーの手に」。世代交代が寿命到達・戦闘死を
+    //  *自動* で外すのに対し、本 API はプレイヤーの意思で現役 1 名を *任意* に外す
+    //  （席を空ける・戦力外を切る）。TS 正史 HumanDecisionService.dismissUnit 相当。
+    //
+    //  ★ 純粋ロジック（対象探索・除去）は Godot 非依存の RosterAdminService に分離済み。
+    //    本メソッドは「ロスタの差し替え → 盤面整合 → シグナル発火」だけに専念する。
+    //
+    //  ★ 解雇はポイント経済に一切触れない（払い戻しなし）。動かすのはロスタと、その
+    //    結果として掃き出しが起きた場合のみ編成盤面（FormationChanged）の 2 つだけ。
+
+    /// <summary>
+    /// 指定 Id の旅団員に戦力外通告を行い、現役ロスタから即時に外す。
+    ///
+    /// 実行内容:
+    ///   1. RosterAdminService.TryDismiss で対象探索 → 除去を一括試行（不在なら null）。
+    ///   2. 成功時のみ BattalionRoster を差し替え、盤面整合フックで占有を掃き出す。
+    ///   3. RosterChanged を発火（盤面に掃き出しが起きた時のみ FormationChanged も）。
+    ///
+    /// 戻り値:
+    ///   - Unit: 解雇されたユニット（UI が「○○に戦力外を通告」演出に使う）。
+    ///   - null: 未初期化、または指定 Id がロスタに存在しない（no-op）。
+    /// </summary>
+    /// <param name="unitId">戦力外通告の対象ユニット Id。</param>
+    public Unit? ExecuteDismiss(Guid unitId)
+    {
+        Unit? dismissed;
+        bool formationChanged;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // 純粋ロジックへ委譲。対象不在は null で返る（no-op）。
+            var result = RosterAdminService.TryDismiss(BattalionRoster, unitId);
+            if (result is null) return null;
+
+            // 成功 → ロスタを差し替え、盤面からも当該占有を掃き出す。
+            BattalionRoster = result.NewRoster;
+            formationChanged = ReconcileFormationWithRosterLocked();
+            dismissed = result.Dismissed;
+        }
+
+        SafeEmit(SignalRosterChanged);
+        if (formationChanged) SafeEmit(SignalFormationChanged);
+
+        return dismissed;
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  ゲームフェーズ状態マシン（一方通行の遷移）
     // ════════════════════════════════════════════════════════════════════════

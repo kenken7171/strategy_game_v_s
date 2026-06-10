@@ -70,6 +70,9 @@ public partial class MarriageUI : Godot.Control
     /// <summary>子の既定寿命（newborn 生成時のデフォルト）。</summary>
     private const int ChildDefaultMaxAge = 60;
 
+    /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
+    private const string TestIdMetaKey = "data_testid";
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -92,6 +95,9 @@ public partial class MarriageUI : Godot.Control
     private VBoxContainer? _readyChildrenContainer;
     private VBoxContainer? _minorChildrenContainer;
 
+    // 人事（戦力外通告）セクション
+    private VBoxContainer? _dismissListContainer;
+
     // ─── 内部状態 ─────────────────────────────────────────────────────────
 
     /// <summary>OptionButton index → Unit.Id のマッピング（父選択用）</summary>
@@ -105,6 +111,13 @@ public partial class MarriageUI : Godot.Control
     /// 側のロスタには既に居るため、これは表示フィルタ用）。
     /// </summary>
     private readonly HashSet<Guid> _ceremoniallyEnlisted = new();
+
+    /// <summary>
+    /// 戦力外通告の確認待ち対象 ID。解雇は不可逆なため、行内 2 段階確認
+    /// （[戦力外通告] → [解雇する]／[やめる]）の「武装」状態をこの 1 件で表す。
+    /// null なら確認待ちなし。Roster 再描画をまたいでも保持する（誤爆防止）。
+    /// </summary>
+    private Guid? _pendingDismissId;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -128,68 +141,119 @@ public partial class MarriageUI : Godot.Control
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 20);
+        root.SetMeta(TestIdMetaKey, "marriage-root");
         AddChild(root);
 
         // ─ ヘッダー ─────────────────────────────────────────────
         var header = new HBoxContainer();
+        header.SetMeta(TestIdMetaKey, "marriage-header");
         root.AddChild(header);
-        header.AddChild(new Label { Text = "💞 婚姻・スカウト・家系図" });
+        var headerTitle = new Label { Text = "💞 婚姻・スカウト・家系図" };
+        headerTitle.SetMeta(TestIdMetaKey, "marriage-header-title");
+        header.AddChild(headerTitle);
         _balanceLabel = new Label();
+        _balanceLabel.SetMeta(TestIdMetaKey, "marriage-balance");
         header.AddChild(_balanceLabel);
 
         // ─ 婚姻セクション ───────────────────────────────────────
         var marriageSection = new VBoxContainer();
+        marriageSection.SetMeta(TestIdMetaKey, "marriage-pairing-section");
         root.AddChild(marriageSection);
-        marriageSection.AddChild(new Label { Text = "── 💞 手動婚姻 ──" });
+        var marriageTitle = new Label { Text = "── 💞 手動婚姻 ──" };
+        marriageTitle.SetMeta(TestIdMetaKey, "marriage-pairing-title");
+        marriageSection.AddChild(marriageTitle);
 
         var pairRow = new HBoxContainer();
         pairRow.AddThemeConstantOverride("separation", 12);
+        pairRow.SetMeta(TestIdMetaKey, "marriage-pairing-row");
         marriageSection.AddChild(pairRow);
 
-        pairRow.AddChild(new Label { Text = "父:" });
+        var fatherLabel = new Label { Text = "父:" };
+        fatherLabel.SetMeta(TestIdMetaKey, "marriage-father-label");
+        pairRow.AddChild(fatherLabel);
         _fatherSelect = new OptionButton();
+        _fatherSelect.SetMeta(TestIdMetaKey, "marriage-father-select");
         _fatherSelect.ItemSelected += OnFatherSelectionChanged;
         pairRow.AddChild(_fatherSelect);
 
-        pairRow.AddChild(new Label { Text = "母:" });
+        var motherLabel = new Label { Text = "母:" };
+        motherLabel.SetMeta(TestIdMetaKey, "marriage-mother-label");
+        pairRow.AddChild(motherLabel);
         _motherSelect = new OptionButton();
+        _motherSelect.SetMeta(TestIdMetaKey, "marriage-mother-select");
         _motherSelect.ItemSelected += OnMotherSelectionChanged;
         pairRow.AddChild(_motherSelect);
 
         _quoteLabel = new Label { Text = "💡 父・母を選択してください" };
+        _quoteLabel.SetMeta(TestIdMetaKey, "marriage-quote");
         marriageSection.AddChild(_quoteLabel);
 
         _marriageExecuteButton = new Button { Text = "💞 結婚させる", Disabled = true };
+        _marriageExecuteButton.SetMeta(TestIdMetaKey, "marriage-execute-button");
         _marriageExecuteButton.Pressed += OnMarriageExecutePressed;
         marriageSection.AddChild(_marriageExecuteButton);
 
         // ─ スカウトセクション ───────────────────────────────────
         var scoutSection = new VBoxContainer();
+        scoutSection.SetMeta(TestIdMetaKey, "marriage-scout-section");
         root.AddChild(scoutSection);
-        scoutSection.AddChild(new Label { Text = "── ⚔ 外様スカウト ──" });
+        var scoutTitle = new Label { Text = "── ⚔ 外様スカウト ──" };
+        scoutTitle.SetMeta(TestIdMetaKey, "marriage-scout-title");
+        scoutSection.AddChild(scoutTitle);
 
         _scoutHintLabel = new Label
         {
             Text = $"血縁関係のない外様を {ScoutCost} pt で雇用",
         };
+        _scoutHintLabel.SetMeta(TestIdMetaKey, "marriage-scout-hint");
         scoutSection.AddChild(_scoutHintLabel);
 
         _scoutButton = new Button { Text = $"⚔ スカウトする ({ScoutCost} pt)" };
+        _scoutButton.SetMeta(TestIdMetaKey, "marriage-scout-button");
         _scoutButton.Pressed += OnScoutPressed;
         scoutSection.AddChild(_scoutButton);
 
         // ─ 家系図セクション ─────────────────────────────────────
         var familySection = new VBoxContainer();
+        familySection.SetMeta(TestIdMetaKey, "marriage-family-section");
         root.AddChild(familySection);
-        familySection.AddChild(new Label { Text = "── 👶 家系図（子供たち） ──" });
+        var familyTitle = new Label { Text = "── 👶 家系図（子供たち） ──" };
+        familyTitle.SetMeta(TestIdMetaKey, "marriage-family-title");
+        familySection.AddChild(familyTitle);
 
-        familySection.AddChild(new Label { Text = $"🎓 入団待ち (Age ≥ {AdultAge})" });
+        var readyLabel = new Label { Text = $"🎓 入団待ち (Age ≥ {AdultAge})" };
+        readyLabel.SetMeta(TestIdMetaKey, "marriage-family-ready-label");
+        familySection.AddChild(readyLabel);
         _readyChildrenContainer = new VBoxContainer();
+        _readyChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-ready-list");
         familySection.AddChild(_readyChildrenContainer);
 
-        familySection.AddChild(new Label { Text = $"👶 成長中 (Age < {AdultAge})" });
+        var minorLabel = new Label { Text = $"👶 成長中 (Age < {AdultAge})" };
+        minorLabel.SetMeta(TestIdMetaKey, "marriage-family-minor-label");
+        familySection.AddChild(minorLabel);
         _minorChildrenContainer = new VBoxContainer();
+        _minorChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-minor-list");
         familySection.AddChild(_minorChildrenContainer);
+
+        // ─ 人事（戦力外通告）セクション ─────────────────────────
+        // 旅団の新陳代謝をプレイヤーの手に戻す。寿命前の現役を任意に外す手動解雇。
+        var dismissSection = new VBoxContainer();
+        dismissSection.SetMeta(TestIdMetaKey, "marriage-dismiss-section");
+        root.AddChild(dismissSection);
+        var dismissTitle = new Label { Text = "── 🛡 人事（戦力外通告） ──" };
+        dismissTitle.SetMeta(TestIdMetaKey, "marriage-dismiss-title");
+        dismissSection.AddChild(dismissTitle);
+
+        var dismissHint = new Label
+        {
+            Text = "現役を任意に解雇して席を空ける（不可逆・払い戻しなし）",
+        };
+        dismissHint.SetMeta(TestIdMetaKey, "marriage-dismiss-hint");
+        dismissSection.AddChild(dismissHint);
+
+        _dismissListContainer = new VBoxContainer();
+        _dismissListContainer.SetMeta(TestIdMetaKey, "marriage-dismiss-list");
+        dismissSection.AddChild(_dismissListContainer);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -231,6 +295,7 @@ public partial class MarriageUI : Godot.Control
         RenderUnitSelectors();
         RenderQuote();
         RenderChildrenLists();
+        RenderDismissList();
     }
 
     private void OnStateInitialized() => RenderAll();
@@ -244,6 +309,7 @@ public partial class MarriageUI : Godot.Control
         RenderQuote();
         RenderScoutButton();
         RenderChildrenLists();
+        RenderDismissList();
     }
 
     private void RenderBalance()
@@ -345,10 +411,13 @@ public partial class MarriageUI : Godot.Control
             {
                 // 成長中 (0〜14歳)
                 var row = new HBoxContainer();
-                row.AddChild(new Label
+                row.SetMeta(TestIdMetaKey, $"marriage-family-minor-row-{unit.Id}");
+                var minorName = new Label
                 {
                     Text = $"👶 {JobName(unit.Job)} (Age {unit.Age} / {AdultAge})",
-                });
+                };
+                minorName.SetMeta(TestIdMetaKey, $"marriage-family-minor-name-{unit.Id}");
+                row.AddChild(minorName);
                 _minorChildrenContainer.AddChild(row);
             }
             else if (unit.Age <= AdultAge + 2 && !_ceremoniallyEnlisted.Contains(unit.Id))
@@ -356,16 +425,87 @@ public partial class MarriageUI : Godot.Control
                 // 入団待ち（Age 15〜17 で、まだ正式加入の儀式を経ていない子）
                 // ※ Age >= 18 は通常成人扱いで本リストから外す
                 var row = new HBoxContainer();
-                row.AddChild(new Label
+                row.SetMeta(TestIdMetaKey, $"marriage-family-ready-row-{unit.Id}");
+                var readyName = new Label
                 {
                     Text = $"🎓 {JobName(unit.Job)} (Age {unit.Age})",
-                });
+                };
+                readyName.SetMeta(TestIdMetaKey, $"marriage-family-ready-name-{unit.Id}");
+                row.AddChild(readyName);
                 var enlistBtn = new Button { Text = "0 pt で正式加入" };
+                enlistBtn.SetMeta(TestIdMetaKey, $"marriage-family-enlist-button-{unit.Id}");
                 var capturedId = unit.Id;
                 enlistBtn.Pressed += () => OnEnlistChildPressed(capturedId);
                 row.AddChild(enlistBtn);
                 _readyChildrenContainer.AddChild(row);
             }
+        }
+    }
+
+    /// <summary>
+    /// 人事（戦力外通告）セクションのロスタ一覧を、現在の生存者から無状態に再構築する。
+    /// 各行は「[戦力外通告]」ボタンを持ち、押下で当該行のみ確認状態（[解雇する]／[やめる]）
+    /// へ切り替わる（<see cref="_pendingDismissId"/> による行内 2 段階確認）。
+    /// SoT を一切キャッシュせず、毎回 GetAliveUnits を読み直す（ロスタ変更に追従）。
+    /// </summary>
+    private void RenderDismissList()
+    {
+        if (_chronicleGlobal is null || _dismissListContainer is null) return;
+
+        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない）。
+        foreach (var c in _dismissListContainer.GetChildren()) c.QueueFree();
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        if (alive.Count == 0)
+        {
+            var empty = new Label { Text = "（解雇できる現役がいません）" };
+            empty.SetMeta(TestIdMetaKey, "marriage-dismiss-empty");
+            _dismissListContainer.AddChild(empty);
+            return;
+        }
+
+        foreach (var unit in alive)
+        {
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"marriage-dismiss-row-{capturedId}");
+
+            var name = new Label
+            {
+                Text = $"🎖 {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
+                       + _chronicleGlobal.ResolveDisplayName(unit),
+            };
+            name.SetMeta(TestIdMetaKey, $"marriage-dismiss-name-{capturedId}");
+            row.AddChild(name);
+
+            if (_pendingDismissId == capturedId)
+            {
+                // 武装状態: 確認ラベル + [解雇する] + [やめる]（不可逆操作の誤爆防止）。
+                var confirmLabel = new Label { Text = "⚠ 本当に解雇しますか？" };
+                confirmLabel.SetMeta(TestIdMetaKey, $"marriage-dismiss-confirm-label-{capturedId}");
+                row.AddChild(confirmLabel);
+
+                var confirmBtn = new Button { Text = "解雇する" };
+                confirmBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-confirm-button-{capturedId}");
+                confirmBtn.Pressed += () => OnDismissConfirmPressed(capturedId);
+                row.AddChild(confirmBtn);
+
+                var cancelBtn = new Button { Text = "やめる" };
+                cancelBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-cancel-button-{capturedId}");
+                cancelBtn.Pressed += OnDismissCancelPressed;
+                row.AddChild(cancelBtn);
+            }
+            else
+            {
+                var armBtn = new Button { Text = "戦力外通告" };
+                armBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-button-{capturedId}");
+                armBtn.Pressed += () => OnDismissArmPressed(capturedId);
+                row.AddChild(armBtn);
+            }
+
+            _dismissListContainer.AddChild(row);
         }
     }
 
@@ -435,6 +575,52 @@ public partial class MarriageUI : Godot.Control
         _ceremoniallyEnlisted.Add(childId);
         GD.Print($"[MarriageUI] 🎓 0 pt で正式入団: {childId}");
         RenderChildrenLists();
+    }
+
+    // ─── 人事（戦力外通告）ハンドラ ───────────────────────────────────────
+
+    /// <summary>
+    /// 解雇ボタン押下: 当該ユニットを確認待ち（武装）状態にして行を組み直す。
+    /// 実際の解雇はまだ起きない（次の [解雇する] 押下で確定する）。
+    /// </summary>
+    private void OnDismissArmPressed(Guid unitId)
+    {
+        _pendingDismissId = unitId;
+        RenderDismissList();
+    }
+
+    /// <summary>[やめる] 押下: 確認待ちを解除して通常表示へ戻す（何も外さない）。</summary>
+    private void OnDismissCancelPressed()
+    {
+        _pendingDismissId = null;
+        RenderDismissList();
+    }
+
+    /// <summary>
+    /// [解雇する] 押下: ChronicleGlobal.ExecuteDismiss でロスタから即時に外す。
+    /// 成功時はロスタ変更シグナル経由で OnRosterChanged → RenderDismissList が自動再描画
+    /// するため、ここでは武装解除だけ行う。失敗（対象不在）時はシグナルが飛ばないので
+    /// 手動で再描画して武装状態を畳む。
+    /// </summary>
+    private void OnDismissConfirmPressed(Guid unitId)
+    {
+        if (_chronicleGlobal is null) return;
+
+        // 確認待ちは結果に関わらず解除（成功なら行ごと消え、失敗なら通常表示に戻る）。
+        _pendingDismissId = null;
+
+        var dismissed = _chronicleGlobal.ExecuteDismiss(unitId);
+        if (dismissed is null)
+        {
+            GD.Print($"[MarriageUI] 🛡 戦力外通告 失敗: 対象不在／未初期化 Id={unitId}");
+            RenderDismissList(); // 失敗時はシグナル無し → 手動で武装解除を反映
+            return;
+        }
+
+        GD.Print(
+            $"[MarriageUI] 🛡 戦力外通告 成立 / {JobName(dismissed.Job)} " +
+            $"(Age {dismissed.Age}) Id={dismissed.Id}");
+        // 残高・父母セレクタ・家系図・解雇一覧の再描画はシグナル経由で自動。
     }
 
     // ─── ヘルパー ─────────────────────────────────────────────────────────
