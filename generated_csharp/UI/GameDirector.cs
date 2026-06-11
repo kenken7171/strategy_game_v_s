@@ -64,6 +64,13 @@ public partial class GameDirector : Godot.Control
     private Button? _advanceButton;
     private Control? _screenContainer;
 
+    /// <summary>
+    /// 起動直後に最前面へ overlay する無状態タイトルゲート。IsInitialized == false の
+    /// 間だけ生存し、新規/継続のいずれかで世界が初期化（StateInitialized）された瞬間に
+    /// QueueFree して静かに退場する（自己崩壊型ライフサイクル）。未展開時は null。
+    /// </summary>
+    private TitleScreen? _titleScreen;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -78,27 +85,88 @@ public partial class GameDirector : Godot.Control
         BuildScreens();
         SubscribeSignals();
 
-        // 新規ゲームのブートストラップ（起動エントリ）。
-        // ★ 画面ノード群を AddChild 済み（= 各 UI が自身の _Ready でシグナル購読済み）
-        //   のこのタイミングで Initialize を呼ぶことで、StateInitialized 等の初回シグナルが
-        //   全 UI へ確実に届き、起動した瞬間に最初の旅団員と予言が描画される。
-        BootstrapNewGameIfNeeded();
-
-        RenderCurrentPhase();
+        // ★ 起動エントリの単一窓口（タイトルゲート方式）:
+        //   かつてはここで問答無用に新規ゲームを初期化していたが、プレイヤーが最初に
+        //   「新規 / つづきから」を選ぶ門が無かった。現在は世界が未初期化の間だけ
+        //   TitleScreen を最前面へ overlay し、その意思表示イベントを受けて初めて
+        //   Initialize / LoadGame という SoT トリガーを引く（OnNewChronicleRequested /
+        //   OnContinueChronicleRequested）。これにより全画面ノードへ初回シグナルが確実に
+        //   届くタイミング（AddChild 済み）で初期化が走り、最初の旅団員と予言が描画される。
+        if (_chronicleGlobal is { IsInitialized: true })
+        {
+            // 既に世界が在る（ホットリロード・セーブ継続後の再アタッチ等）→ 現在フェーズを描画。
+            RenderCurrentPhase();
+        }
+        else
+        {
+            // まっさらな起動 → タイトルゲートを最前面へ展開（唯一の起動契機）。
+            MountTitleScreen();
+        }
     }
 
     public override void _ExitTree()
     {
+        // タイトルゲートの購読を先に解いて確実に解放（ゾンビノード・購読二重接続の根絶）。
+        DismissTitleScreen();
         UnsubscribeSignals();
     }
 
-    // ─── 新規ゲーム・ブートストラップ（起動エントリ） ───────────────────────
+    // ─── タイトルゲート（起動エントリの単一窓口） ─────────────────────────
     //  ⚠ 最重要: 常駐ノード ChronicleGlobal は生成直後 IsInitialized == false の
-    //  「無（未初期化）」状態で待機している。Initialize がどこからも呼ばれなければ、
-    //  ロスターも予言も空のまま何も描画されない。本メソッドがその唯一の起動契機。
+    //  「無（未初期化）」状態で待機している。Initialize / LoadGame がどこからも呼ばれ
+    //  なければ、ロスターも予言も空のまま何も描画されない。タイトルゲートのボタンが
+    //  その唯一の起動契機であり、本ディレクターがその意思表示を受けて SoT を初期化する。
 
     /// <summary>
-    /// 常駐ノード ChronicleGlobal がまだ初期化されていなければ、新規ゲームの初期状態
+    /// 無状態タイトルゲート（TitleScreen）を最前面へ overlay する。多重展開・前回ゲートの
+    /// 取り残しを避けるため、生存中の旧ゲートがあれば先に確実に解放してから展開する。
+    ///
+    /// 設計:
+    ///   - 「つづきから」を活性化してよいかは、ここで ChronicleGlobal.HasSaveData() を
+    ///     一度だけ問い合わせ、AddChild 前に ContinueAvailable へ注入する（TitleScreen は
+    ///     SoT を自分で触らない無状態の徹底）。
+    ///   - 2 つの意思表示イベントを購読し、押下時に初めて Initialize / LoadGame を引く。
+    ///   - root（VBox）より後に AddChild するため、本ゲートは全 UI の最前面に描かれ、
+    ///     かつ MouseFilter=Stop で背後（ヘッダ・各フェーズ画面）への入力を遮断する。
+    /// </summary>
+    private void MountTitleScreen()
+    {
+        // 旧ゲートが取り残されていれば購読を解いて解放（多重展開・リーク防止）。
+        DismissTitleScreen();
+
+        var title = new TitleScreen
+        {
+            ContinueAvailable = _chronicleGlobal?.HasSaveData() ?? false,
+        };
+        title.NewChronicleRequested      += OnNewChronicleRequested;
+        title.ContinueChronicleRequested += OnContinueChronicleRequested;
+        title.SetMeta(TestIdMetaKey, "game-director-title-screen");
+        _titleScreen = title;
+
+        AddChild(title); // root の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中のタイトルゲートがあれば購読を解いて確実に解放する。世界が初期化された
+    /// 瞬間（OnStateInitialized）および退場時（_ExitTree）に呼び、ゾンビノード・購読の
+    /// 二重接続・Tween リークを根絶する。TitleScreen 側は _ExitTree で篝火 Tween を自ら
+    /// Kill するため、ここでの QueueFree だけで演出ノードも綺麗にお掃除される。
+    /// </summary>
+    private void DismissTitleScreen()
+    {
+        if (_titleScreen is null) return;
+
+        if (GodotObject.IsInstanceValid(_titleScreen))
+        {
+            _titleScreen.NewChronicleRequested      -= OnNewChronicleRequested;
+            _titleScreen.ContinueChronicleRequested -= OnContinueChronicleRequested;
+            _titleScreen.QueueFree();
+        }
+        _titleScreen = null;
+    }
+
+    /// <summary>
+    /// タイトルゲート「新たな年代記を始める」の意思表示ハンドラ。新規ゲームの初期状態
     /// （初期資金・初期ロスター・ターン 1 の予言 3 択）を生成して Initialize へ注入する。
     ///
     /// 設計:
@@ -106,17 +174,12 @@ public partial class GameDirector : Godot.Control
     ///     NewGameFactory（Core/Bootstrap）へ委譲する（脳と身体の分離・テスト容易性）。
     ///   - タイムライン（ターン 1 の予言 3 つ）は initialTimeline=null で渡し、
     ///     Initialize 内で同じ Random から生成させる（乱数列を 1 本に統一）。
-    ///   - 既に初期化済み（IsInitialized == true）なら何もしない。これはセーブ継続ロードや
-    ///     ホットリロードで二重初期化（＝進行中の世界の破棄）を起こさないための安全網。
-    ///
-    /// ★ 将来「つづきから」を実装する際は、本メソッドの先頭で
-    ///   ChronicleGlobal.HasSaveData → LoadGame を試み、無ければ新規ゲームへ
-    ///   フォールバックする分岐を足すだけでよい（起動エントリの単一窓口）。
+    ///   - Initialize は SafeEmit(StateInitialized) を同期発火する。その購読ハンドラ
+    ///     OnStateInitialized が、本ゲートを QueueFree して退場させる（後始末は一元化）。
     /// </summary>
-    private void BootstrapNewGameIfNeeded()
+    private void OnNewChronicleRequested()
     {
         if (_chronicleGlobal is null) return;
-        if (_chronicleGlobal.IsInitialized) return;
 
         var rng = new Random();
         var seed = NewGameFactory.Create(rng);
@@ -126,6 +189,22 @@ public partial class GameDirector : Godot.Control
             initialEconomy:  seed.Economy,
             initialTimeline: null,   // ターン 1 の予言は Initialize が同じ rng で生成する
             rng:             rng);
+    }
+
+    /// <summary>
+    /// タイトルゲート「つづきから」の意思表示ハンドラ。既定パスのセーブを読み込み、
+    /// 4 状態（経済・タイムライン・ロスター・旅団史）を一括復元する。
+    ///
+    /// 安全性:
+    ///   - 「つづきから」は HasSaveData() == true のときしか活性化しないため、通常ここに
+    ///     到達した時点でセーブは存在する。それでも LoadGame は false（ファイル消失・破損）を
+    ///     返し得るが、その場合は既存状態を一切変えずに何もしない（ゲートは残り再選択可能）。
+    ///   - 成功時は LoadGame が SafeEmit(StateInitialized) を同期発火し、OnStateInitialized が
+    ///     本ゲートを退場させる（新規と継続でゲート後始末の経路を一本化）。
+    /// </summary>
+    private void OnContinueChronicleRequested()
+    {
+        _chronicleGlobal?.LoadGame();
     }
 
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
@@ -220,8 +299,18 @@ public partial class GameDirector : Godot.Control
 
     // ─── シグナルハンドラ ─────────────────────────────────────────────────
 
-    private void OnPhaseChanged()     => RenderCurrentPhase();
-    private void OnStateInitialized() => RenderCurrentPhase();
+    private void OnPhaseChanged() => RenderCurrentPhase();
+
+    /// <summary>
+    /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
+    /// まずタイトルゲートを退場（QueueFree）させ、その後に現在フェーズ（= 拠点・年代記）を
+    /// 描画する。新規・継続のどちらの経路でも本ハンドラがゲート後始末の単一窓口となる。
+    /// </summary>
+    private void OnStateInitialized()
+    {
+        DismissTitleScreen();
+        RenderCurrentPhase();
+    }
 
     // ─── 描画（フェーズに応じた画面切り替え + インジケータ更新） ──────────
 
