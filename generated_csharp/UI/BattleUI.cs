@@ -98,8 +98,46 @@ public partial class BattleUI : Godot.Control
     /// EnemyOffenseEvent が着弾する」という意味論の単一の色源でもある（Req 4 の整合点）。
     /// 予告の赤枠 → 実際の被弾ログ（EnemyOffenseEvent）が同じ赤で結ばれることで、
     /// プレイヤーは『予告された行が、まさにその行に着弾した』因果を一目で追える。
+    /// さらに被弾フラッシュ（FlashRow）も同じ DangerFrameColor で焚き、予告→着弾の
+    /// 因果を「色」で完全に一致させる。
     /// </summary>
     private static readonly Color DangerFrameColor = new(0.86f, 0.20f, 0.20f);
+
+    // ─── 手触り演出（カメラシェイク / 被弾フラッシュ / 自己崩壊ポップアップ）の定数 ──
+    //  ★ 演出はすべて「ワンショットで自己完結・自動消滅する Tween」で物質化し、UI には
+    //    演出中フラグ等の状態を一切持たせない（設計憲法 ③）。唯一カメラシェイクだけは
+    //    永続ノード（盤面ルート）を対象に取るため、多重起動による位置ドリフトを防ぐ目的で
+    //    直近 1 本のハンドルを保持し、新シェイク前に必ず Kill する（リーク・ゾンビ化防止）。
+
+    /// <summary>カメラシェイク 1 ジョルトあたりの秒数（往復の片道）。</summary>
+    private const double CameraShakeStepSeconds = 0.05;
+
+    /// <summary>カメラシェイクの初期振幅（px）。ジョルトごとに係数で減衰させ収束させる。</summary>
+    private const float CameraShakeAmplitude = 14.0f;
+
+    /// <summary>被弾フラッシュ（対象行 modulate の赤→白フェード）の秒数。</summary>
+    private const double RowFlashSeconds = 0.35;
+
+    /// <summary>ダメージポップアップが上方へ跳ね上がる距離（px）。</summary>
+    private const float DamagePopupRiseDistance = 48.0f;
+
+    /// <summary>ダメージポップアップの寿命（上昇 + フェードアウトの秒数）。完了で自己 QueueFree。</summary>
+    private const double DamagePopupLifeSeconds = 0.70;
+
+    /// <summary>被ダメージ / 撃破ポップアップの色（赤）。</summary>
+    private static readonly Color DamagePopupColor = new(0.94f, 0.28f, 0.24f);
+
+    /// <summary>回復ポップアップの色（緑）。</summary>
+    private static readonly Color HealPopupColor = new(0.36f, 0.84f, 0.42f);
+
+    /// <summary>とどめポップアップの色（金）。</summary>
+    private static readonly Color LastHitPopupColor = new(0.98f, 0.82f, 0.25f);
+
+    /// <summary>撃破ポップアップの記号（chrome 装飾。データ名ではないので ① に抵触しない）。</summary>
+    private const string DefeatPopupMark = "✖";
+
+    /// <summary>とどめポップアップの記号（chrome 装飾）。</summary>
+    private const string LastHitPopupMark = "★";
 
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
@@ -108,10 +146,22 @@ public partial class BattleUI : Godot.Control
     // ─── UI 要素（_Ready でプログラマティック生成） ──────────────────────
 
     private Label? _statusLabel;
+    private VBoxContainer? _enemyCard;
     private Label? _enemyNameLabel;
     private Label? _enemyHpLabel;
     private VBoxContainer? _boardContainer;
     private VBoxContainer? _logContainer;
+
+    // ─── 手触り演出のための参照（BuildUI で 1 度だけ確定） ────────────────
+    //  ★ カメラシェイクは盤面ルート（VBoxContainer）の position を往復させて実現する。
+    //    ルートの親は本 Control（コンテナではない）なので、コンテナのレイアウト再ソートに
+    //    position を奪われない。これにより「画面全体の揺れ」を安定して焚ける。
+    private VBoxContainer? _rootShakeTarget;
+
+    //  ★ ダメージポップアップ専用オーバーレイ層。コンテナ配下に置くとレイアウト対象に
+    //    なってしまうため、本 Control 直下（非コンテナ）の全画面 Control として独立させ、
+    //    マウスは透過（Ignore）させる。ポップアップはここへ載せ、global 座標で配置する。
+    private Control? _popupLayer;
     private Button? _startButton;
     private Button? _commandNoneButton;
     private Button? _commandClockwiseButton;
@@ -141,6 +191,29 @@ public partial class BattleUI : Godot.Control
 
     private int _logEntryCount;
 
+    // ─── 手触り演出の補助状態（描画ごとに作り直す or 一過性カウンタ） ──────
+
+    /// <summary>
+    /// 行 → その行の 3 マス Panel の対応表。RenderBoard の冒頭で更地化し再構築する。
+    /// 被弾フラッシュ（FlashRow）が「予告対象行 = 着弾行」を一発で掴むための索引。
+    /// </summary>
+    private readonly Dictionary<SquadRow, List<PanelContainer>> _rowPanels = new();
+
+    /// <summary>
+    /// ユニット Id → そのユニットが占有するマス Panel の対応表。RenderBoard の冒頭で
+    /// 更地化し再構築する。被弾・回復・撃破・とどめポップアップを当人のマス上へ出すための索引。
+    /// </summary>
+    private readonly Dictionary<Guid, PanelContainer> _unitPanels = new();
+
+    /// <summary>ポップアップ testid の機械生成に使う一過性カウンタ（自己崩壊するので回収不要）。</summary>
+    private int _popupSpawnCount;
+
+    /// <summary>
+    /// 直近のカメラシェイク Tween のハンドル。永続ノード（盤面ルート）を対象にするため、
+    /// 新シェイク前に必ず Kill して位置ドリフト・多重起動を断つ（ゾンビ化・リーク防止規律）。
+    /// </summary>
+    private Tween? _cameraShakeTween;
+
     // ─── 危険スロット赤枠の脈動 Tween（再描画ごとに全 Kill して更地化する） ──
     //  ★ ゾンビ化・リーク防止規律（最重要）:
     //    「丸ごと再描画」のたびに古い脈動 Tween が残ると、無効ノードを掴んだまま
@@ -162,6 +235,9 @@ public partial class BattleUI : Godot.Control
     {
         // 退場時も生存中の脈動 Tween を必ず一掃する（リーク防止規律）。
         KillDangerPulses();
+        // 永続ノード（盤面ルート）を掴むカメラシェイク Tween も明示的に Kill する。
+        // （ルート自体は cascade で解放され Tween も自動失効するが、規律として明示破棄する。）
+        KillCameraShake();
         // 従属モーダルが前面展開中のまま退場する場合に備え、購読を解いて確実に解放する。
         DismissLastHitCeremony();
         DismissSpoilsScreen();
@@ -177,6 +253,9 @@ public partial class BattleUI : Godot.Control
         root.AddThemeConstantOverride("separation", 16);
         AddChild(root);
 
+        // カメラシェイクの対象（盤面ルート）。親は本 Control（非コンテナ）なので position を奪われない。
+        _rootShakeTarget = root;
+
         root.AddChild(new Label { Text = "⚔ 戦闘（V字3×3 / 1ターン解決）" });
 
         _statusLabel = new Label();
@@ -188,6 +267,8 @@ public partial class BattleUI : Godot.Control
         enemyCard.AddThemeConstantOverride("separation", 2);
         enemyCard.SetMeta(TestIdMetaKey, "battle-enemy-card");
         root.AddChild(enemyCard);
+        // 味方の攻撃着弾（AllyOffenseEvent）でこのカードをフラッシュさせるため参照を保持。
+        _enemyCard = enemyCard;
 
         _enemyNameLabel = new Label();
         _enemyNameLabel.SetMeta(TestIdMetaKey, "battle-enemy-name");
@@ -271,6 +352,16 @@ public partial class BattleUI : Godot.Control
         _logContainer.AddThemeConstantOverride("separation", 2);
         _logContainer.SetMeta(TestIdMetaKey, "battle-log");
         logScroll.AddChild(_logContainer);
+
+        // ── ダメージポップアップ用オーバーレイ層（最前面・マウス透過の全画面 Control） ──
+        //  本 Control 直下（root と兄弟）に置くことで、VBox のレイアウト対象にならず
+        //  自由な global 座標へポップアップを配置できる。root より後に AddChild するため
+        //  描画順は最前面。MouseFilter=Ignore で下のコマンドボタンへの操作を妨げない。
+        _popupLayer = new Control();
+        _popupLayer.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        _popupLayer.MouseFilter = Control.MouseFilterEnum.Ignore;
+        _popupLayer.SetMeta(TestIdMetaKey, "battle-damage-popup-layer");
+        AddChild(_popupLayer);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -412,6 +503,11 @@ public partial class BattleUI : Godot.Control
 
         ClearChildren(_boardContainer);
 
+        // 手触り演出の索引（行→Panel / ユニット→Panel）も盤面と運命を共にする。再描画の
+        // たびに古い Panel 参照（QueueFree 済み）を掴み続けないよう、ここで必ず更地化する。
+        _rowPanels.Clear();
+        _unitPanels.Clear();
+
         var battle = _chronicleGlobal?.CurrentBattle;
         // 非戦闘時も 9 マスの testid を欠かさないよう、空盤面で骨格を描く。
         var board = battle?.Board ?? FormationBoard.Empty();
@@ -431,11 +527,20 @@ public partial class BattleUI : Godot.Control
                 CustomMinimumSize = new Vector2(96, 0),
             });
 
+            var panelsInRow = new List<PanelContainer>();
+
             for (int column = 0; column < FormationBoard.ColumnsPerRow; column++)
             {
                 var coordinate = new SlotCoordinate(row, column);
                 var slot = BuildSlotPanel(battle, board, coordinate);
                 rowGroup.AddChild(slot);
+                panelsInRow.Add(slot);
+
+                // ユニット占有マスは Id → Panel を索引し、被弾/回復ポップアップの着地点にする。
+                if (board.OccupantAt(coordinate) is { } occupantId)
+                {
+                    _unitPanels[occupantId] = slot;
+                }
 
                 if (IsSlotTargeted(battle, row))
                 {
@@ -443,6 +548,7 @@ public partial class BattleUI : Godot.Control
                 }
             }
 
+            _rowPanels[row] = panelsInRow;
             _boardContainer.AddChild(rowGroup);
         }
 
@@ -556,6 +662,157 @@ public partial class BattleUI : Godot.Control
             }
         }
         _dangerPulseTweens.Clear();
+    }
+
+    // ─── 手触り演出: カメラシェイク（盤面ルートの位置往復・ワンショット） ──────
+
+    /// <summary>
+    /// 被弾の瞬間、盤面ルート（_rootShakeTarget）の position を減衰しながら数回往復させ、
+    /// 「画面全体の揺れ（カメラシェイク）」を焚く。最後は必ず基準位置（Vector2.Zero）へ収束する。
+    ///
+    /// ★ ワンショット・自己完結: SetLoops を付けない単発 Tween なので、最後のジョルトを
+    ///   終えると自動的に完了・破棄される。演出中フラグ等の状態は一切持たない。
+    /// ★ ドリフト・多重起動の防止: 対象は永続ノードなので、直近 1 本のハンドルを保持し、
+    ///   新シェイク開始前に必ず Kill して位置を Zero へ戻す（ゾンビ化・リーク防止規律）。
+    /// ★ コンテナ非干渉: _rootShakeTarget の親は本 Control（非コンテナ）であり、コンテナの
+    ///   レイアウト再ソートに position を奪われないため、揺れが安定して可視化される。
+    /// </summary>
+    private void ShakeCamera()
+    {
+        if (_rootShakeTarget is null || !GodotObject.IsInstanceValid(_rootShakeTarget)) return;
+
+        // 直近のシェイクが生きていれば Kill し、基準位置へ戻してからやり直す（ドリフト根絶）。
+        KillCameraShake();
+        _rootShakeTarget.Position = Vector2.Zero;
+
+        // 減衰する 4 ジョルト → 最後に基準（Zero）へ収束。係数で揺れ幅を徐々に小さくする。
+        var offsets = new[]
+        {
+            new Vector2(CameraShakeAmplitude,         -CameraShakeAmplitude * 0.60f),
+            new Vector2(-CameraShakeAmplitude * 0.80f, CameraShakeAmplitude * 0.50f),
+            new Vector2(CameraShakeAmplitude * 0.55f,  CameraShakeAmplitude * 0.35f),
+            new Vector2(-CameraShakeAmplitude * 0.35f, -CameraShakeAmplitude * 0.25f),
+            Vector2.Zero,
+        };
+
+        var tween = _rootShakeTarget.CreateTween();
+        foreach (var offset in offsets)
+        {
+            tween.TweenProperty(_rootShakeTarget, "position", offset, CameraShakeStepSeconds)
+                 .SetTrans(Tween.TransitionType.Sine)
+                 .SetEase(Tween.EaseType.InOut);
+        }
+
+        _cameraShakeTween = tween;
+    }
+
+    /// <summary>
+    /// 直近のカメラシェイク Tween を明示的に Kill する。新シェイク開始前・退場時に呼び、
+    /// 永続ノードを掴んだ Tween の多重蓄積・位置ドリフトを断つ。
+    /// </summary>
+    private void KillCameraShake()
+    {
+        if (_cameraShakeTween is not null && _cameraShakeTween.IsValid())
+        {
+            _cameraShakeTween.Kill();
+        }
+        _cameraShakeTween = null;
+    }
+
+    // ─── 手触り演出: 被弾フラッシュ（対象行 / 敵カードの modulate 赤→白・ワンショット） ──
+
+    /// <summary>
+    /// 予告対象行（= 着弾行）の 3 マスを一斉にフラッシュさせる。色は予告赤枠と同一の
+    /// <see cref="DangerFrameColor"/> で、「予告された行が、まさにその行へ着弾した」因果を色で結ぶ。
+    /// </summary>
+    private void FlashRow(SquadRow row)
+    {
+        if (!_rowPanels.TryGetValue(row, out var panels)) return;
+        foreach (var panel in panels)
+        {
+            FlashControl(panel, DangerFrameColor);
+        }
+    }
+
+    /// <summary>
+    /// ノードの modulate を一瞬 flashColor に染め、白（恒等）へワンショットでフェードして戻す。
+    /// modulate は self_modulate（危険脈動が使う別プロパティ）と独立なので、脈動と衝突しない。
+    ///
+    /// ★ リーク防止: Tween は対象ノードへバインドされる（Node.CreateTween）。対象 Panel が
+    ///   次の再描画で QueueFree される際、この Tween も自動失効する（明示台帳は不要）。
+    /// </summary>
+    private static void FlashControl(Control? node, Color flashColor)
+    {
+        if (node is null || !GodotObject.IsInstanceValid(node)) return;
+
+        node.Modulate = flashColor;
+        var tween = node.CreateTween();
+        tween.TweenProperty(node, "modulate", Colors.White, RowFlashSeconds)
+             .SetTrans(Tween.TransitionType.Quad)
+             .SetEase(Tween.EaseType.Out);
+    }
+
+    // ─── 手触り演出: 自己崩壊型ダメージポップアップ（生成→上昇フェード→自己 QueueFree） ──
+
+    /// <summary>ユニット Id からそのマス Panel を引き、その上にポップアップを跳ね上げる。</summary>
+    private void SpawnDamagePopupForUnit(Guid unitId, string text, Color color)
+    {
+        if (_unitPanels.TryGetValue(unitId, out var panel))
+        {
+            SpawnDamagePopup(panel, text, color);
+        }
+    }
+
+    /// <summary>
+    /// アンカー（被弾マス・敵カード等）の上空に軽量 Label を生成し、上方へ跳ね上げつつ
+    /// アルファを 0 へフェードさせ、Tween 完了時に自分自身を QueueFree する自己崩壊型演出。
+    ///
+    /// ★ 自己崩壊ライフサイクル（リーク・ゾンビ化の構造的根絶）:
+    ///   Tween は Label 自身へバインドされ、最終ステップの TweenCallback が当の Label を
+    ///   QueueFree する。これにより BattleUI が何度再描画されても演出ノードが残留しない。
+    ///   万一、親（_popupLayer）の cascade 解放が先に走っても、Label の解放で Tween は
+    ///   自動失効し、コールバックは IsInstanceValid ガードにより安全に no-op となる（二重解放なし）。
+    /// ★ 無状態: 生成・消滅は Tween に完結し、UI 側は演出中フラグ等を一切持たない。
+    /// </summary>
+    private void SpawnDamagePopup(Control? anchor, string text, Color color)
+    {
+        if (_popupLayer is null || anchor is null || !GodotObject.IsInstanceValid(anchor)) return;
+
+        var label = new Label
+        {
+            Text         = text,
+            Modulate     = color,
+            ZIndex       = 100,                          // オーバーレイ層内でも確実に最前面
+            MouseFilter  = Control.MouseFilterEnum.Ignore, // クリックを透過（下のボタンを妨げない）
+        };
+        label.SetMeta(TestIdMetaKey, $"battle-damage-popup-{_popupSpawnCount}");
+        _popupSpawnCount++;
+        _popupLayer.AddChild(label);
+
+        // アンカーのグローバル矩形から、その上部中央を初期位置に取る（global → ローカルへ反映）。
+        var anchorRect = anchor.GetGlobalRect();
+        label.GlobalPosition = new Vector2(
+            anchorRect.Position.X + anchorRect.Size.X * 0.5f,
+            anchorRect.Position.Y + anchorRect.Size.Y * 0.25f);
+
+        var risenLocalPosition = label.Position + new Vector2(0.0f, -DamagePopupRiseDistance);
+
+        var tween = label.CreateTween();
+        // 上昇とフェードを並行（Parallel）で走らせる。
+        tween.TweenProperty(label, "position", risenLocalPosition, DamagePopupLifeSeconds)
+             .SetTrans(Tween.TransitionType.Quad)
+             .SetEase(Tween.EaseType.Out);
+        tween.Parallel().TweenProperty(label, "modulate:a", 0.0f, DamagePopupLifeSeconds)
+             .SetTrans(Tween.TransitionType.Sine)
+             .SetEase(Tween.EaseType.In);
+        // 並行ブロックの後（Chain）に、自分自身を QueueFree する自己崩壊ステップを連結。
+        tween.Chain().TweenCallback(Callable.From(() =>
+        {
+            if (GodotObject.IsInstanceValid(label))
+            {
+                label.QueueFree();
+            }
+        }));
     }
 
     // ─── コマンド操作（すべて ChronicleGlobal の API を呼ぶだけ） ─────────
@@ -774,21 +1031,84 @@ public partial class BattleUI : Godot.Control
     // ─── ターンログ（イベント駆動の受け皿スケルトン） ────────────────────
 
     /// <summary>
-    /// 1 ターンのイベントログを発生順に走査し、各イベントを 1 行へ落とす。ここが将来の
-    /// アニメーション再生（被弾フラッシュ・撃破演出・回復ポップ等）のフックポイントになる。
+    /// 1 ターンのイベントログを発生順に走査し、各イベントを 1 行のテキストへ落としつつ、
+    /// 種別に応じた手触り演出（被弾フラッシュ・自己崩壊ポップアップ）をワンショット Tween で
+    /// 焚く。盤面・HP・敵カードの再描画は別途 BattleChanged 経由の RenderAll が済ませている
+    /// （SafeEmit は同期発火のため、本メソッド到達時には _rowPanels / _unitPanels は最新）。
+    ///
+    /// ★ カメラシェイクは「敵対的着弾が 1 つでもあったターン」に高々 1 回だけ焚く。
+    ///   全戦線強襲（TotalAssault）で複数行が同時被弾しても、画面の揺れは 1 回に集約して
+    ///   過剰な振動を避ける（演出は強いが、うるさくしない）。
+    ///
+    /// ★ 状態を持たない: 演出中フラグの類は一切持たず、各 Tween が自己完結・自動消滅する。
+    ///   ポップアップは完了時に自分自身を QueueFree し、フラッシュは Panel が次の再描画で
+    ///   QueueFree される際に Tween ごと自動失効する（リーク・ゾンビ化の構造的根絶）。
     /// </summary>
     private void AppendTurnEvents(ImmutableArray<BattleEvent> events)
     {
         if (events.IsDefaultOrEmpty) return;
 
+        var hostileImpactOccurred = false;
+
         foreach (var battleEvent in events)
         {
             AppendLogLine(DescribeEvent(battleEvent), $"battle-log-entry-{_logEntryCount}");
-            // 将来の演出フック: イベント種別に応じて Tween / SE をここで起動する。
-            //   特に EnemyOffenseEvent の着弾フラッシュは、予告で赤く脈動していた対象行
-            //   （DangerFrameColor）と同じ赤で焚くことで、「予告された行 → 実際に着弾した
-            //   行」の因果を色で結ぶ。赤枠（予告）と着弾フラッシュ（実弾）は単一の
-            //   DangerFrameColor を共有し、意味論を一致させる（Req 4 の整合点）。
+            hostileImpactOccurred |= PlayEventJuice(battleEvent);
+        }
+
+        // 大隊側への着弾があったターンだけ、画面全体を 1 回だけ揺らす。
+        if (hostileImpactOccurred)
+        {
+            ShakeCamera();
+        }
+    }
+
+    /// <summary>
+    /// 1 戦闘イベントに対応する手触り演出（フラッシュ / ポップアップ）を焚く。
+    /// 戻り値は「このイベントが大隊側への敵対的着弾か（= カメラシェイク対象か）」を表す。
+    ///
+    /// ★ 予告→着弾の色の一致: EnemyOffenseEvent の対象行フラッシュは、予告で脈動していた
+    ///   赤枠と同じ <see cref="DangerFrameColor"/> で焚く（Req 4 の整合点）。
+    /// ★ ① 準拠: ポップアップに載るのは数値と chrome 記号（✖ / ★）のみで「データ名」は出さない。
+    /// </summary>
+    private bool PlayEventJuice(BattleEvent battleEvent)
+    {
+        switch (battleEvent)
+        {
+            case AllyOffenseEvent ally:
+                // 味方の攻撃が敵へ命中 → 敵カードを赤くフラッシュし、敵カード上にダメージを出す。
+                FlashControl(_enemyCard, DangerFrameColor);
+                SpawnDamagePopup(_enemyCard, $"-{ally.Damage}", DamagePopupColor);
+                return false;
+
+            case EnemyOffenseEvent enemy:
+                // 敵の攻撃が対象行へ着弾 → 行全体を予告と同じ赤でフラッシュ（カメラシェイク対象）。
+                FlashRow(enemy.TargetRow);
+                return true;
+
+            case UnitDamagedEvent damaged:
+                // 個々の被弾 → 当人のマス上に被ダメージを跳ね上げる（カメラシェイク対象）。
+                SpawnDamagePopupForUnit(damaged.UnitId, $"-{damaged.Damage}", DamagePopupColor);
+                return true;
+
+            case UnitDefeatedEvent defeated:
+                // 撃破（完全ロスト）→ 当人のマス上に撃破記号を出す（カメラシェイク対象）。
+                SpawnDamagePopupForUnit(defeated.UnitId, DefeatPopupMark, DamagePopupColor);
+                return true;
+
+            case UnitHealedEvent healed:
+                // 回復 → 当人のマス上に回復量を緑で跳ね上げる（敵対着弾ではないので揺らさない）。
+                SpawnDamagePopupForUnit(healed.UnitId, $"+{healed.HealAmount}", HealPopupColor);
+                return false;
+
+            case LastHitResolvedEvent lastHit:
+                // とどめ成立 → とどめを刺した当人のマス上に金の星を出す（祝福。揺らさない）。
+                SpawnDamagePopupForUnit(lastHit.UnitId, LastHitPopupMark, LastHitPopupColor);
+                return false;
+
+            default:
+                // ローテーション・決着など、盤面着弾を伴わないイベントは演出なし。
+                return false;
         }
     }
 
