@@ -1,0 +1,46 @@
+name: dotnet-test
+
+# Deterministic triggers: run on every push to main and on every pull request
+# that targets main. No manual dispatch, no other branches -- the gate fires
+# exactly when main is about to change or is being proposed to change.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Least-privilege token: this pipeline only reads the repository contents.
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same ref so only the latest commit is tested.
+concurrency:
+  group: dotnet-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (Godot-independent core)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Restore only the Godot-independent test project. It pulls the Core
+      # sources in via <Compile Include="../Core/**/*.cs"> and never references
+      # the Godot.NET.Sdk body assembly, so no Godot runtime is needed here.
+      - name: Restore dependencies
+        run: dotnet restore generated_csharp/Tests/ChronicleKnights.Tests.csproj
+
+      # WarningsAsErrors in the test csproj escalates the 13 audited CS codes to
+      # build errors. If any forbidden warning regresses in, this build step
+      # exits non-zero and the whole job turns red -- the rampart is enforced
+      # structurally by the build, not by a separate lint step.
+      - name: Run xUnit tests
+        run: dotnet test generated_csharp/Tests/ChronicleKnights.Tests.csproj --configuration Release --verbosity normal
