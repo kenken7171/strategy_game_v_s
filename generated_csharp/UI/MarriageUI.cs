@@ -46,6 +46,7 @@ using System.Collections.Generic;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Shop;
 using ChronicleKnights.Core.Units;
 using Godot;
 
@@ -95,6 +96,9 @@ public partial class MarriageUI : Godot.Control
     private VBoxContainer? _readyChildrenContainer;
     private VBoxContainer? _minorChildrenContainer;
 
+    // 旅団兵器廠（商店・強化）セクション
+    private VBoxContainer? _shopListContainer;
+
     // 人事（戦力外通告）セクション
     private VBoxContainer? _dismissListContainer;
 
@@ -118,6 +122,18 @@ public partial class MarriageUI : Godot.Control
     /// null なら確認待ちなし。Roster 再描画をまたいでも保持する（誤爆防止）。
     /// </summary>
     private Guid? _pendingDismissId;
+
+    /// <summary>
+    /// 装備強化の確認待ち対象 ID。購入と同じく行内 2 段階確認（[強化] → [強化する]／[やめる]）の
+    /// 「武装」状態をこの 1 件で表す。null なら確認待ちなし。Roster 再描画をまたいでも保持する。
+    /// </summary>
+    private Guid? _pendingUpgradeId;
+
+    /// <summary>
+    /// 装備購入の確認待ち対象 ID。武装すると当該行に 5 大マスターの購入ボタンが展開される
+    /// （[購入] → [剣]/[弓]/…/[やめる]）。null なら確認待ちなし。強化と相互排他に保つ。
+    /// </summary>
+    private Guid? _pendingBuyId;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -235,6 +251,26 @@ public partial class MarriageUI : Godot.Control
         _minorChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-minor-list");
         familySection.AddChild(_minorChildrenContainer);
 
+        // ─ 旅団兵器廠（商店・強化）セクション ───────────────────
+        // 共通サイフ (pt) を消費して、現役へ新品装備を購入／現装備を 1 段階強化する。
+        var shopSection = new VBoxContainer();
+        shopSection.SetMeta(TestIdMetaKey, "shop-section");
+        root.AddChild(shopSection);
+        var shopTitle = new Label { Text = "── 🛡️ 旅団兵器廠（商店・強化） ──" };
+        shopTitle.SetMeta(TestIdMetaKey, "shop-title");
+        shopSection.AddChild(shopTitle);
+
+        var shopHint = new Label
+        {
+            Text = $"装備の購入は {ShopService.BuyCost} pt 固定 / 強化は現Lvに比例（Lv1→2 で {ShopService.UpgradeCostFor(1)} pt）",
+        };
+        shopHint.SetMeta(TestIdMetaKey, "shop-hint");
+        shopSection.AddChild(shopHint);
+
+        _shopListContainer = new VBoxContainer();
+        _shopListContainer.SetMeta(TestIdMetaKey, "shop-list");
+        shopSection.AddChild(_shopListContainer);
+
         // ─ 人事（戦力外通告）セクション ─────────────────────────
         // 旅団の新陳代謝をプレイヤーの手に戻す。寿命前の現役を任意に外す手動解雇。
         var dismissSection = new VBoxContainer();
@@ -288,6 +324,7 @@ public partial class MarriageUI : Godot.Control
         RenderBalance();
         RenderQuote(); // 残高変動で affordable が変わる可能性
         RenderScoutButton();
+        RenderShop();  // 残高変動で購入・強化ボタンの活性が変わる
     }
 
     private void OnRosterChanged()
@@ -295,6 +332,7 @@ public partial class MarriageUI : Godot.Control
         RenderUnitSelectors();
         RenderQuote();
         RenderChildrenLists();
+        RenderShop();
         RenderDismissList();
     }
 
@@ -309,6 +347,7 @@ public partial class MarriageUI : Godot.Control
         RenderQuote();
         RenderScoutButton();
         RenderChildrenLists();
+        RenderShop();
         RenderDismissList();
     }
 
@@ -439,6 +478,160 @@ public partial class MarriageUI : Godot.Control
                 row.AddChild(enlistBtn);
                 _readyChildrenContainer.AddChild(row);
             }
+        }
+    }
+
+    /// <summary>
+    /// 旅団兵器廠（商店・強化）セクションを、現在の生存者から無状態に再構築する。
+    ///
+    /// 各行の出し分け（装備の有無・上限・確認待ちで分岐）:
+    ///   - 装備なし     → [購入]（武装で 5 大マスターの購入ボタン群＋[やめる]を展開）。
+    ///   - 装備あり・未上限 → [強化 (cost pt)]（武装で [強化する]／[やめる]）。
+    ///   - 装備あり・上限   → 「Lv5 最大」ラベル（これ以上は強化不可）。
+    ///
+    /// 残高不足の実行ボタンは Disabled にする（押下不能で誤操作を防ぐ）。コストの SoT は
+    /// すべて <see cref="ShopService"/>（BuyCost / UpgradeCostFor）に委ねる（UI で式を持たない）。
+    /// SoT を一切キャッシュせず毎回 GetAliveUnits を読み直す（ロスタ／残高変更に追従）。
+    /// </summary>
+    private void RenderShop()
+    {
+        if (_chronicleGlobal is null || _shopListContainer is null) return;
+
+        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない）。
+        foreach (var c in _shopListContainer.GetChildren()) c.QueueFree();
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        if (alive.Count == 0)
+        {
+            var empty = new Label { Text = "（装備を購入・強化できる現役がいません）" };
+            empty.SetMeta(TestIdMetaKey, "shop-empty");
+            _shopListContainer.AddChild(empty);
+            return;
+        }
+
+        var economy = _chronicleGlobal.CurrentEconomy;
+
+        foreach (var unit in alive)
+        {
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"shop-row-{capturedId}");
+
+            var name = new Label
+            {
+                Text = $"🎖 {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
+                       + _chronicleGlobal.ResolveDisplayName(unit),
+            };
+            name.SetMeta(TestIdMetaKey, $"shop-unit-name-{capturedId}");
+            row.AddChild(name);
+
+            var equip = unit.MainEquipment;
+            var equipLabel = new Label
+            {
+                Text = equip is null
+                    ? "装備: —"
+                    : $"装備: {ItemName(equip.ItemId)} Lv{equip.Level}",
+            };
+            equipLabel.SetMeta(TestIdMetaKey, $"shop-equip-label-{capturedId}");
+            row.AddChild(equipLabel);
+
+            if (equip is null)
+            {
+                RenderShopBuyControls(row, capturedId, economy);
+            }
+            else
+            {
+                RenderShopUpgradeControls(row, capturedId, equip, economy);
+            }
+
+            _shopListContainer.AddChild(row);
+        }
+    }
+
+    /// <summary>
+    /// 装備なしユニット行へ「購入」操作を組み立てる。武装状態（<see cref="_pendingBuyId"/>）なら
+    /// 5 大マスターの購入ボタン群＋[やめる]を、未武装なら [購入] 1 個を出す（残高不足は Disabled）。
+    /// </summary>
+    private void RenderShopBuyControls(HBoxContainer row, Guid unitId, PointsEconomy economy)
+    {
+        var canAfford = economy.CanAfford(ShopService.BuyCost);
+
+        if (_pendingBuyId == unitId)
+        {
+            // 武装状態: 5 大マスターの各購入ボタン（押下＝即実行）＋[やめる]。
+            foreach (var item in Enum.GetValues<ItemId>())
+            {
+                var capturedItem = item;
+                var itemBtn = new Button { Text = ItemName(item), Disabled = !canAfford };
+                itemBtn.SetMeta(TestIdMetaKey, $"shop-buy-item-button-{unitId}-{item}");
+                itemBtn.Pressed += () => OnBuyItemPressed(unitId, capturedItem);
+                row.AddChild(itemBtn);
+            }
+
+            var cancelBtn = new Button { Text = "やめる" };
+            cancelBtn.SetMeta(TestIdMetaKey, $"shop-buy-cancel-button-{unitId}");
+            cancelBtn.Pressed += OnShopCancelPressed;
+            row.AddChild(cancelBtn);
+        }
+        else
+        {
+            var buyBtn = new Button
+            {
+                Text = $"購入 ({ShopService.BuyCost} pt)",
+                Disabled = !canAfford,
+            };
+            buyBtn.SetMeta(TestIdMetaKey, $"shop-buy-button-{unitId}");
+            buyBtn.Pressed += () => OnBuyArmPressed(unitId);
+            row.AddChild(buyBtn);
+        }
+    }
+
+    /// <summary>
+    /// 装備ありユニット行へ「強化」操作を組み立てる。上限 (Lv5) は強化不可ラベルのみ。
+    /// 未上限は武装状態（<see cref="_pendingUpgradeId"/>）で [強化する]／[やめる]、未武装で [強化 (cost pt)]。
+    /// </summary>
+    private void RenderShopUpgradeControls(
+        HBoxContainer row, Guid unitId, Equipment equip, PointsEconomy economy)
+    {
+        if (equip.IsAtMaxLevel)
+        {
+            var maxLabel = new Label { Text = "★ Lv5 最大（強化済）" };
+            maxLabel.SetMeta(TestIdMetaKey, $"shop-upgrade-max-label-{unitId}");
+            row.AddChild(maxLabel);
+            return;
+        }
+
+        var cost = ShopService.UpgradeCostFor(equip.Level);
+        var canAfford = economy.CanAfford(cost);
+
+        if (_pendingUpgradeId == unitId)
+        {
+            var confirmLabel = new Label { Text = $"⚠ Lv{equip.Level}→{equip.Level + 1} に強化しますか？ ({cost} pt)" };
+            confirmLabel.SetMeta(TestIdMetaKey, $"shop-upgrade-confirm-label-{unitId}");
+            row.AddChild(confirmLabel);
+
+            var confirmBtn = new Button { Text = "強化する", Disabled = !canAfford };
+            confirmBtn.SetMeta(TestIdMetaKey, $"shop-upgrade-confirm-button-{unitId}");
+            confirmBtn.Pressed += () => OnUpgradeConfirmPressed(unitId);
+            row.AddChild(confirmBtn);
+
+            var cancelBtn = new Button { Text = "やめる" };
+            cancelBtn.SetMeta(TestIdMetaKey, $"shop-upgrade-cancel-button-{unitId}");
+            cancelBtn.Pressed += OnShopCancelPressed;
+            row.AddChild(cancelBtn);
+        }
+        else
+        {
+            var upgradeBtn = new Button
+            {
+                Text = $"強化 ({cost} pt)",
+                Disabled = !canAfford,
+            };
+            upgradeBtn.SetMeta(TestIdMetaKey, $"shop-upgrade-button-{unitId}");
+            upgradeBtn.Pressed += () => OnUpgradeArmPressed(unitId);
+            row.AddChild(upgradeBtn);
         }
     }
 
@@ -621,6 +814,93 @@ public partial class MarriageUI : Godot.Control
             $"[MarriageUI] 🛡 戦力外通告 成立 / {JobName(dismissed.Job)} " +
             $"(Age {dismissed.Age}) Id={dismissed.Id}");
         // 残高・父母セレクタ・家系図・解雇一覧の再描画はシグナル経由で自動。
+    }
+
+    // ─── 旅団兵器廠（商店・強化）ハンドラ ─────────────────────────────────
+
+    /// <summary>
+    /// [購入] 押下: 当該行を購入の武装状態にして 5 大マスターの選択ボタンを展開する。
+    /// 強化の武装とは相互排他（同時に複数行が開かないよう片方を畳む）。実際の購入はまだ起きない。
+    /// </summary>
+    private void OnBuyArmPressed(Guid unitId)
+    {
+        _pendingBuyId = unitId;
+        _pendingUpgradeId = null; // 相互排他: 強化の武装は解除。
+        RenderShop();
+    }
+
+    /// <summary>
+    /// [強化] 押下: 当該行を強化の武装状態（[強化する]／[やめる]）にする。
+    /// 購入の武装とは相互排他。実際の強化はまだ起きない（次の [強化する] で確定）。
+    /// </summary>
+    private void OnUpgradeArmPressed(Guid unitId)
+    {
+        _pendingUpgradeId = unitId;
+        _pendingBuyId = null; // 相互排他: 購入の武装は解除。
+        RenderShop();
+    }
+
+    /// <summary>[やめる] 押下: 購入・強化の武装をともに解除して通常表示へ戻す（何も買わない・強化しない）。</summary>
+    private void OnShopCancelPressed()
+    {
+        _pendingBuyId = null;
+        _pendingUpgradeId = null;
+        RenderShop();
+    }
+
+    /// <summary>
+    /// 装備購入ボタン（5 大マスターのいずれか）押下: ChronicleGlobal.ExecuteBuyEquipment で
+    /// ポイント消費・新装備装着・旧装備ロストを一括実行する。成功時は Economy/RosterChanged
+    /// シグナル経由で自動再描画されるため、ここでは武装解除だけ行う。失敗時は手動で畳む。
+    /// </summary>
+    private void OnBuyItemPressed(Guid unitId, ItemId itemId)
+    {
+        if (_chronicleGlobal is null) return;
+
+        // 武装は結果に関わらず解除（成功なら行が組み変わり、失敗なら通常表示に戻る）。
+        _pendingBuyId = null;
+
+        var result = _chronicleGlobal.ExecuteBuyEquipment(unitId, itemId);
+        if (result is null)
+        {
+            GD.Print($"[MarriageUI] 🛡️ 装備購入 失敗: 残高不足／対象不在 Id={unitId} Item={itemId}");
+            RenderShop(); // 失敗時はシグナル無し → 手動で武装解除を反映
+            return;
+        }
+
+        var lostText = result.ReplacedEquipment is null
+            ? ""
+            : $" / 旧装備 {ItemName(result.ReplacedEquipment.ItemId)} Lv{result.ReplacedEquipment.Level} をロスト";
+        GD.Print(
+            $"[MarriageUI] 🛡️ 装備購入 成立 ({ShopService.BuyCost} pt) / " +
+            $"{ItemName(result.PurchasedEquipment.ItemId)} Lv{result.PurchasedEquipment.Level} を装備{lostText}");
+        // 残高・各リストの再描画はシグナル経由で自動。
+    }
+
+    /// <summary>
+    /// [強化する] 押下: ChronicleGlobal.ExecuteUpgradeEquipment で現装備を 1 段階上げる。
+    /// コストは SoT（ShopService.UpgradeCostFor）に従い SoT 側が現レベルから算出する。
+    /// 成功時はシグナル経由で自動再描画。失敗（残高不足・上限・対象不在）時は手動で畳む。
+    /// </summary>
+    private void OnUpgradeConfirmPressed(Guid unitId)
+    {
+        if (_chronicleGlobal is null) return;
+
+        // 武装は結果に関わらず解除。
+        _pendingUpgradeId = null;
+
+        var result = _chronicleGlobal.ExecuteUpgradeEquipment(unitId);
+        if (result is null)
+        {
+            GD.Print($"[MarriageUI] 🛡️ 装備強化 失敗: 残高不足／上限／対象不在 Id={unitId}");
+            RenderShop(); // 失敗時はシグナル無し → 手動で武装解除を反映
+            return;
+        }
+
+        GD.Print(
+            $"[MarriageUI] 🛡️ 装備強化 成立 / " +
+            $"{ItemName(result.UpgradedEquipment.ItemId)} → Lv{result.UpgradedEquipment.Level}");
+        // 残高・各リストの再描画はシグナル経由で自動。
     }
 
     // ─── ヘルパー ─────────────────────────────────────────────────────────

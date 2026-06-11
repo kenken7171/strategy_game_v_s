@@ -32,6 +32,7 @@
 // =============================================================================
 
 using System.Collections.Generic;
+using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 
@@ -59,18 +60,19 @@ public static class SaveManager
     // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// 3 つの状態を指定パス（既定 user://save_data.json）へアトミックに書き出す。
+    /// 4 つの状態を指定パス（既定 user://save_data.json）へアトミックに書き出す。
     /// 成功時 true、失敗（書き込み不可・例外）時 false。例外は外へ漏らさない。
     /// </summary>
     public static bool SaveToFile(
         string path,
         PointsEconomy economy,
         TimelineEngine timeline,
-        IReadOnlyList<Unit> roster)
+        IReadOnlyList<Unit> roster,
+        IReadOnlyList<ChronicleLogEntry> chronicleLog)
     {
         try
         {
-            var json = SaveSerializer.Serialize(economy, timeline, roster);
+            var json = SaveSerializer.Serialize(economy, timeline, roster, chronicleLog);
             return WriteTextAtomic(path, json);
         }
         catch

@@ -53,6 +53,7 @@ using ChronicleKnights.Core.Localization;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Persistence;
+using ChronicleKnights.Core.Shop;
 using ChronicleKnights.Core.Timeline;
 using ChronicleKnights.Core.Units;
 using Godot;
@@ -608,12 +609,130 @@ public partial class ChronicleGlobal : Godot.Node
             BattalionRoster = result.NewRoster;
             formationChanged = ReconcileFormationWithRosterLocked();
             dismissed = result.Dismissed;
+
+            // 解雇の事実を旅団史へ刻む（ロスタから外れる前の静止画から名前キー等を確定捕捉）。
+            RecordDismissalChronicleLocked(dismissed);
         }
 
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalTimelineChanged); // 旅団史が 1 行伸びたので年代記ナレーションを再描画させる。
         if (formationChanged) SafeEmit(SignalFormationChanged);
 
         return dismissed;
+    }
+
+    /// <summary>
+    /// 手動解雇（戦力外通告）1 件を純粋層 <see cref="ChronicleLog.BuildDismissalEntry"/> で不変エントリへ
+    /// 写し取り、旅団史 <see cref="_chronicleLog"/> へ追記する。<see cref="ExecuteDismiss"/> の内部
+    /// （<see cref="_stateLock"/> 保持中・対象がロスタから外れる直前）からのみ呼ばれる。
+    ///
+    /// ★ 世代見出しは現ターン（<see cref="CurrentTimeline"/>.Turn）を用いる。解雇は Guild フェーズで
+    ///   起きるため、その時点の世代番号がそのまま見出しになる（世代交代の年送りとは独立した即時記録）。
+    /// </summary>
+    /// <param name="dismissed">戦力外通告で外れる旅団員（外れる前の静止画）。</param>
+    private void RecordDismissalChronicleLocked(Unit dismissed)
+    {
+        var generation = CurrentTimeline?.Turn ?? 0;
+        var entry = ChronicleLog.BuildDismissalEntry(generation, dismissed);
+        _chronicleLog = _chronicleLog.Add(entry);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    //  旅団兵器廠: 装備の購入・強化（共通サイフ PointsEconomy を消費）
+    // ────────────────────────────────────────────────────────────────────────
+    //  設計憲法③「単一 SoT」。装備の購入・強化はスカウト・婚姻と同じ共通サイフ
+    //  （PointsEconomy）を消費する。専用通貨は設けず、EconomyChanged を再利用する。
+    //
+    //  ★ 純粋ロジック（残高検証・装備生成/差し替え・上限ガード）は Godot 非依存の
+    //    ShopService (Core/Shop) に分離済み。本メソッドは「状態の差し替えとシグナル
+    //    発火」だけに専念する（責務分離 + テスト容易性）。
+    //
+    //  ★ コストの SoT は ShopService（BuyCost / UpgradeCostFor）に一元化する。
+    //    UI と ChronicleGlobal はともにこの公開 API を参照し、コスト式を二重定義しない。
+
+    /// <summary>
+    /// 共通サイフから <see cref="ShopService.BuyCost"/> を消費して、指定ユニットへ新品 Lv1 装備を
+    /// 1 個装着する。既存装備があった場合、旧装備は差し替えで完全ロストする。
+    ///
+    /// 実行内容:
+    ///   1. ShopService.TryBuyEquipment で残高検証 → 消費 → 新装備生成 → 装着を一括試行。
+    ///   2. 成功時のみ CurrentEconomy と BattalionRoster を一括差し替え。
+    ///   3. EconomyChanged / RosterChanged を発火。
+    ///
+    /// 戻り値:
+    ///   - ShopBuyResult: 購入結果（UI が「○○が装備した」「旧装備を失った」演出に使う）。
+    ///   - null: 残高不足・未初期化・対象不在、等の失敗（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を購入して装着する対象ユニット Id。</param>
+    /// <param name="itemId">購入する装備種別（5 大マスターのいずれか）。</param>
+    public ShopBuyResult? ExecuteBuyEquipment(Guid unitId, ItemId itemId)
+    {
+        ShopBuyResult? result;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // 純粋ロジックへ委譲。失敗（残高不足・対象不在・不正入力）は null で返る。
+            result = ShopService.TryBuyEquipment(
+                CurrentEconomy, BattalionRoster, unitId, itemId, ShopService.BuyCost);
+            if (result is null) return null;
+
+            // 成功 → 状態を一括差し替え。
+            CurrentEconomy  = result.NewEconomy;
+            BattalionRoster = result.NewRoster;
+        }
+
+        SafeEmit(SignalEconomyChanged);
+        SafeEmit(SignalRosterChanged);
+
+        return result;
+    }
+
+    /// <summary>
+    /// 共通サイフから <see cref="ShopService.UpgradeCostFor"/>（現レベル比例）を消費して、指定ユニットの
+    /// 現装備を 1 段階レベルアップする。上限 (Lv5) では失敗（ポイント浪費を防ぐ）。
+    ///
+    /// 実行内容:
+    ///   1. ロスタから対象を覗き、現装備レベルから今回の強化コストを算出（SoT は ShopService）。
+    ///   2. ShopService.TryUpgradeEquipment で残高検証 → 消費 → レベルアップ → 装着し直しを一括試行。
+    ///   3. 成功時のみ CurrentEconomy と BattalionRoster を一括差し替え。
+    ///   4. EconomyChanged / RosterChanged を発火。
+    ///
+    /// 戻り値:
+    ///   - ShopUpgradeResult: 強化結果（UI が「○○の装備が強化された」演出に使う）。
+    ///   - null: 残高不足・未初期化・対象不在・装備なし・上限到達、等の失敗（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を強化する対象ユニット Id。</param>
+    public ShopUpgradeResult? ExecuteUpgradeEquipment(Guid unitId)
+    {
+        ShopUpgradeResult? result;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // 現装備レベルから今回の強化コストを確定（対象不在・装備なしは後段の純粋層が null 化）。
+            var target = BattalionRoster.Find(u => u.Id == unitId);
+            var current = target?.MainEquipment;
+            if (current is null) return null;
+
+            var cost = ShopService.UpgradeCostFor(current.Level);
+
+            // 純粋ロジックへ委譲。失敗（残高不足・上限到達・対象不在）は null で返る。
+            result = ShopService.TryUpgradeEquipment(
+                CurrentEconomy, BattalionRoster, unitId, cost);
+            if (result is null) return null;
+
+            // 成功 → 状態を一括差し替え。
+            CurrentEconomy  = result.NewEconomy;
+            BattalionRoster = result.NewRoster;
+        }
+
+        SafeEmit(SignalEconomyChanged);
+        SafeEmit(SignalRosterChanged);
+
+        return result;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1281,14 +1400,14 @@ public partial class ChronicleGlobal : Godot.Node
     // ════════════════════════════════════════════════════════════════════════
     //  セーブ＆ロード（永続化）
     // ════════════════════════════════════════════════════════════════════════
-    //  3 つの不変レコード状態 (CurrentEconomy / CurrentTimeline / BattalionRoster)
-    //  を SaveManager 経由で user://save_data.json に保存・復元する。
+    //  4 つの不変状態 (CurrentEconomy / CurrentTimeline / BattalionRoster /
+    //  _chronicleLog) を SaveManager 経由で user://save_data.json に保存・復元する。
     //
     //  ★ Random は保存しない。LoadGame では新しい Random を再注入する
     //    （ユーザー仕様: 「Random インスタンスは保存せず、ロード時に再注入」）。
 
     /// <summary>
-    /// 現在の 3 状態を指定パス（既定 SaveManager.DefaultSavePath）へ保存する。
+    /// 現在の 4 状態を指定パス（既定 SaveManager.DefaultSavePath）へ保存する。
     ///
     /// 戻り値:
     ///   - true : 保存成功
@@ -1307,26 +1426,29 @@ public partial class ChronicleGlobal : Godot.Node
         PointsEconomy economy;
         TimelineEngine timeline;
         ImmutableList<Unit> roster;
+        ImmutableArray<ChronicleLogEntry> chronicleLog;
 
         lock (_stateLock)
         {
             if (!IsInitialized || CurrentTimeline is null) return false;
-            economy  = CurrentEconomy;
-            timeline = CurrentTimeline;
-            roster   = BattalionRoster;
+            economy      = CurrentEconomy;
+            timeline     = CurrentTimeline;
+            roster       = BattalionRoster;
+            chronicleLog = _chronicleLog;
         }
 
-        return SaveManager.SaveToFile(targetPath, economy, timeline, roster);
+        return SaveManager.SaveToFile(targetPath, economy, timeline, roster, chronicleLog);
     }
 
     /// <summary>
-    /// 指定パスのセーブデータを読み込み、3 状態を一括で復元する。
+    /// 指定パスのセーブデータを読み込み、4 状態を一括で復元する。
     ///
     /// 復元後の処理:
     ///   - _rng に新しい Random（または引数 rng）を再注入（★ Random は保存しない設計）
+    ///   - _chronicleLog をセーブから復元（旧 v1 セーブは空配列で後方互換）
     ///   - IsInitialized を true に
     ///   - StateInitialized / Economy / Timeline / Roster の全シグナルを発火し
-    ///     UI を初期化と同じ経路で完全再描画させる
+    ///     UI を初期化と同じ経路で完全再描画させる（TimelineChanged で旅団史も再描画）
     ///
     /// 戻り値:
     ///   - true : ロード成功（状態を差し替え済み）
@@ -1355,7 +1477,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle   = null;              // 戦闘は永続化しない（ロード再開は非戦闘状態）
             _battleRng      = new Random();       // 戦闘乱数は次の StartBattle で再シード
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
-            _chronicleLog   = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史は永続化せず空から再蓄積
+            _chronicleLog   = loaded.ChronicleLog; // ★ 旅団史を永続化セーブから復元（v1 は空配列）
             IsInitialized   = true;
         }
 

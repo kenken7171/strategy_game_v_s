@@ -13,7 +13,10 @@
 // =============================================================================
 
 using System;
+using System.Collections.Immutable;
 using System.Linq;
+using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Persistence;
 using ChronicleKnights.Core.Units;
 using ChronicleKnights.Tests.TestSupport;
@@ -30,7 +33,8 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
         var loaded = SaveSerializer.Deserialize(json);
 
         Assert.NotNull(loaded);
@@ -45,7 +49,8 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
         var loaded = SaveSerializer.Deserialize(json);
 
         Assert.NotNull(loaded);
@@ -71,7 +76,8 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
         var loaded = SaveSerializer.Deserialize(json);
 
         Assert.NotNull(loaded);
@@ -88,7 +94,8 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
         var loaded = SaveSerializer.Deserialize(json);
 
         Assert.NotNull(loaded);
@@ -115,7 +122,8 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
         var loaded = SaveSerializer.Deserialize(json);
 
         Assert.NotNull(loaded);
@@ -132,12 +140,100 @@ public class SaveSerializerTests
     {
         var state = SampleData.BuildState();
 
-        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster);
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
 
         // 数値ではなく文字列で保存されていること（JsonStringEnumConverter）。
         Assert.Contains("IronWallKnight", json);
         Assert.Contains("Sniper", json);
         Assert.Contains("SwordKnight", json);
+    }
+
+    // ─── ラウンドトリップ: 旅団史（年代記ナレーション素材） ─────────────────
+
+    [Fact]
+    public void Roundtrip_PreservesChronicleLog_FieldByField()
+    {
+        var state = SampleData.BuildState();
+
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(state.ChronicleLog.Length, loaded!.ChronicleLog.Length);
+
+        for (var i = 0; i < state.ChronicleLog.Length; i++)
+        {
+            AssertChronicleEntryEqual(state.ChronicleLog[i], loaded.ChronicleLog[i]);
+        }
+    }
+
+    [Fact]
+    public void Roundtrip_PreservesDismissalEntry_AgeAndFinalLevel()
+    {
+        var state = SampleData.BuildState();
+
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        var dismissal = loaded!.ChronicleLog.Single(
+            e => e.Kind == ChronicleEventKind.Dismissed);
+
+        // 解雇は Age（解雇時年齢）と FromLevel（解雇時の最終 Lv）の双方を運ぶ。
+        Assert.Equal(JobId.Sniper, dismissal.Job);
+        Assert.Equal(41, dismissal.Age);
+        Assert.Equal(3, dismissal.FromLevel);
+        Assert.Equal(4, dismissal.Generation);
+    }
+
+    [Fact]
+    public void Serialize_WritesChronicleLogKinds_AsStrings()
+    {
+        var state = SampleData.BuildState();
+
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
+
+        // enum Kind は数値でなく文字列で保存（並べ替え耐性）。
+        Assert.Contains("LevelGained", json);
+        Assert.Contains("Dismissed", json);
+    }
+
+    [Fact]
+    public void Serialize_EmptyChronicleLog_RoundtripsToEmpty()
+    {
+        var state = SampleData.BuildState();
+
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster,
+            ImmutableArray<ChronicleLogEntry>.Empty);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        Assert.Empty(loaded!.ChronicleLog);
+    }
+
+    // ─── 後方互換: 旧 v1 セーブ（ChronicleLog 欠落）は空配列で復元 ───────────
+
+    [Fact]
+    public void Deserialize_LegacyV1Save_WithoutChronicleLog_YieldsEmptyLog()
+    {
+        // ChronicleLog セクションを持たない旧 v1 セーブを模した JSON。
+        const string legacyJson =
+            "{\"Version\":1," +
+            "\"Economy\":{\"CurrentBalance\":7,\"TotalEarned\":7,\"TotalSpent\":0}," +
+            "\"Timeline\":{\"Turn\":1,\"CurrentOptions\":[]}," +
+            "\"Roster\":[]}";
+
+        var loaded = SaveSerializer.Deserialize(legacyJson);
+
+        Assert.NotNull(loaded);
+        // 経済は正しくパースされ、欠落した旅団史は空配列で安全に復元される。
+        Assert.Equal(7, loaded!.Economy.CurrentBalance);
+        Assert.Empty(loaded.ChronicleLog);
     }
 
     // ─── 破損耐性: 不正入力は null（例外を投げない） ───────────────────────
@@ -170,11 +266,13 @@ public class SaveSerializerTests
         var state = SampleData.BuildState();
 
         Assert.Throws<ArgumentNullException>(
-            () => SaveSerializer.Serialize(null!, state.Timeline, state.Roster));
+            () => SaveSerializer.Serialize(null!, state.Timeline, state.Roster, state.ChronicleLog));
         Assert.Throws<ArgumentNullException>(
-            () => SaveSerializer.Serialize(state.Economy, null!, state.Roster));
+            () => SaveSerializer.Serialize(state.Economy, null!, state.Roster, state.ChronicleLog));
         Assert.Throws<ArgumentNullException>(
-            () => SaveSerializer.Serialize(state.Economy, state.Timeline, null!));
+            () => SaveSerializer.Serialize(state.Economy, state.Timeline, null!, state.ChronicleLog));
+        Assert.Throws<ArgumentNullException>(
+            () => SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster, null!));
     }
 
     // ─── ヘルパー: Unit のフィールド単位照合 ───────────────────────────────
@@ -214,5 +312,21 @@ public class SaveSerializerTests
             Assert.True(actual.BattleAffinity.TryGetValue(kv.Key, out var v));
             Assert.Equal(kv.Value, v);
         }
+    }
+
+    // ─── ヘルパー: ChronicleLogEntry のフィールド単位照合 ─────────────────────
+
+    private static void AssertChronicleEntryEqual(ChronicleLogEntry expected, ChronicleLogEntry actual)
+    {
+        // ChronicleLogEntry はスカラー専用 record（コレクションを持たない）ため値等価でも
+        // 照合できるが、欠落フィールドの取りこぼしを明示検出するため 1 つずつ突き合わせる。
+        Assert.Equal(expected.Generation, actual.Generation);
+        Assert.Equal(expected.Kind, actual.Kind);
+        Assert.Equal(expected.UnitFirstNameKey, actual.UnitFirstNameKey);
+        Assert.Equal(expected.UnitLastNameKey, actual.UnitLastNameKey);
+        Assert.Equal(expected.Job, actual.Job);
+        Assert.Equal(expected.Age, actual.Age);
+        Assert.Equal(expected.FromLevel, actual.FromLevel);
+        Assert.Equal(expected.ToLevel, actual.ToLevel);
     }
 }

@@ -49,6 +49,11 @@ namespace ChronicleKnights.UI;
 /// </summary>
 public partial class GameDirector : Godot.Control
 {
+    // ─── 定数 ─────────────────────────────────────────────────────────────
+
+    /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
+    private const string TestIdMetaKey = "data_testid";
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -132,25 +137,30 @@ public partial class GameDirector : Godot.Control
         var root = new VBoxContainer { Name = "DirectorRoot" };
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 8);
+        root.SetMeta(TestIdMetaKey, "game-director-root");
         AddChild(root);
 
         // ── 常設ヘッダー：フェーズインジケータ + 次へボタン ──────────
         var header = new HBoxContainer { Name = "DirectorHeader" };
         header.AddThemeConstantOverride("separation", 16);
+        header.SetMeta(TestIdMetaKey, "game-director-header");
         root.AddChild(header);
 
         _phaseIndicatorLabel = new Label { Name = "PhaseIndicator" };
         _phaseIndicatorLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _phaseIndicatorLabel.SetMeta(TestIdMetaKey, "game-director-phase-indicator");
         header.AddChild(_phaseIndicatorLabel);
 
         _advanceButton = new Button { Name = "AdvancePhaseButton" };
         _advanceButton.Pressed += OnAdvancePressed;
+        _advanceButton.SetMeta(TestIdMetaKey, "game-director-advance-button");
         header.AddChild(_advanceButton);
 
         // ── 画面コンテナ：4 フェーズ画面をぶら下げ、1 つだけ Visible にする ──
         _screenContainer = new Control { Name = "ScreenContainer" };
         _screenContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         _screenContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _screenContainer.SetMeta(TestIdMetaKey, "game-director-screen-container");
         root.AddChild(_screenContainer);
     }
 
@@ -165,6 +175,8 @@ public partial class GameDirector : Godot.Control
             var screen = CreateScreenFor(phase);
             // スラッグを Node 名にして、後段で GetNodeOrNull により安全に引き当てる。
             screen.Name = phase.Slug();
+            // testid もスラッグ込みで付与（E2E がフェーズ画面を一意に掴めるようにする）。
+            screen.SetMeta(TestIdMetaKey, $"game-director-screen-{phase.Slug()}");
             screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
             screen.Visible = false; // 初期は全て非表示。RenderCurrentPhase で 1 つだけ表示。
             _screenContainer.AddChild(screen);

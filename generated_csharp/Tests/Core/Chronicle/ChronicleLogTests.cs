@@ -269,4 +269,34 @@ public class ChronicleLogTests
         Assert.Single(entries, e => e.Kind == ChronicleEventKind.Retired);
         Assert.Single(entries, e => e.Kind == ChronicleEventKind.KilledInAction);
     }
+
+    // ─── 7. 手動解雇（戦力外通告）の年代記化 ────────────────────────────────
+
+    [Fact]
+    public void BuildDismissalEntry_CapturesFinalStatus_FromStillPicture()
+    {
+        var id = Guid.NewGuid();
+        // 寿命前の現役を編成判断で外す静止画（年齢・最終レベルの双方が意味を持つ）。
+        var dismissed = MakeUnit(id, JobId.Scout, "dismissed-first", "dismissed-last")
+            with { Age = 33, Level = 3 };
+
+        var entry = ChronicleLog.BuildDismissalEntry(generation: 11, dismissed);
+
+        Assert.Equal(ChronicleEventKind.Dismissed, entry.Kind);
+        Assert.Equal(11, entry.Generation);
+        Assert.Equal("dismissed-first", entry.UnitFirstNameKey);
+        Assert.Equal("dismissed-last", entry.UnitLastNameKey);
+        Assert.Equal(JobId.Scout, entry.Job);
+        // 解雇は Age（解雇時年齢）と FromLevel（解雇時の最終 Lv）を運ぶ。ToLevel は未使用。
+        Assert.Equal(33, entry.Age);
+        Assert.Equal(3, entry.FromLevel);
+        Assert.Equal(0, entry.ToLevel);
+    }
+
+    [Fact]
+    public void BuildDismissalEntry_NullUnit_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => ChronicleLog.BuildDismissalEntry(generation: 1, dismissed: null!));
+    }
 }

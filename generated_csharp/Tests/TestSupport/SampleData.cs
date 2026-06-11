@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Immutable;
+using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
@@ -44,7 +45,7 @@ public static class SampleData
     // ─── 状態スナップショット ─────────────────────────────────────────────
 
     /// <summary>
-    /// 経済・タイムライン・ロスターの 3 状態の束。テスト間で受け渡しやすい
+    /// 経済・タイムライン・ロスター・旅団史の 4 状態の束。テスト間で受け渡しやすい
     /// 軽量レコード。
     /// </summary>
     public sealed record State
@@ -52,6 +53,7 @@ public static class SampleData
         public required PointsEconomy Economy { get; init; }
         public required TimelineEngine Timeline { get; init; }
         public required ImmutableList<Unit> Roster { get; init; }
+        public required ImmutableArray<ChronicleLogEntry> ChronicleLog { get; init; }
     }
 
     /// <summary>
@@ -59,6 +61,7 @@ public static class SampleData
     ///   - 経済   : 残高 9 / 累計獲得 11 / 累計消費 2
     ///   - タイムライン: DefaultGenerator(new Random(2024)) による 3 予言
     ///   - ロスター : IronWallKnight(Lv3, 装備+好感度あり) と Sniper(Lv1, 装備なし)
+    ///   - 旅団史   : 昇級(LevelGained) 1 行 + 解雇(Dismissed) 1 行（永続化ラウンドトリップ用）
     /// </summary>
     public static State BuildState()
     {
@@ -114,11 +117,36 @@ public static class SampleData
 
         var roster = ImmutableList.Create(ironWall, sniper);
 
+        // 旅団史 2 行: 昇級(成長系・FromLevel/ToLevel を使う)と解雇(損失系・Age/FromLevel を使う)
+        // の両分岐を踏み、シリアライズが全フィールドを取りこぼさないことを担保する。
+        var chronicleLog = ImmutableArray.Create(
+            new ChronicleLogEntry
+            {
+                Generation       = 2,
+                Kind             = ChronicleEventKind.LevelGained,
+                UnitFirstNameKey = "name-sample-ironwall",
+                UnitLastNameKey  = "name-family-sample",
+                Job              = JobId.IronWallKnight,
+                FromLevel        = 2,
+                ToLevel          = 3,
+            },
+            new ChronicleLogEntry
+            {
+                Generation       = 4,
+                Kind             = ChronicleEventKind.Dismissed,
+                UnitFirstNameKey = "name-sample-sniper",
+                UnitLastNameKey  = "name-family-sample",
+                Job              = JobId.Sniper,
+                Age              = 41,
+                FromLevel        = 3,
+            });
+
         return new State
         {
-            Economy  = economy,
-            Timeline = timeline,
-            Roster   = roster,
+            Economy      = economy,
+            Timeline     = timeline,
+            Roster       = roster,
+            ChronicleLog = chronicleLog,
         };
     }
 }

@@ -365,6 +365,8 @@ public partial class TimelineUI : Godot.Control
                 $"⚔️ 〈ターン{entry.Generation}〉{name}（{jobName}・{entry.Age}歳）は戦野に斃れ、その名は伝説となった。",
             ChronicleEventKind.LevelGained =>
                 $"⬆️ 〈ターン{entry.Generation}〉{name}（{jobName}）は研鑽の末、Lv{entry.FromLevel} から Lv{entry.ToLevel} へと成長した。",
+            ChronicleEventKind.Dismissed =>
+                $"🛡️ 〈ターン{entry.Generation}〉{name}（{jobName}・{entry.Age}歳・Lv{entry.FromLevel}）は編成判断により旅団を去った。",
             _ =>
                 $"・〈ターン{entry.Generation}〉{name}（{jobName}）",
         };

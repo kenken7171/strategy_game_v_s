@@ -95,16 +95,21 @@ public partial class FormationUI : Godot.Control
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 16);
+        root.SetMeta(TestIdMetaKey, "formation-root");
         AddChild(root);
 
-        root.AddChild(new Label { Text = "⚔ 大隊編成（V字3×3配置）" });
+        var titleLabel = new Label { Text = "⚔ 大隊編成（V字3×3配置）" };
+        titleLabel.SetMeta(TestIdMetaKey, "formation-title");
+        root.AddChild(titleLabel);
 
         _summaryLabel = new Label();
+        _summaryLabel.SetMeta(TestIdMetaKey, "formation-summary");
         root.AddChild(_summaryLabel);
 
         // ── 分隊ローテーション操作 ─────────────────────────────────
         var rotationRow = new HBoxContainer();
         rotationRow.AddThemeConstantOverride("separation", 12);
+        rotationRow.SetMeta(TestIdMetaKey, "formation-rotation-row");
         root.AddChild(rotationRow);
 
         var rotateCcw = new Button { Text = "⟲ 反時計回り" };
@@ -118,23 +123,31 @@ public partial class FormationUI : Godot.Control
         rotationRow.AddChild(rotateCw);
 
         // ── 配置盤面（9 マス。FormationChanged ごとに再構築） ──────
-        root.AddChild(new Label { Text = "── 配置盤面 ──" });
+        var boardSectionLabel = new Label { Text = "── 配置盤面 ──" };
+        boardSectionLabel.SetMeta(TestIdMetaKey, "formation-board-section-label");
+        root.AddChild(boardSectionLabel);
 
         _boardContainer = new VBoxContainer();
         _boardContainer.AddThemeConstantOverride("separation", 8);
+        _boardContainer.SetMeta(TestIdMetaKey, "formation-board");
         root.AddChild(_boardContainer);
 
         // ── 控え（未配置の旅団員。RosterChanged ごとに再構築） ─────
-        root.AddChild(new Label { Text = "── 控え（未配置の旅団員）──" });
+        var benchSectionLabel = new Label { Text = "── 控え（未配置の旅団員）──" };
+        benchSectionLabel.SetMeta(TestIdMetaKey, "formation-bench-section-label");
+        root.AddChild(benchSectionLabel);
 
         _benchContainer = new VBoxContainer();
         _benchContainer.AddThemeConstantOverride("separation", 4);
+        _benchContainer.SetMeta(TestIdMetaKey, "formation-bench");
         root.AddChild(_benchContainer);
 
-        root.AddChild(new Label
+        var hintLabel = new Label
         {
             Text = "💡 控えを選び空きマスをクリックで配置 / 埋まったマスをクリックで外す",
-        });
+        };
+        hintLabel.SetMeta(TestIdMetaKey, "formation-hint");
+        root.AddChild(hintLabel);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -220,12 +233,15 @@ public partial class FormationUI : Godot.Control
         {
             var rowGroup = new HBoxContainer();
             rowGroup.AddThemeConstantOverride("separation", 8);
+            rowGroup.SetMeta(TestIdMetaKey, $"formation-row-{row}");
 
-            rowGroup.AddChild(new Label
+            var rowLabel = new Label
             {
                 Text = $"[{row}]",
                 CustomMinimumSize = new Vector2(96, 0),
-            });
+            };
+            rowLabel.SetMeta(TestIdMetaKey, $"formation-row-label-{row}");
+            rowGroup.AddChild(rowLabel);
 
             for (int column = 0; column < FormationBoard.ColumnsPerRow; column++)
             {

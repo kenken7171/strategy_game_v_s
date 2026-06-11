@@ -48,6 +48,12 @@ public enum ChronicleEventKind
 
     /// <summary>戦果による昇級（経験を積み階級が上がった）。</summary>
     LevelGained,
+
+    /// <summary>
+    /// 戦力外通告（プレイヤーの編成判断による手動解雇）で旅団を去った。
+    /// 引退（寿命）・戦死（戦場）と異なり、寿命前の現役を *任意* に外す人事決定を写し取る。
+    /// </summary>
+    Dismissed,
 }
 
 /// <summary>
@@ -162,5 +168,37 @@ public static class ChronicleLog
         }
 
         return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// プレイヤーの編成判断による手動解雇（戦力外通告）1 件を、年代記の一行へ純粋に写し取る。
+    ///
+    /// ★ 呼び出しタイミングの規律（<see cref="BuildGenerationEntries"/> と同じ思想）:
+    ///   解雇ユニットはこの直後にロスタから不可逆に外れるため、外れる前の静止画
+    ///   （<paramref name="dismissed"/>）から名前キー・ジョブ・年齢・レベルをその場で確定捕捉する。
+    ///   これにより UI はロスタ実在に依存せず、過去に解雇した者の名も安全に解決できる。
+    ///
+    /// ★ フィールドの割り当て:
+    ///   解雇は「年齢」と「最終レベル」の双方が意味を持つ出来事のため、
+    ///   <see cref="ChronicleLogEntry.Age"/> に解雇時の年齢、<see cref="ChronicleLogEntry.FromLevel"/> に
+    ///   解雇時のレベルを格納する（ToLevel は未使用・0）。UI 側の整形がこの取り決めに対応する。
+    /// </summary>
+    /// <param name="generation">この解雇が起きた世代（タイムラインのターン番号・見出しに使う）。</param>
+    /// <param name="dismissed">戦力外通告で外れる旅団員（外れる前の静止画）。</param>
+    /// <returns>解雇 1 件を表す不変な年代記エントリ。</returns>
+    public static ChronicleLogEntry BuildDismissalEntry(int generation, Unit dismissed)
+    {
+        ArgumentNullException.ThrowIfNull(dismissed);
+
+        return new ChronicleLogEntry
+        {
+            Generation       = generation,
+            Kind             = ChronicleEventKind.Dismissed,
+            UnitFirstNameKey = dismissed.FirstNameKey,
+            UnitLastNameKey  = dismissed.LastNameKey,
+            Job              = dismissed.Job,
+            Age              = dismissed.Age,
+            FromLevel        = dismissed.Level, // 解雇時の最終レベル（ToLevel は未使用）。
+        };
     }
 }

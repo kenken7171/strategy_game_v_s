@@ -3,10 +3,11 @@
 // -----------------------------------------------------------------------------
 //  セーブデータの「状態 ⇄ JSON 文字列」純粋変換層（Godot 完全非依存）。
 //
-//  保存対象は ChronicleGlobal が保持する 3 つの不変レコード状態:
-//    1. PointsEconomy        — ポイント一元経済の財布
-//    2. TimelineEngine       — 予言タイムラインの現在状態
-//    3. ImmutableList<Unit>  — 大隊の全旅団員リスト
+//  保存対象は ChronicleGlobal が保持する 4 つの不変状態:
+//    1. PointsEconomy                       — ポイント一元経済の財布
+//    2. TimelineEngine                      — 予言タイムラインの現在状態
+//    3. ImmutableList<Unit>                 — 大隊の全旅団員リスト
+//    4. ImmutableArray<ChronicleLogEntry>   — 旅団史（引退/戦死/昇級/解雇のナレーション素材）
 //
 //  ★ 重要設計判断 — DTO マッピング方式:
 //    不変レコード (sealed record + required/init + ImmutableArray/
@@ -37,6 +38,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
@@ -63,6 +65,13 @@ public sealed record LoadedGameState
 
     /// <summary>復元された旅団員リスト。</summary>
     public required ImmutableList<Unit> Roster { get; init; }
+
+    /// <summary>
+    /// 復元された旅団史（年代記ナレーションの素材）。旧 v1 セーブには無いため既定は空配列
+    /// （required を付けず、欠落セーブでも安全に空で復元できるようにする＝後方互換）。
+    /// </summary>
+    public ImmutableArray<ChronicleLogEntry> ChronicleLog { get; init; }
+        = ImmutableArray<ChronicleLogEntry>.Empty;
 }
 
 // ─── 純粋変換ユーティリティ（Godot 非依存・テスト可能） ──────────────────────
@@ -75,8 +84,11 @@ public static class SaveSerializer
 {
     // ─── 定数 ─────────────────────────────────────────────────────────────
 
-    /// <summary>セーブスキーマのバージョン。破壊的変更時にインクリメントする。</summary>
-    public const int CurrentSaveVersion = 1;
+    /// <summary>
+    /// セーブスキーマのバージョン。破壊的変更時にインクリメントする。
+    /// v2: 旅団史（ChronicleLog）を追加（旧 v1 セーブは ChronicleLog 欠落 → 空配列で後方互換復元）。
+    /// </summary>
+    public const int CurrentSaveVersion = 2;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -97,24 +109,31 @@ public static class SaveSerializer
     // ─── 純粋変換 ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 3 つの状態を JSON 文字列へ変換する純粋関数。Godot ランタイム不要。
+    /// 4 つの状態を JSON 文字列へ変換する純粋関数。Godot ランタイム不要。
     /// </summary>
+    /// <param name="economy">保存するポイント経済。</param>
+    /// <param name="timeline">保存する予言タイムライン。</param>
+    /// <param name="roster">保存する旅団員リスト。</param>
+    /// <param name="chronicleLog">保存する旅団史（年代記ナレーションの素材）。空でも可。</param>
     public static string Serialize(
         PointsEconomy economy,
         TimelineEngine timeline,
-        IReadOnlyList<Unit> roster)
+        IReadOnlyList<Unit> roster,
+        IReadOnlyList<ChronicleLogEntry> chronicleLog)
     {
         ArgumentNullException.ThrowIfNull(economy);
         ArgumentNullException.ThrowIfNull(timeline);
         ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(chronicleLog);
 
         var dto = new SaveDataDto
         {
-            Version    = CurrentSaveVersion,
-            SavedAtUtc = DateTime.UtcNow.ToString("o"),
-            Economy    = ToDto(economy),
-            Timeline   = ToDto(timeline),
-            Roster     = roster.Select(ToDto).ToList(),
+            Version      = CurrentSaveVersion,
+            SavedAtUtc   = DateTime.UtcNow.ToString("o"),
+            Economy      = ToDto(economy),
+            Timeline     = ToDto(timeline),
+            Roster       = roster.Select(ToDto).ToList(),
+            ChronicleLog = chronicleLog.Select(ToDto).ToList(),
         };
         return JsonSerializer.Serialize(dto, JsonOptions);
     }
@@ -146,6 +165,10 @@ public static class SaveSerializer
             Roster   = (dto.Roster ?? new List<UnitDto>())
                        .Select(FromDto)
                        .ToImmutableList(),
+            // 旧 v1 セーブには ChronicleLog が無い → null → 空配列で後方互換復元。
+            ChronicleLog = (dto.ChronicleLog ?? new List<ChronicleLogEntryDto>())
+                           .Select(FromDto)
+                           .ToImmutableArray(),
         };
     }
 
@@ -199,6 +222,18 @@ public static class SaveSerializer
         ItemId    = e.ItemId,
         Level     = e.Level,
         AffixKeys = e.AffixKeys.ToList(),
+    };
+
+    private static ChronicleLogEntryDto ToDto(ChronicleLogEntry c) => new()
+    {
+        Generation       = c.Generation,
+        Kind             = c.Kind,
+        UnitFirstNameKey = c.UnitFirstNameKey,
+        UnitLastNameKey  = c.UnitLastNameKey,
+        Job              = c.Job,
+        Age              = c.Age,
+        FromLevel        = c.FromLevel,
+        ToLevel          = c.ToLevel,
     };
 
     // ════════════════════════════════════════════════════════════════════════
@@ -273,6 +308,18 @@ public static class SaveSerializer
         AffixKeys = (d.AffixKeys ?? new List<string>()).ToImmutableArray(),
     };
 
+    private static ChronicleLogEntry FromDto(ChronicleLogEntryDto d) => new()
+    {
+        Generation       = d.Generation,
+        Kind             = d.Kind,
+        UnitFirstNameKey = d.UnitFirstNameKey ?? string.Empty,
+        UnitLastNameKey  = d.UnitLastNameKey ?? string.Empty,
+        Job              = d.Job,
+        Age              = d.Age,
+        FromLevel        = d.FromLevel,
+        ToLevel          = d.ToLevel,
+    };
+
     // ════════════════════════════════════════════════════════════════════════
     //  ディスクスキーマ DTO（可変・System.Text.Json 用）
     // ════════════════════════════════════════════════════════════════════════
@@ -292,6 +339,12 @@ public static class SaveSerializer
         public EconomyDto? Economy { get; set; }
         public TimelineDto? Timeline { get; set; }
         public List<UnitDto> Roster { get; set; } = new();
+
+        /// <summary>
+        /// 旅団史（年代記ナレーションの素材）。v2 で追加。旧 v1 セーブには無く JSON 上で欠落するため
+        /// nullable とし、Deserialize 側で null → 空配列に正規化する（後方互換）。
+        /// </summary>
+        public List<ChronicleLogEntryDto>? ChronicleLog { get; set; }
     }
 
     /// <summary>PointsEconomy の保存形。</summary>
@@ -344,5 +397,21 @@ public static class SaveSerializer
         public ItemId ItemId { get; set; }
         public int Level { get; set; }
         public List<string> AffixKeys { get; set; } = new();
+    }
+
+    /// <summary>
+    /// ChronicleLogEntry（旅団史の一行）の保存形。enum Kind は文字列で保存し、
+    /// 表示テキストは持たない（名前キー・JobId・数値だけ）＝ロード後に UI が localization 解決する。
+    /// </summary>
+    private sealed class ChronicleLogEntryDto
+    {
+        public int Generation { get; set; }
+        public ChronicleEventKind Kind { get; set; }
+        public string UnitFirstNameKey { get; set; } = string.Empty;
+        public string UnitLastNameKey { get; set; } = string.Empty;
+        public JobId Job { get; set; }
+        public int Age { get; set; }
+        public int FromLevel { get; set; }
+        public int ToLevel { get; set; }
     }
 }
