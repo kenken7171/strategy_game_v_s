@@ -24,6 +24,7 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
@@ -48,6 +49,13 @@ public static class AttackIntentRoller
 
     /// <summary>各攻撃の最小威力（倍率・ジッタ・丸めで 0 以下に落ちない保証）。</summary>
     public const int MinimumDamagePerUnit = 1;
+
+    /// <summary>
+    /// 先読み（運命の帯）の最大ターン数の番兵。Forecast が受け取る lookaheadTurns は
+    /// この上限でクランプされ、過大値による過剰確保・長時間ループを構造的に封じる。
+    /// 数ターン先の戦術判断（回転作戦の読み合い）が目的のため、現実的な深さに留める。
+    /// </summary>
+    public const int MaxForecastTurns = 16;
 
     // ─── スキル名キー（ASCII・localization 解決用） ──────────────────────
 
@@ -127,6 +135,62 @@ public static class AttackIntentRoller
             TargetRows = AllRows,
             DamagePerUnit = RollDamage(baseAttack, TotalAssaultMultiplier, rng),
         };
+    }
+
+    // ─── N ターン先読み（運命の帯・横軸の予言エンジン） ──────────────────
+
+    /// <summary>
+    /// 敵がこの先 <paramref name="lookaheadTurns"/> ターンに放つ予定の攻撃予告を、
+    /// 受け取ったシードから決定論的に先回りして「運命の帯」（ルックアヘッド配列）へ
+    /// 組み上げて返す純粋関数。戻り値 index 0 が T+1（次ターン）、index 1 が T+2 … と続く。
+    ///
+    /// ★ SoT 不可侵（設計憲法 ②・③ / 副作用なく未来を覗き見る）:
+    ///   <paramref name="currentSeed"/> の「コピー」をローカルの <see cref="Random"/> として
+    ///   立て、それだけをターン数分だけ確定的に前進させる。外部状態（実戦の乱数器・敵・盤面）を
+    ///   1 ミリも変更しない。<see cref="Roll"/> は <paramref name="enemy"/> を読むだけの純粋関数
+    ///   ゆえ、何度呼んでも同じ局面からは同じ帯が返る（完全な冪等・決定論）。
+    ///
+    /// ★ 実戦との整合（faithful projection）:
+    ///   実戦 <see cref="BattleResolver.ResolveTurn"/> は 1 本の乱数器を毎ターン Roll へ通して
+    ///   次手を確定する。本関数も同型に、1 本のローカル乱数器を Roll へ連続通電して帯を組む。
+    ///   各 Roll は局面に応じて乱数を可変個（強襲/挟撃=3・総攻撃=2）消費するため、帯の各要素は
+    ///   前要素の消費量だけ前進した「次の予言」になる。
+    ///
+    /// ★ ガード番兵（要件③・暴走の構造的封じ込め）:
+    ///   <paramref name="lookaheadTurns"/> が 0 以下なら空帯を返す。過大値は
+    ///   <see cref="MaxForecastTurns"/> でクランプして過剰確保・長時間ループを防ぐ。ループは
+    ///   固定回数の前進のみで添字アクセスを行わないため、無限ループ・範囲外参照は原理的に生じない。
+    /// </summary>
+    /// <param name="enemy">予告主の敵スナップショット（攻撃力を威力の基値に使う、null 不可）。</param>
+    /// <param name="currentSeed">先読みの起点シード（このコピーをローカルで前進させる）。</param>
+    /// <param name="lookaheadTurns">何ターン先まで覗くか（0 以下は空・上限はクランプ）。</param>
+    /// <returns>T+1 から順に並ぶ攻撃予告の不変な帯（要素数は実効ターン数）。</returns>
+    /// <exception cref="ArgumentNullException">enemy が null の場合。</exception>
+    public static IReadOnlyList<AttackIntent> Forecast(
+        EnemyState enemy, uint currentSeed, int lookaheadTurns)
+    {
+        ArgumentNullException.ThrowIfNull(enemy);
+
+        // 番兵①: 非正のルックアヘッドは「覗く未来なし」として空帯を返す（例外を投げない）。
+        if (lookaheadTurns <= 0)
+        {
+            return ImmutableArray<AttackIntent>.Empty;
+        }
+
+        // 番兵②: 過大値を上限でクランプ（過剰確保・長時間ループの構造的封じ込め）。
+        var effectiveTurns = Math.Min(lookaheadTurns, MaxForecastTurns);
+
+        // 受け取ったシードの「コピー」をローカル乱数器として確定的に前進させる。
+        // uint シードを Random の種(int)へ unchecked で写す（情報を落とさない決定論的写像）。
+        var forecastRng = new Random(unchecked((int)currentSeed));
+
+        var builder = ImmutableArray.CreateBuilder<AttackIntent>(effectiveTurns);
+        for (int turn = 0; turn < effectiveTurns; turn++)
+        {
+            // Roll は enemy を変更しない純粋関数。前進するのは forecastRng だけ（SoT は不可侵）。
+            builder.Add(Roll(enemy, forecastRng));
+        }
+        return builder.ToImmutable();
     }
 
     // ─── 内部ヘルパー ───────────────────────────────────────────────────
