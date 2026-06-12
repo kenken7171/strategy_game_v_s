@@ -155,7 +155,9 @@ public class PhaseNameResolverTests
     [Fact]
     public void FromLocalizationJson_MalformedJson_ThrowsJsonException()
     {
-        Assert.Throws<JsonException>(
+        // System.Text.Json throws JsonReaderException (a JsonException subclass) for
+        // malformed input; ThrowsAny accepts the base type and any derived parse error.
+        Assert.ThrowsAny<JsonException>(
             () => PhaseNameResolver.FromLocalizationJson("{ this is not valid json "));
     }
 
