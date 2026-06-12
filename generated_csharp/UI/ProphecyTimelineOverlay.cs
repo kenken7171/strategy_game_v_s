@@ -85,6 +85,18 @@ public partial class ProphecyTimelineOverlay : Godot.Control
     /// <summary>confidence-fade の下限アルファ（遠い未来でも完全には消さない）。</summary>
     private const float MinConfidenceAlpha = 0.34f;
 
+    /// <summary>時間の矢（Line2D コネクタ）の太さ（px）。</summary>
+    private const float ConnectorWidth = 3.0f;
+
+    /// <summary>時間の矢 1 本が手前から奥へ伸び切るまでの秒数（GrowLine の補間時間）。</summary>
+    private const double ConnectorGrowSeconds = 0.45;
+
+    /// <summary>
+    /// 時間の矢の段階遅延（stagger）1 段あたりの秒数。手前（T+1→T+2）の矢を先に、奥の矢ほど
+    /// 遅らせて開通させ、「現在から未来へ運命が流れる」方向性を体感させる。
+    /// </summary>
+    private const double ConnectorGrowStaggerSeconds = 0.12;
+
     /// <summary>暗幕の色（半透明の深紫紺。背後の戦闘画面を沈めて未来予測へ集中させる）。</summary>
     private static readonly Color BackdropColor = new(0.05f, 0.04f, 0.10f, 0.93f);
 
@@ -316,6 +328,66 @@ public partial class ProphecyTimelineOverlay : Godot.Control
 
             float alpha = Mathf.Max(MinConfidenceAlpha, 1.0f - i * ConfidenceFadePerTurn);
             SpawnCard(i, band[i], center, alpha);
+        }
+
+        // 全カードの中心が _cardCenters に出揃った後で、隣接ターン間へ「時間の矢」を張る。
+        // （カード生成より後に呼ぶことで端点参照が必ず引ける。台帳カウントで境界を守る。）
+        GrowTimeArrows(band.Count);
+    }
+
+    /// <summary>
+    /// 隣接するターンカード（T+i から T+i+1）の間へ Godot.Line2D「時間の矢」を背面動的生成し、
+    /// JuiceDirector.GrowLine で手前（T+1）から奥（T+N）へ段階遅延つきに伸ばす開通演出を焚く。
+    ///
+    /// ★ 背面配置: ZIndex を -1 にし、さらに MoveChild で描画順を最背面へ送る二重保証で、
+    ///   矢が予告カードの視認性を 1 ミリも損なわないようにする。色は時間軸の意味論を統一する
+    ///   AxisAccentColor（青紫の燐光）。
+    /// ★ 時間の方向性: ループインデックス i に基づく段階遅延（i * stagger）で、現在から未来へ
+    ///   運命の線が次々に開通していく感覚を体感させる。
+    /// ★ 未来の霞み: 矢の Modulate.A を「繋ぐ先（より遠い）カード」のアルファに合わせて逓減させ、
+    ///   カードの confidence-fade と色価言語を完全同調させる。
+    /// ★ 境界ガード: 反復は台帳カウント基準（i &lt; cardCount - 1）。カードが 1 枚以下なら矢は
+    ///   1 本も張られない（KeyNotFoundException・宙吊り線は原理的に生じない）。端点は TryGetValue で
+    ///   防御的に引き、欠落時は静かに飛ばす。
+    /// ★ リークフリー: 生成した各 Line2D は既存台帳 _timelineNodes へ登録し、再描画冒頭・退場時の
+    ///   ClearTimeline で一括 QueueFree される。GrowLine の Tween は当の Line2D 自身へバインドされる
+    ///   ため、Line2D の解放で自動失効する（新たなビュー状態を一切増設しない）。
+    /// </summary>
+    private void GrowTimeArrows(int cardCount)
+    {
+        if (_canvas is null) return;
+
+        // 台帳カウント基準の安全境界。隣接ペアが作れない（カード 1 枚以下）なら何も張らない。
+        for (int i = 0; i < cardCount - 1; i++)
+        {
+            if (!_cardCenters.TryGetValue(i, out var fromCenter)) continue;
+            if (!_cardCenters.TryGetValue(i + 1, out var toCenter)) continue;
+
+            // 手前カードの右端中央 → 奥カードの左端中央（全カードは同じ centerY ゆえ水平な一本鎖）。
+            var from = new Vector2(fromCenter.X + CardSize.X * 0.5f, fromCenter.Y);
+            var to   = new Vector2(toCenter.X   - CardSize.X * 0.5f, toCenter.Y);
+
+            // 繋ぐ先（i+1）の confidence-fade に合わせて矢自体も霞ませる（色価言語の同調）。
+            float arrowAlpha = Mathf.Max(MinConfidenceAlpha, 1.0f - (i + 1) * ConfidenceFadePerTurn);
+
+            var connector = new Line2D
+            {
+                Width        = ConnectorWidth,
+                DefaultColor = AxisAccentColor,
+                ZIndex       = -1,                              // カード（既定 Z=0）より背面へ
+                Modulate     = new Color(1.0f, 1.0f, 1.0f, arrowAlpha), // 未来ほど霞む
+                Points       = new[] { from, from },            // 長さ 0 から開始（GrowLine が伸ばす）
+            };
+            connector.SetMeta(TestIdMetaKey, $"prophecy-timeline-connector-{i + 1}-{i + 2}");
+            _canvas.AddChild(connector);
+            // Z だけに頼らず、描画順でもカードの背面へ確実に送る（二重保証）。
+            _canvas.MoveChild(connector, 0);
+            _timelineNodes.Add(connector);   // 台帳へ登録（更地化で一括解放）
+
+            // 手前から奥へ段階遅延。Tween は connector 自身へバインドされ、解放で自動失効するため
+            // 戻り値は保持しない（新たなビュー状態を増設しない＝SoT 不増設の徹底）。
+            double delaySeconds = i * ConnectorGrowStaggerSeconds;
+            JuiceDirector.GrowLine(connector, from, to, ConnectorGrowSeconds, delaySeconds);
         }
     }
 
