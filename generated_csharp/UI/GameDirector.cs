@@ -71,6 +71,19 @@ public partial class GameDirector : Godot.Control
     /// </summary>
     private TitleScreen? _titleScreen;
 
+    /// <summary>
+    /// 婚姻・家系図運営画面（拠点B）への参照。家系図ビューアの「家系図を開く」意思表示
+    /// （<see cref="MarriageUI.PedigreeRequested"/>）を購読し、本ディレクターが
+    /// PedigreeOverlay を最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
+    /// </summary>
+    private MarriageUI? _marriageScreen;
+
+    /// <summary>
+    /// 現在前面に展開中の家系図オーバーレイ。閉じる意思表示（CloseRequested）または退場時に
+    /// QueueFree して静かに退場する（タイトルゲートと同型の自己崩壊型ライフサイクル）。未展開時は null。
+    /// </summary>
+    private PedigreeOverlay? _pedigreeOverlay;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -106,8 +119,25 @@ public partial class GameDirector : Godot.Control
 
     public override void _ExitTree()
     {
-        // タイトルゲートの購読を先に解いて確実に解放（ゾンビノード・購読二重接続の根絶）。
+        // タイトルゲート・家系図オーバーレイの購読を先に解いて確実に解放
+        // （ゾンビノード・購読二重接続・Tween リークの根絶）。
         DismissTitleScreen();
+        DismissPedigreeOverlay();
+
+        // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
+        if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
+        {
+            try
+            {
+                _marriageScreen.PedigreeRequested -= OnPedigreeRequested;
+            }
+            catch
+            {
+                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
+            }
+        }
+        _marriageScreen = null;
+
         UnsubscribeSignals();
     }
 
@@ -207,6 +237,56 @@ public partial class GameDirector : Godot.Control
         _chronicleGlobal?.LoadGame();
     }
 
+    // ─── 家系図オーバーレイ（血統の縦軸ビューア） ─────────────────────────
+    //  拠点B の家系図ビューア各行の「家系図を開く」押下を受け、指定ユニットを根とする
+    //  無状態オーバーレイ PedigreeOverlay を最前面へ overlay する。タイトルゲートと同じ
+    //  自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）で後始末を一元化する。
+
+    /// <summary>
+    /// 家系図ビューアの「家系図を開く」意思表示ハンドラ。指定ユニットを根に
+    /// PedigreeOverlay を最前面へマウントする（婚姻画面が発火する唯一の窓口）。
+    /// </summary>
+    private void OnPedigreeRequested(Guid targetUnitId) => MountPedigreeOverlay(targetUnitId);
+
+    /// <summary>家系図オーバーレイの「閉じる」意思表示ハンドラ。前面のオーバーレイを解放する。</summary>
+    private void OnPedigreeCloseRequested() => DismissPedigreeOverlay();
+
+    /// <summary>
+    /// 指定ユニット（<paramref name="targetUnitId"/>）を根とする家系図オーバーレイを最前面へ
+    /// 展開する。多重展開・前回オーバーレイの取り残しを避けるため、生存中の旧オーバーレイが
+    /// あれば先に確実に解放してから展開する。TargetUnitId は AddChild 前に注入する
+    /// （オーバーレイは無状態で、SoT 手繰りと描画を自身の _Ready で行う）。
+    /// </summary>
+    private void MountPedigreeOverlay(Guid targetUnitId)
+    {
+        DismissPedigreeOverlay();
+
+        var overlay = new PedigreeOverlay { TargetUnitId = targetUnitId };
+        overlay.CloseRequested += OnPedigreeCloseRequested;
+        overlay.SetMeta(TestIdMetaKey, "game-director-pedigree-overlay");
+        _pedigreeOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中の家系図オーバーレイがあれば購読を解いて確実に解放する。閉じる意思表示
+    /// （OnPedigreeCloseRequested）および退場時（_ExitTree）に呼び、ゾンビノード・購読の
+    /// 二重接続・Tween リークを根絶する。オーバーレイ側は _ExitTree で自前の台帳（カード・
+    /// コネクタ・開通 Tween）を更地化するため、ここでの QueueFree だけで演出ノードも綺麗に掃除される。
+    /// </summary>
+    private void DismissPedigreeOverlay()
+    {
+        if (_pedigreeOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_pedigreeOverlay))
+        {
+            _pedigreeOverlay.CloseRequested -= OnPedigreeCloseRequested;
+            _pedigreeOverlay.QueueFree();
+        }
+        _pedigreeOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -252,6 +332,15 @@ public partial class GameDirector : Godot.Control
         foreach (var phase in GamePhaseFlow.Cycle)
         {
             var screen = CreateScreenFor(phase);
+
+            // 拠点B（婚姻・家系図）画面なら、家系図ビューアの「開く」意思表示を購読する。
+            // オーバーレイの生死は本ディレクターが一手に握る（画面側は無状態のまま）。
+            if (screen is MarriageUI marriageScreen)
+            {
+                _marriageScreen = marriageScreen;
+                marriageScreen.PedigreeRequested += OnPedigreeRequested;
+            }
+
             // スラッグを Node 名にして、後段で GetNodeOrNull により安全に引き当てる。
             screen.Name = phase.Slug();
             // testid もスラッグ込みで付与（E2E がフェーズ画面を一意に掴めるようにする）。

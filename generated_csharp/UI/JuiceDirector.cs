@@ -213,6 +213,53 @@ public static class JuiceDirector
         return tween;
     }
 
+    // ─── 線の伸長（Line2D の終点を始点から目標へ補間。親→子コネクタの開通演出） ──
+
+    /// <summary>
+    /// <see cref="Line2D"/> の 2 点（始点・終点）を、終点だけ <paramref name="from"/> から
+    /// <paramref name="to"/> まで補間させ「線が親から子へスーッと伸びていく」開通演出を焚く。
+    /// 家系図オーバーレイで、各コネクタを世代帯の上から下へ順に開通させるのに使う。
+    ///
+    /// ★ 座標系: Line2D は Node2D。Control の子として追加された場合、その Points は
+    ///   親 Control のローカル座標フレームを共有する。呼び出し側は from/to を当の
+    ///   キャンバス Control のローカル座標で渡すこと（ノード絶対配置と同じフレーム）。
+    /// ★ リーク・ゾンビ化の根絶: Tween は対象 Line2D 自身へバインドされる。コネクタが
+    ///   QueueFree（オーバーレイ更地化）されると Tween は自動失効し、TweenMethod の
+    ///   コールバックは IsInstanceValid ガードにより安全に no-op となる（null 参照なし）。
+    /// ★ <paramref name="delaySeconds"/> で世代帯ごとの開通に時間差を付けられる。
+    /// </summary>
+    public static Tween? GrowLine(Line2D? line, Vector2 from, Vector2 to, double seconds, double delaySeconds = 0.0)
+    {
+        if (line is null || !GodotObject.IsInstanceValid(line))
+        {
+            return null;
+        }
+
+        // null 確定済みの参照を非 nullable のローカルへ束ねる。これにより、後続のクロージャ
+        // 内での Points 代入が nullable フロー解析でも安全（CS8602 を構造的に回避）になる。
+        Line2D target = line;
+
+        // 開始時は長さ 0（始点に終点が重なった点）から伸ばし始める。
+        target.Points = new[] { from, from };
+
+        var tween = target.CreateTween();
+        tween.TweenMethod(
+                 Callable.From<Vector2>(tip =>
+                 {
+                     if (GodotObject.IsInstanceValid(target))
+                     {
+                         target.Points = new[] { from, tip };
+                     }
+                 }),
+                 from,
+                 to,
+                 seconds)
+             .SetDelay(delaySeconds)
+             .SetTrans(Tween.TransitionType.Cubic)
+             .SetEase(Tween.EaseType.Out);
+        return tween;
+    }
+
     // ─── 自己崩壊型ポップアップ（生成 → 上昇フェード → 自分自身を QueueFree） ──────
 
     /// <summary>

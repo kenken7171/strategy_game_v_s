@@ -74,6 +74,15 @@ public partial class MarriageUI : Godot.Control
     /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
     private const string TestIdMetaKey = "data_testid";
 
+    // ─── 意思表示イベント（オーバーレイのマウントは購読側 = GameDirector が引く） ──
+
+    /// <summary>
+    /// 家系図オーバーレイを開く意思表示。指定ユニットを根として、購読側（GameDirector）が
+    /// PedigreeOverlay を最前面へマウントする。本 UI はオーバーレイの生死を一切持たない
+    /// （無状態の徹底。SoT 手繰りと描画はオーバーレイ自身が担う）。
+    /// </summary>
+    public event Action<Guid>? PedigreeRequested;
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -101,6 +110,9 @@ public partial class MarriageUI : Godot.Control
 
     // 人事（戦力外通告）セクション
     private VBoxContainer? _dismissListContainer;
+
+    // 家系図ビューアセクション（現役を起点に血統樹オーバーレイを開く入口）
+    private VBoxContainer? _pedigreeListContainer;
 
     // ─── 内部状態 ─────────────────────────────────────────────────────────
 
@@ -290,6 +302,28 @@ public partial class MarriageUI : Godot.Control
         _dismissListContainer = new VBoxContainer();
         _dismissListContainer.SetMeta(TestIdMetaKey, "marriage-dismiss-list");
         dismissSection.AddChild(_dismissListContainer);
+
+        // ─ 家系図ビューア セクション ─────────────────────────────
+        // 現役 1 名を起点に、祖先（英霊）と子孫を縦の血統樹で一望する入口。
+        // 各行の [🌳 家系図] 押下で PedigreeRequested を発火し、購読側が
+        // PedigreeOverlay を最前面へマウントする（本 UI はオーバーレイを持たない）。
+        var pedigreeSection = new VBoxContainer();
+        pedigreeSection.SetMeta(TestIdMetaKey, "marriage-pedigree-section");
+        root.AddChild(pedigreeSection);
+        var pedigreeTitle = new Label { Text = "── 🌳 家系図ビューア ──" };
+        pedigreeTitle.SetMeta(TestIdMetaKey, "marriage-pedigree-title");
+        pedigreeSection.AddChild(pedigreeTitle);
+
+        var pedigreeHint = new Label
+        {
+            Text = "現役を起点に祖先（英霊）と子孫を縦の血統樹で一望する",
+        };
+        pedigreeHint.SetMeta(TestIdMetaKey, "marriage-pedigree-hint");
+        pedigreeSection.AddChild(pedigreeHint);
+
+        _pedigreeListContainer = new VBoxContainer();
+        _pedigreeListContainer.SetMeta(TestIdMetaKey, "marriage-pedigree-list");
+        pedigreeSection.AddChild(_pedigreeListContainer);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -334,6 +368,7 @@ public partial class MarriageUI : Godot.Control
         RenderChildrenLists();
         RenderShop();
         RenderDismissList();
+        RenderPedigreeList();
     }
 
     private void OnStateInitialized() => RenderAll();
@@ -349,6 +384,7 @@ public partial class MarriageUI : Godot.Control
         RenderChildrenLists();
         RenderShop();
         RenderDismissList();
+        RenderPedigreeList();
     }
 
     private void RenderBalance()
@@ -702,6 +738,52 @@ public partial class MarriageUI : Godot.Control
         }
     }
 
+    /// <summary>
+    /// 家系図ビューアの現役一覧を、毎回 GetAliveUnits を読み直して無状態に再構築する。
+    /// 各行は [🌳 家系図] ボタンを持ち、押下で当該ユニットを根とする家系図オーバーレイの
+    /// マウント意思（<see cref="PedigreeRequested"/>）を発火する。SoT を一切キャッシュしない。
+    /// </summary>
+    private void RenderPedigreeList()
+    {
+        if (_chronicleGlobal is null || _pedigreeListContainer is null) return;
+
+        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない）。
+        foreach (var c in _pedigreeListContainer.GetChildren()) c.QueueFree();
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        if (alive.Count == 0)
+        {
+            var empty = new Label { Text = "（家系図を開ける現役がいません）" };
+            empty.SetMeta(TestIdMetaKey, "marriage-pedigree-empty");
+            _pedigreeListContainer.AddChild(empty);
+            return;
+        }
+
+        foreach (var unit in alive)
+        {
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"marriage-pedigree-row-{capturedId}");
+
+            var name = new Label
+            {
+                Text = $"🎖 {JobName(unit.Job)} (Age {unit.Age}) "
+                       + _chronicleGlobal.ResolveDisplayName(unit),
+            };
+            name.SetMeta(TestIdMetaKey, $"marriage-pedigree-name-{capturedId}");
+            row.AddChild(name);
+
+            var openBtn = new Button { Text = "🌳 家系図" };
+            openBtn.SetMeta(TestIdMetaKey, $"marriage-pedigree-open-button-{capturedId}");
+            openBtn.Pressed += () => OnPedigreeOpenPressed(capturedId);
+            row.AddChild(openBtn);
+
+            _pedigreeListContainer.AddChild(row);
+        }
+    }
+
     // ─── アクションハンドラ ───────────────────────────────────────────────
 
     private void OnFatherSelectionChanged(long _) => RenderQuote();
@@ -758,6 +840,18 @@ public partial class MarriageUI : Godot.Control
             $"[MarriageUI] ⚔ 外様スカウト成立 ({ScoutCost} pt) / " +
             $"{JobName(recruited.Job)} (Age {recruited.Age}) Id={recruited.Id}");
         // 残高・父母セレクタ・家系図の再描画はシグナル経由で自動
+    }
+
+    /// <summary>
+    /// 家系図ビューア各行の [🌳 家系図] 押下ハンドラ。当該ユニットを根とする家系図
+    /// オーバーレイのマウント意思（<see cref="PedigreeRequested"/>）を 1 度だけ発火する。
+    /// 本 UI はオーバーレイの生死を一切持たず、購読側（GameDirector）が PedigreeOverlay を
+    /// 最前面へ展開・解放する（無状態の徹底・単一責務）。
+    /// </summary>
+    private void OnPedigreeOpenPressed(Guid unitId)
+    {
+        GD.Print($"[MarriageUI] 🌳 家系図を開く要求 Id={unitId}");
+        PedigreeRequested?.Invoke(unitId);
     }
 
     private void OnEnlistChildPressed(Guid childId)
