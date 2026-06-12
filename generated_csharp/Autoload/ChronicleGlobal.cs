@@ -1473,6 +1473,51 @@ public partial class ChronicleGlobal : Godot.Node
     public IReadOnlyList<Unit> GetAliveUnits()
         => BattalionRoster.Where(u => u.IsAlive).ToList();
 
+    /// <summary>
+    /// 現在戦闘中の敵が、この先 <paramref name="lookaheadTurns"/> ターンに放つ予定の攻撃予告
+    /// （運命の帯）を、現在の戦況スナップショットから決定論的に先読みして返す読み取り専用クエリ。
+    /// 非戦闘時（<see cref="CurrentBattle"/> == null）は空配列を返す。SoT は 1 ミリも変更しない。
+    ///
+    /// ★ 決定論シードの導出（SoT 不可侵・カプセル化の堅持）:
+    ///   実戦の乱数器 <c>_battleRng</c> の内部状態は外部へ晒さない。代わりに、現在スナップショットの
+    ///   不変な観測量（敵攻撃力・敏捷・最大 HP・現ターン番号）から大きな素数で決定論的にシードを
+    ///   織り、純粋関数 <see cref="AttackIntentRoller.Forecast"/> へ渡す。同じ局面からは常に同じ帯が
+    ///   返り、ターンが進めば（TurnNumber が変われば）帯も前進する。
+    ///
+    /// ★ 「確定した予言」ではなく「決定論的な予測投影」:
+    ///   これは未来を 1 ビットの狂いなく当てる予言ではなく、現局面から再現可能に投影した予測である。
+    ///   遠い未来ほど実戦（ローテーション・とどめの乱数前進）とのズレが増す不確実性は、UI 層が
+    ///   confidence-fade（遠いカードほど褪色）として正直に表現する。
+    /// </summary>
+    /// <param name="lookaheadTurns">何ターン先まで読むか（0 以下は空・上限は Forecast 側でクランプ）。</param>
+    /// <returns>T+1 から順に並ぶ攻撃予告の帯（非戦闘時は空）。</returns>
+    public IReadOnlyList<AttackIntent> ForecastEnemyIntents(int lookaheadTurns)
+    {
+        var battle = CurrentBattle;
+        if (battle is null)
+        {
+            return Array.Empty<AttackIntent>();
+        }
+
+        var seed = DeriveForecastSeed(battle);
+        return AttackIntentRoller.Forecast(battle.Enemy, seed, lookaheadTurns);
+    }
+
+    /// <summary>
+    /// 戦況スナップショットの不変観測量から、先読み用の決定論シードを織る純粋写像。大きな素数で
+    /// 混ぜて分散させ、敵の個体差（攻撃力・敏捷・最大 HP）とターン経過の双方を反映させる。
+    /// </summary>
+    private static uint DeriveForecastSeed(BattleSnapshot battle)
+    {
+        var enemy = battle.Enemy;
+        var mixed = unchecked(
+            (enemy.Attack * 73856093)
+            ^ (enemy.Speed * 19349663)
+            ^ (enemy.MaxHp * 83492791)
+            ^ (battle.TurnNumber * 49979693));
+        return unchecked((uint)mixed);
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  セーブ＆ロード（永続化）
     // ════════════════════════════════════════════════════════════════════════

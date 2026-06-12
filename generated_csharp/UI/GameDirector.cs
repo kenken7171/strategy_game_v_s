@@ -54,6 +54,12 @@ public partial class GameDirector : Godot.Control
     /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
     private const string TestIdMetaKey = "data_testid";
 
+    /// <summary>
+    /// 運命の帯（予言タイムライン）オーバーレイの既定先読みターン数。数ターン先の戦術判断
+    /// （ローテーションの読み合い）に足る現実的な深さに留める。AttackIntentRoller 側でも上限クランプ。
+    /// </summary>
+    private const int DefaultProphecyLookaheadTurns = 4;
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -83,6 +89,19 @@ public partial class GameDirector : Godot.Control
     /// QueueFree して静かに退場する（タイトルゲートと同型の自己崩壊型ライフサイクル）。未展開時は null。
     /// </summary>
     private PedigreeOverlay? _pedigreeOverlay;
+
+    /// <summary>
+    /// 戦闘画面（拠点D）への参照。運命の帯（予言タイムライン）の「開く」意思表示
+    /// （<see cref="BattleUI.ProphecyRequested"/>）を購読し、本ディレクターが
+    /// ProphecyTimelineOverlay を最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
+    /// </summary>
+    private BattleUI? _battleScreen;
+
+    /// <summary>
+    /// 現在前面に展開中の予言タイムラインオーバーレイ。閉じる意思表示（CloseRequested）または退場時に
+    /// QueueFree して静かに退場する（家系図オーバーレイと同型の自己崩壊型ライフサイクル）。未展開時は null。
+    /// </summary>
+    private ProphecyTimelineOverlay? _prophecyOverlay;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -119,10 +138,11 @@ public partial class GameDirector : Godot.Control
 
     public override void _ExitTree()
     {
-        // タイトルゲート・家系図オーバーレイの購読を先に解いて確実に解放
+        // タイトルゲート・家系図・予言オーバーレイの購読を先に解いて確実に解放
         // （ゾンビノード・購読二重接続・Tween リークの根絶）。
         DismissTitleScreen();
         DismissPedigreeOverlay();
+        DismissProphecyOverlay();
 
         // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
         if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
@@ -137,6 +157,20 @@ public partial class GameDirector : Godot.Control
             }
         }
         _marriageScreen = null;
+
+        // 戦闘画面の「運命の帯を開く」意思表示の購読も解除（戦闘画面ノードの破棄に先んじて）。
+        if (_battleScreen is not null && GodotObject.IsInstanceValid(_battleScreen))
+        {
+            try
+            {
+                _battleScreen.ProphecyRequested -= OnProphecyRequested;
+            }
+            catch
+            {
+                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
+            }
+        }
+        _battleScreen = null;
 
         UnsubscribeSignals();
     }
@@ -287,6 +321,58 @@ public partial class GameDirector : Godot.Control
         _pedigreeOverlay = null;
     }
 
+    // ─── 予言タイムラインオーバーレイ（未来の横軸ビューア） ────────────────
+    //  拠点D の戦闘画面の「運命の帯を開く」押下を受け、N ターン先の敵の手筋を
+    //  無状態オーバーレイ ProphecyTimelineOverlay として最前面へ overlay する。家系図
+    //  オーバーレイと同じ自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）
+    //  で後始末を一元化する。先読みターン数だけを注入し、予言データの手繰りと描画は
+    //  オーバーレイ自身が _Ready / RenderAll で ChronicleGlobal から行う（画面側は無状態）。
+
+    /// <summary>
+    /// 戦闘画面の「運命の帯を開く」意思表示ハンドラ。予言タイムラインオーバーレイを
+    /// 最前面へマウントする（戦闘画面が発火する唯一の窓口）。
+    /// </summary>
+    private void OnProphecyRequested() => MountProphecyOverlay();
+
+    /// <summary>予言タイムラインオーバーレイの「閉じる」意思表示ハンドラ。前面のオーバーレイを解放する。</summary>
+    private void OnProphecyCloseRequested() => DismissProphecyOverlay();
+
+    /// <summary>
+    /// 既定先読みターン数（<see cref="DefaultProphecyLookaheadTurns"/>）の予言タイムライン
+    /// オーバーレイを最前面へ展開する。多重展開・前回オーバーレイの取り残しを避けるため、
+    /// 生存中の旧オーバーレイがあれば先に確実に解放してから展開する。LookaheadTurns は
+    /// AddChild 前に注入する（オーバーレイは無状態で、予言の手繰りと描画を自身の _Ready で行う）。
+    /// </summary>
+    private void MountProphecyOverlay()
+    {
+        DismissProphecyOverlay();
+
+        var overlay = new ProphecyTimelineOverlay { LookaheadTurns = DefaultProphecyLookaheadTurns };
+        overlay.CloseRequested += OnProphecyCloseRequested;
+        overlay.SetMeta(TestIdMetaKey, "game-director-prophecy-overlay");
+        _prophecyOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中の予言タイムラインオーバーレイがあれば購読を解いて確実に解放する。閉じる意思表示
+    /// （OnProphecyCloseRequested）および退場時（_ExitTree）に呼び、ゾンビノード・購読の二重接続・
+    /// Tween リークを根絶する。オーバーレイ側は _ExitTree で自前の台帳（予告カード・盤面セル）を
+    /// 更地化するため、ここでの QueueFree だけで描画ノードも綺麗に掃除される。
+    /// </summary>
+    private void DismissProphecyOverlay()
+    {
+        if (_prophecyOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_prophecyOverlay))
+        {
+            _prophecyOverlay.CloseRequested -= OnProphecyCloseRequested;
+            _prophecyOverlay.QueueFree();
+        }
+        _prophecyOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -339,6 +425,14 @@ public partial class GameDirector : Godot.Control
             {
                 _marriageScreen = marriageScreen;
                 marriageScreen.PedigreeRequested += OnPedigreeRequested;
+            }
+
+            // 拠点D（戦闘解決）画面なら、運命の帯（予言タイムライン）の「開く」意思表示を購読する。
+            // 家系図オーバーレイと同型に、ProphecyTimelineOverlay の生死を本ディレクターが一手に握る。
+            if (screen is BattleUI battleScreen)
+            {
+                _battleScreen = battleScreen;
+                battleScreen.ProphecyRequested += OnProphecyRequested;
             }
 
             // スラッグを Node 名にして、後段で GetNodeOrNull により安全に引き当てる。

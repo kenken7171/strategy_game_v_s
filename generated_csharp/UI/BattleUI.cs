@@ -181,6 +181,15 @@ public partial class BattleUI : Godot.Control
     /// <summary>① 前面 HP バーが瀕死寄りのときの色（赤）。</summary>
     private static readonly Color EnemyHpLowColor = new(0.85f, 0.22f, 0.20f);
 
+    // ─── 意思表示イベント（オーバーレイのマウントは購読側 = GameDirector が引く） ──
+
+    /// <summary>
+    /// 運命の帯（予言タイムライン）オーバーレイを開く意思表示。購読側（GameDirector）が
+    /// ProphecyTimelineOverlay を最前面へマウントする。本 UI はオーバーレイの生死を一切
+    /// 持たない（無状態の徹底。N ターン先予言の手繰りと描画はオーバーレイ自身が担う）。
+    /// </summary>
+    public event Action? ProphecyRequested;
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -413,6 +422,15 @@ public partial class BattleUI : Godot.Control
         _endButton.SetMeta(TestIdMetaKey, "battle-command-end");
         _endButton.Pressed += OnEndPressed;
         commandRow.AddChild(_endButton);
+
+        // ── 運命の帯（予言タイムライン）を開くボタン ────────────────
+        //  押下で ProphecyRequested を発火するだけ（無状態の徹底）。オーバーレイの生死は
+        //  購読側 GameDirector が一手に握る。ボタンは戦闘状態を持たないためフィールド化せず
+        //  ローカル変数で生成・即購読・即ぶら下げる（assigned-but-never-read を構造的に回避）。
+        var prophecyButton = new Button { Text = "🔮 運命の帯" };
+        prophecyButton.SetMeta(TestIdMetaKey, "battle-prophecy-open-button");
+        prophecyButton.Pressed += OnProphecyPressed;
+        commandRow.AddChild(prophecyButton);
 
         // ── ターンログ（ResolveBattleTurn の戻りイベントを時系列に積む） ──
         root.AddChild(new Label { Text = "── ターンログ ──" });
@@ -1098,6 +1116,13 @@ public partial class BattleUI : Godot.Control
             ShowLastHitCeremony();
         }
     }
+
+    /// <summary>
+    /// 「運命の帯」ボタン押下ハンドラ。予言タイムラインオーバーレイを開く意思表示
+    /// （<see cref="ProphecyRequested"/>）を 1 度だけ発火する。本 UI はオーバーレイを自分で
+    /// 生成せず、購読側 GameDirector に生死を委ねる（無状態の徹底・単方向の堅持）。
+    /// </summary>
+    private void OnProphecyPressed() => ProphecyRequested?.Invoke();
 
     /// <summary>
     /// とどめの儀式（三段フロー第 2 段）を前面展開する。
