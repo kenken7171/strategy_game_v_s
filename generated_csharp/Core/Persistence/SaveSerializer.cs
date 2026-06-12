@@ -87,8 +87,10 @@ public static class SaveSerializer
     /// <summary>
     /// セーブスキーマのバージョン。破壊的変更時にインクリメントする。
     /// v2: 旅団史（ChronicleLog）を追加（旧 v1 セーブは ChronicleLog 欠落 → 空配列で後方互換復元）。
+    /// v3: 血統リンク（Unit.Parentage / Unit.SpouseId）を追加（旧 v1/v2 セーブは欠落 → null で
+    ///     後方互換復元。生者同士の親子・婚姻の縦横軸を永続化し、家系図をロード後も再構築可能にする）。
     /// </summary>
-    public const int CurrentSaveVersion = 2;
+    public const int CurrentSaveVersion = 3;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -214,6 +216,15 @@ public static class SaveSerializer
             kv => kv.Key.ToString(),
             kv => kv.Value),
         IsDead = u.IsDead,
+        // 血統リンク（v3）。婚姻で生まれた子のみ非 null（初代は null で省略される）。
+        Parentage = u.Parentage is null ? null : ToDto(u.Parentage),
+        SpouseId = u.SpouseId,
+    };
+
+    private static ParentageDto ToDto(Parentage p) => new()
+    {
+        FatherId = p.FatherId,
+        MotherId = p.MotherId,
     };
 
     private static EquipmentDto ToDto(Equipment e) => new()
@@ -297,8 +308,17 @@ public static class SaveSerializer
             MainEquipment  = d.MainEquipment is null ? null : FromDto(d.MainEquipment),
             BattleAffinity = affinity,
             IsDead         = d.IsDead,
+            // 血統リンク（v3）。旧 v1/v2 セーブは欠落 → null で後方互換復元。
+            Parentage      = d.Parentage is null ? null : FromDto(d.Parentage),
+            SpouseId       = d.SpouseId,
         };
     }
+
+    private static Parentage FromDto(ParentageDto d) => new()
+    {
+        FatherId = d.FatherId,
+        MotherId = d.MotherId,
+    };
 
     private static Equipment FromDto(EquipmentDto d) => new()
     {
@@ -388,6 +408,25 @@ public static class SaveSerializer
         /// <summary>Guid → ポイントの好感度。Guid は文字列キーへ正規化して保存。</summary>
         public Dictionary<string, int> BattleAffinity { get; set; } = new();
         public bool IsDead { get; set; }
+
+        /// <summary>
+        /// 血統リンク（父母 Id）。v3 で追加。婚姻で生まれた子のみ非 null。
+        /// 旧 v1/v2 セーブには無く JSON 上で欠落するため nullable とし、FromDto 側で null 許容。
+        /// </summary>
+        public ParentageDto? Parentage { get; set; }
+
+        /// <summary>
+        /// 配偶者ユニット Id。v3 で追加。未婚は null（JSON 上で省略される）。
+        /// 旧 v1/v2 セーブには無く欠落するため nullable とし、FromDto 側で null 許容。
+        /// </summary>
+        public Guid? SpouseId { get; set; }
+    }
+
+    /// <summary>Parentage（血統リンク）の保存形。v3 で追加。</summary>
+    private sealed class ParentageDto
+    {
+        public Guid FatherId { get; set; }
+        public Guid MotherId { get; set; }
     }
 
     /// <summary>Equipment の保存形。</summary>

@@ -47,6 +47,24 @@ using ChronicleKnights.Core.Naming;
 namespace ChronicleKnights.Core.Units;
 
 /// <summary>
+/// 血統リンク（親子関係）の不変レコード。
+///
+/// 婚姻で生まれた子ユニットにのみ刻まれる（手動入団・スカウト由来の初代は null）。
+/// 家系図オーバーレイ (PedigreeOverlay) が縦系の血の連鎖を手繰り寄せる際の
+/// 唯一のソース。Father/Mother いずれの Id も「過去に実在した（あるいは現存する）
+/// ユニット」を指すが、当該ユニットが既に旅団から失われている可能性があるため、
+/// 解決側は必ず TryGetValue + null 番兵で参照欠落に備える責務を負う。
+/// </summary>
+public sealed record Parentage
+{
+    /// <summary>父ユニットの Id。</summary>
+    public required Guid FatherId { get; init; }
+
+    /// <summary>母ユニットの Id。</summary>
+    public required Guid MotherId { get; init; }
+}
+
+/// <summary>
 /// 旅団員 1 名の完全不変なスナップショット。
 ///
 /// すべてのフィールドは init-only。状態を変更するときは必ず With* メソッドで
@@ -143,6 +161,19 @@ public sealed record Unit
     /// </summary>
     public bool IsDead { get; init; } = false;
 
+    /// <summary>
+    /// 血統リンク（父母 Id）。婚姻で生まれた子のみ非 null。
+    /// 既定 null = 初代（手動入団・スカウト由来。両親を持たない系譜の根）。
+    /// PedigreeOverlay が縦系（祖父母→父母→本人→子孫）を遡上・降下する際の唯一の鍵。
+    /// </summary>
+    public Parentage? Parentage { get; init; }
+
+    /// <summary>
+    /// 配偶者ユニットの Id。婚姻成立時に双方へ相互リンクされる。
+    /// 既定 null = 未婚。家系図で「本人・配偶者」を横に並べる際に参照する。
+    /// </summary>
+    public Guid? SpouseId { get; init; }
+
     // ─── 派生プロパティ（純粋な読み取り専用） ─────────────────────────────
 
     /// <summary>戦闘で死亡しておらず、かつ寿命にも達していない状態。</summary>
@@ -171,6 +202,12 @@ public sealed record Unit
 
     /// <summary>装備を所持しているか（MainEquipment != null）。</summary>
     public bool HasEquipment => MainEquipment is not null;
+
+    /// <summary>血統リンク（父母）を持つか。false の場合は系譜の根（初代）。</summary>
+    public bool HasParentage => Parentage is not null;
+
+    /// <summary>配偶者を持つか（SpouseId != null）。</summary>
+    public bool IsMarried => SpouseId is not null;
 
     // ─── 不変更新メソッド ─────────────────────────────────────────────────
 
@@ -254,4 +291,31 @@ public sealed record Unit
     /// </summary>
     public Unit MarkDeadInBattle()
         => this with { IsDead = true };
+
+    /// <summary>
+    /// 血統リンク（父母 Id）を刻んだ新インスタンスを返す（婚姻で生まれた子に付与）。
+    /// 父母が同一 Id の場合は系譜が縮退するため弾く。
+    /// </summary>
+    /// <param name="fatherId">父ユニットの Id</param>
+    /// <param name="motherId">母ユニットの Id</param>
+    public Unit WithParentage(Guid fatherId, Guid motherId)
+    {
+        if (fatherId == motherId)
+            throw new ArgumentException(
+                "Father and mother must be different units for parentage.", nameof(motherId));
+        return this with { Parentage = new Parentage { FatherId = fatherId, MotherId = motherId } };
+    }
+
+    /// <summary>
+    /// 配偶者 Id を相互リンクした新インスタンスを返す（婚姻成立時に双方へ適用）。
+    /// 自分自身との婚姻は意味を成さないため弾く。
+    /// </summary>
+    /// <param name="spouseId">配偶者ユニットの Id</param>
+    public Unit WithSpouse(Guid spouseId)
+    {
+        if (spouseId == Id)
+            throw new ArgumentException(
+                "A unit cannot be married to itself.", nameof(spouseId));
+        return this with { SpouseId = spouseId };
+    }
 }

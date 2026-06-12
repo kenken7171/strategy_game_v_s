@@ -193,6 +193,66 @@ public partial class ChronicleGlobal : Godot.Node
     private ImmutableArray<ChronicleLogEntry> _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty;
 
     /// <summary>
+    /// 英霊アーカイブ（Id → 旅団を去った当時の静止画 Unit）。世代交代の自然離脱
+    /// （<see cref="AdvanceGenerationLocked"/> の DepartedRoster）と手動解雇
+    /// （<see cref="ExecuteDismiss"/> の dismissed）の瞬間に、外れる直前のユニットを
+    /// その場で写し取って蓄積する。家系図オーバーレイ (PedigreeOverlay) が
+    /// 「現役ロスタから既に消えた祖先（遺影）」を遺影として描けるよう、Unit に刻まれた
+    /// Parentage / SpouseId ごと保存する唯一の保管庫。
+    ///
+    /// ★ <see cref="GetPedigreeUniverse"/> が「アーカイブ ∪ 現役ロスタ」を合成する際、
+    ///   同一 Id は現役側を優先採用する（生きている者の最新状態が常に正本）。
+    /// ★ <see cref="_chronicleLog"/> と同様、セーブには含めない（ロード再開時は空から再蓄積）。
+    ///   現役ロスタ側の Parentage / SpouseId はセーブ対象なので、ロード直後でも生者同士の
+    ///   血統・婚姻リンクは復元される（失われるのは「既に去った祖先の遺影」だけ）。
+    ///   常に <see cref="_stateLock"/> 内でのみ読み書きする。
+    /// </summary>
+    private ImmutableDictionary<Guid, Unit> _ancestralArchive =
+        ImmutableDictionary<Guid, Unit>.Empty;
+
+    /// <summary>
+    /// 家系図オーバーレイ向けに「血統宇宙」を合成して返す純粋な読み出し API。
+    /// 現役ロスタ（<see cref="BattalionRoster"/>）と英霊アーカイブ
+    /// （<see cref="_ancestralArchive"/>）を Id で和集合し、同一 Id は常に現役側を採用する
+    /// （生者の最新状態が正本、去った者は遺影として補完）。
+    ///
+    /// PedigreeOverlay はこの辞書だけを頼りに、TargetUnitId を根として Parentage（父母）・
+    /// SpouseId（配偶者）の鎖を TryGetValue で手繰り、縦軸の家系ネットを再構築する。
+    /// 戻り値は完全不変のスナップショット（ロック下で確定）ゆえ参照読みは安全。
+    /// 未初期化でも空辞書を返すヌル安全 API。
+    /// </summary>
+    public ImmutableDictionary<Guid, Unit> GetPedigreeUniverse()
+    {
+        lock (_stateLock)
+        {
+            var builder = _ancestralArchive.ToBuilder();
+            // 現役を後勝ちで上書き（同一 Id は生者の最新状態を正本に）。
+            foreach (var unit in BattalionRoster)
+            {
+                builder[unit.Id] = unit;
+            }
+            return builder.ToImmutable();
+        }
+    }
+
+    /// <summary>
+    /// 旅団を去ろうとしているユニット群を英霊アーカイブへ写し取る（<see cref="_stateLock"/> 保持中専用）。
+    /// 既に同一 Id が存在する場合は「去る直前の最新状態」で上書きする。null 要素・空列は安全に無視する。
+    /// </summary>
+    /// <param name="departed">これからロスタを外れるユニット群（外れる前の静止画）。</param>
+    private void ArchiveDepartedLocked(IEnumerable<Unit>? departed)
+    {
+        if (departed is null) return;
+        var builder = _ancestralArchive.ToBuilder();
+        foreach (var unit in departed)
+        {
+            if (unit is null) continue;
+            builder[unit.Id] = unit;
+        }
+        _ancestralArchive = builder.ToImmutable();
+    }
+
+    /// <summary>
     /// 旅団史（年代記ナレーション）の現在スナップショットを <see cref="_stateLock"/> 下で安全に
     /// 読み出す。返すのは完全不変の <see cref="ImmutableArray{T}"/>（古い→新しいの時系列順）で、
     /// UI 層はこれを丸ごと読んでナレーション領域を無状態に再描画する（単方向データフロー）。
@@ -331,6 +391,7 @@ public partial class ChronicleGlobal : Godot.Node
             _lastBattleOutcome = BattleOutcome.Ongoing; // 退避中の決着状態も更地
             LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
             _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史も白紙から
+            _ancestralArchive = ImmutableDictionary<Guid, Unit>.Empty; // 英霊アーカイブも更地から
             IsInitialized = true;
         }
 
@@ -504,9 +565,15 @@ public partial class ChronicleGlobal : Godot.Node
                 return null;
             }
 
-            // 経済・ロスタを一括差し替え
+            // 経済・ロスタを一括差し替え。婚姻の横リンク（配偶者 SpouseId）を SoT へ定着
+            // させるため、旧父・旧母を相互リンク済みの版（UpdatedFather/UpdatedMother）で
+            // 置換してから、血統リンク（Parentage）を刻んだ子を加える。これにより
+            // GetPedigreeUniverse() が「夫婦」と「親子」の縦横両軸を矛盾なく開放できる。
             CurrentEconomy = result.NewEconomy;
-            BattalionRoster = BattalionRoster.Add(result.Child);
+            BattalionRoster = BattalionRoster
+                .Replace(father, result.UpdatedFather)
+                .Replace(mother, result.UpdatedMother)
+                .Add(result.Child);
         }
 
         SafeEmit(SignalEconomyChanged);
@@ -612,6 +679,10 @@ public partial class ChronicleGlobal : Godot.Node
 
             // 解雇の事実を旅団史へ刻む（ロスタから外れる前の静止画から名前キー等を確定捕捉）。
             RecordDismissalChronicleLocked(dismissed);
+
+            // 英霊アーカイブ: 戦力外通告で去る 1 名も、外れた直後に保管庫へ写し取る。
+            // これにより、解雇された祖先を根に持つ子孫の家系図も縦軸が途切れない。
+            ArchiveDepartedLocked(new[] { dismissed });
         }
 
         SafeEmit(SignalRosterChanged);
@@ -827,6 +898,11 @@ public partial class ChronicleGlobal : Godot.Node
         //     写し取り旅団史へ追記する。⚠️ 損失ユニットはこの直後に BattalionRoster から
         //     不可逆に外れるため、名前キー等を「外れる前」のこのタイミングで確定捕捉する。
         RecordGenerationChronicleLocked(advance);
+
+        // 1.6 英霊アーカイブ: この世代で旅団を去る者（自然死・寿命）の静止画を、外れる直前の
+        //     このタイミングで保管庫へ写し取る。これにより家系図は、現役から消えた祖先も
+        //     Parentage / SpouseId ごと遺影として描き続けられる（縦軸の連続性を保証）。
+        ArchiveDepartedLocked(advance.DepartedRoster);
 
         BattalionRoster = advance.SurvivingRoster.ToImmutableList();
 

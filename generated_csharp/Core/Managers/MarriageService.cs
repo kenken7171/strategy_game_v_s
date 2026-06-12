@@ -74,7 +74,7 @@ public sealed record MarriageResult
 {
     /// <summary>消費後の新しい経済状態（自然婚姻なら未変化）。</summary>
     public required PointsEconomy NewEconomy { get; init; }
-    /// <summary>誕生した子ユニット（Lv1 / Affix 継承の余白付き）。</summary>
+    /// <summary>誕生した子ユニット（Lv1 / Affix 継承の余白付き / Parentage 刻印済み）。</summary>
     public required Unit Child { get; init; }
     /// <summary>実際に支払ったコスト（自然婚姻なら 0）。</summary>
     public required int CostPaid { get; init; }
@@ -84,6 +84,18 @@ public sealed record MarriageResult
     public required Guid FatherId { get; init; }
     /// <summary>選んだ母ユニット ID（ログ・UI 用）。</summary>
     public required Guid MotherId { get; init; }
+
+    /// <summary>
+    /// 配偶者 Id を相互リンクした後の父ユニット（SpouseId = MotherId）。
+    /// 呼び出し側（ChronicleGlobal.ExecuteMarriage）は roster 内の旧父を
+    /// 本インスタンスで置換し、婚姻の横リンクを SoT に定着させる責務を負う。
+    /// </summary>
+    public required Unit UpdatedFather { get; init; }
+
+    /// <summary>
+    /// 配偶者 Id を相互リンクした後の母ユニット（SpouseId = FatherId）。
+    /// </summary>
+    public required Unit UpdatedMother { get; init; }
 }
 
 /// <summary>
@@ -270,7 +282,14 @@ public static class MarriageService
             MainEquipment = newborn.InitialEquipment,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,
             IsDead = false,
+            // ★ 血統リンクを刻む。これが家系図の縦軸（父母→子）の唯一のソース。
+            Parentage = new Parentage { FatherId = father.Id, MotherId = mother.Id },
         };
+
+        // 6. 婚姻の横リンク（配偶者）を双方へ相互定着させる。呼び出し側が roster の
+        //    旧父・旧母をこれらで置換することで、SoT に「夫婦」が記録される。
+        var updatedFather = father.WithSpouse(mother.Id);
+        var updatedMother = mother.WithSpouse(father.Id);
 
         return new MarriageResult
         {
@@ -280,6 +299,8 @@ public static class MarriageService
             WasNaturalMarriage = isNatural,
             FatherId = father.Id,
             MotherId = mother.Id,
+            UpdatedFather = updatedFather,
+            UpdatedMother = updatedMother,
         };
     }
 }
