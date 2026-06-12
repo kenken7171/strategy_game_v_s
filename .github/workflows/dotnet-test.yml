@@ -1,13 +1,12 @@
 name: dotnet-test
 
-# Deterministic triggers: run on every push to main and on every pull request
-# that targets main. No manual dispatch, no other branches -- the gate fires
-# exactly when main is about to change or is being proposed to change.
+# Manual-only trigger: the gate fires exclusively from the Actions tab (or the
+# REST/CLI dispatch endpoint). All automatic triggers (push to main, pull
+# request to main) are intentionally retired so that no GitHub-hosted minutes
+# are billed unless a maintainer explicitly requests a run. This puts the
+# pipeline fully to sleep while keeping the entire test rampart one click away.
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 # Least-privilege token: this pipeline only reads the repository contents.
 permissions:

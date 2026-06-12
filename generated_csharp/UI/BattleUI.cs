@@ -139,6 +139,48 @@ public partial class BattleUI : Godot.Control
     /// <summary>とどめポップアップの記号（chrome 装飾）。</summary>
     private const string LastHitPopupMark = "★";
 
+    // ─── 4 大 UX 演出の定数（JuiceDirector へ渡す調律値。SoT ではなく見た目の調整値） ──
+    //  ★ ① 敵 HP ドレイン: 前面バーが即座に新 HP を示し、背後のドレインバーが遅れて追従する。
+    //  ★ ② ローテーション滑走: 盤面再構築後、各ユニットの旧位置から新位置へ position 補間。
+    //  ★ ③ 死亡退場: 撃破された英霊のカードを低アルファのセピアへ沈める。
+    //  ★ ④ 予告ワインドアップ: 敵攻撃の着弾と同時に敵カードをスケールパンチさせる。
+
+    /// <summary>① ドレインバーが追従を始めるまでの溜め（秒）。前面バーの即時減少を一瞬見せる。</summary>
+    private const double EnemyHpDrainDelaySeconds = 0.10;
+
+    /// <summary>① ドレインバーが新 HP へ滑り込むまでの時間（秒）。被害の重みを尾を引いて見せる。</summary>
+    private const double EnemyHpDrainDurationSeconds = 0.55;
+
+    /// <summary>② ローテーション滑走 1 回の時間（秒）。</summary>
+    private const double RotationSlideSeconds = 0.32;
+
+    /// <summary>② 滑走を焚く最小移動量の二乗（px²）。これ未満の微動は滑走させない（静止セルの除外）。</summary>
+    private const float RotationSlideMinTravelSquared = 4.0f;
+
+    /// <summary>③ 死亡フェードの時間（秒）。</summary>
+    private const double DeathFadeSeconds = 0.65;
+
+    /// <summary>④ 予告ワインドアップ（敵カードのスケールパンチ）の時間（秒）。</summary>
+    private const double EnemyWindupPunchSeconds = 0.28;
+
+    /// <summary>④ パンチのピーク倍率（1.0 = 等倍）。1.10 で 1 割膨らんでから戻る。</summary>
+    private const float EnemyWindupPunchScale = 1.10f;
+
+    /// <summary>③ 死亡フェードの到達色（低アルファのセピア調）。modulate 乗算でカード全体を褪色させる。</summary>
+    private static readonly Color DeathFadeTint = new(0.42f, 0.32f, 0.24f, 0.32f);
+
+    /// <summary>① ドレインバー（遅れて追従する尾）の色。淡い金で「直前まで在った HP」を残光させる。</summary>
+    private static readonly Color EnemyHpDrainColor = new(0.97f, 0.86f, 0.42f);
+
+    /// <summary>① HP バーの空トラック（背景）の色。</summary>
+    private static readonly Color EnemyHpBarTrackColor = new(0.12f, 0.12f, 0.14f);
+
+    /// <summary>① 前面 HP バーが満タン寄りのときの色（緑）。比率で <see cref="EnemyHpLowColor"/> へ寄る。</summary>
+    private static readonly Color EnemyHpHighColor = new(0.30f, 0.78f, 0.36f);
+
+    /// <summary>① 前面 HP バーが瀕死寄りのときの色（赤）。</summary>
+    private static readonly Color EnemyHpLowColor = new(0.85f, 0.22f, 0.20f);
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -151,6 +193,19 @@ public partial class BattleUI : Godot.Control
     private Label? _enemyHpLabel;
     private VBoxContainer? _boardContainer;
     private VBoxContainer? _logContainer;
+
+    // ─── ① 敵 HP ドレインバー（前面＝即時 HP / 背面＝遅れて追従する尾） ─────────
+    //  ★ 背面（ドレイン）バーを先に AddChild して下に敷き、前面バーを後から重ねる。
+    //    前面バーは背景 stylebox を透明にして「自分の塗り（fill）だけ」を描くため、
+    //    前面が削れて短くなった領域から、背面ドレインバーの尾（淡い金）が覗く。
+    private ProgressBar? _enemyHpBarDrain;
+    private ProgressBar? _enemyHpBarFront;
+
+    /// <summary>
+    /// ① ドレインバーの直近の追従 Tween。永続ノード（ドレインバー）を対象にするため、
+    /// 新しい減少のたびに前の追従を Kill して多重 value 補間の競合を断つ（ゾンビ化防止規律）。
+    /// </summary>
+    private Tween? _enemyHpDrainTween;
 
     // ─── 手触り演出のための参照（BuildUI で 1 度だけ確定） ────────────────
     //  ★ カメラシェイクは盤面ルート（VBoxContainer）の position を往復させて実現する。
@@ -238,6 +293,8 @@ public partial class BattleUI : Godot.Control
         // 永続ノード（盤面ルート）を掴むカメラシェイク Tween も明示的に Kill する。
         // （ルート自体は cascade で解放され Tween も自動失効するが、規律として明示破棄する。）
         KillCameraShake();
+        // ① 永続ノード（ドレインバー）を掴む HP ドレイン追従 Tween も明示的に Kill する。
+        KillEnemyHpDrain();
         // 従属モーダルが前面展開中のまま退場する場合に備え、購読を解いて確実に解放する。
         DismissLastHitCeremony();
         DismissSpoilsScreen();
@@ -277,6 +334,25 @@ public partial class BattleUI : Godot.Control
         _enemyHpLabel = new Label();
         _enemyHpLabel.SetMeta(TestIdMetaKey, "battle-enemy-hp");
         enemyCard.AddChild(_enemyHpLabel);
+
+        // ── ① 敵 HP ドレインバー領域（前面＝即時 HP / 背面＝遅れて追従する尾） ──
+        //  非コンテナの素の Control をトラックにし、その中へ 2 本の ProgressBar を
+        //  FullRect で重ねる。背面（ドレイン）を先に敷き、前面を後から重ねて最前面にする。
+        var hpBarRegion = new Control { CustomMinimumSize = new Vector2(0, 18) };
+        hpBarRegion.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        hpBarRegion.SetMeta(TestIdMetaKey, "battle-enemy-hp-bar");
+        enemyCard.AddChild(hpBarRegion);
+
+        // 背面: 空トラック（暗）＋ ドレインの塗り（淡い金）。前面の下から尾が覗く。
+        _enemyHpBarDrain = BuildHpBar(
+            new StyleBoxFlat { BgColor = EnemyHpBarTrackColor }, EnemyHpDrainColor,
+            "battle-enemy-hp-bar-drain");
+        hpBarRegion.AddChild(_enemyHpBarDrain);
+
+        // 前面: 背景は透明（自分の塗りだけ描く）＋ HP 色の塗り。比率で緑→赤に再着色する。
+        _enemyHpBarFront = BuildHpBar(
+            new StyleBoxEmpty(), EnemyHpHighColor, "battle-enemy-hp-bar-front");
+        hpBarRegion.AddChild(_enemyHpBarFront);
 
         // ── 敵攻撃予告バナー（未来を内包したスナップショットの可視化） ──
         //  CurrentBattle.NextEnemyIntent を「読むだけ」で描く。バナー枠は 1 度だけ
@@ -436,6 +512,7 @@ public partial class BattleUI : Godot.Control
         {
             _enemyNameLabel.Text = "敵: ―";
             _enemyHpLabel.Text = string.Empty;
+            ResetEnemyHpBars();
             return;
         }
 
@@ -445,6 +522,109 @@ public partial class BattleUI : Godot.Control
         var percent = (int)Math.Round(enemy.HpRatio * 100.0);
         _enemyHpLabel.Text =
             $"HP {enemy.Hp} / {enemy.MaxHp} ({percent}%)  ATK {enemy.Attack}  SPD {enemy.Speed}";
+
+        // ① 前面バーは即座に新 HP を示し、背面ドレインバーが遅れて追従する（被害の重みの可視化）。
+        DriveEnemyHpBars(enemy.Hp, enemy.MaxHp, enemy.HpRatio);
+    }
+
+    // ─── ① 敵 HP ドレインバーの駆動（前面＝即時 / 背面＝遅延追従） ──────────────
+
+    /// <summary>
+    /// 前面バーを新 HP へ即時スナップし比率で再着色する。背面ドレインバーは、HP が
+    /// 「減った」ときだけ現在値（＝直前まで在った高い HP）から新 HP へ遅延補間させ、
+    /// 削れた量を尾を引くように見せる。HP が増えた（回復）・初回描画では尾を即時スナップする。
+    ///
+    /// ★ 無キャッシュ整合: 前面・背面バーの value はノード自身が前回描画値を保持するため、
+    ///   UI 側に「直前の HP」を別途キャッシュせずとも、背面 value との大小比較だけで
+    ///   「減少か否か」を導出できる（SoT は CurrentBattle のみ・憲法③）。
+    /// </summary>
+    private void DriveEnemyHpBars(int hp, int maxHp, double ratio)
+    {
+        // ローカルへ束ねてから null 判定する。以後は KillEnemyHpDrain 等の呼び出しを挟んでも
+        // ローカルの非 null 状態は保たれるため、CS8602（possibly null 参照）を構造的に避ける。
+        var front = _enemyHpBarFront;
+        var drain = _enemyHpBarDrain;
+        if (front is null || drain is null) return;
+
+        front.MaxValue = maxHp;
+        drain.MaxValue = maxHp;
+
+        // 前面バーは即時に新 HP を示し、残量比率で緑→赤へ再着色する。
+        front.Value = hp;
+        ApplyBarFillColor(front,
+            EnemyHpHighColor.Lerp(EnemyHpLowColor, 1.0f - (float)Math.Clamp(ratio, 0.0, 1.0)));
+
+        // 背面ドレインバーは直近の追従 Tween を必ず Kill してから判定する（多重 value 補間の競合防止）。
+        KillEnemyHpDrain();
+        if (hp < drain.Value)
+        {
+            // 減少: 現在値（高い HP）から新 HP へ遅延追従させ、削れた尾を残光させる。
+            _enemyHpDrainTween = JuiceDirector.DrainBar(
+                drain, hp, EnemyHpDrainDelaySeconds, EnemyHpDrainDurationSeconds);
+        }
+        else
+        {
+            // 回復・初回描画: 尾を新 HP へ即時スナップ（遅延追従しない）。
+            drain.Value = hp;
+        }
+    }
+
+    /// <summary>非戦闘へ戻ったとき、両 HP バーを空に畳み、追従 Tween を明示的に Kill する。</summary>
+    private void ResetEnemyHpBars()
+    {
+        KillEnemyHpDrain();
+        if (_enemyHpBarFront is not null)
+        {
+            _enemyHpBarFront.MaxValue = 1;
+            _enemyHpBarFront.Value = 0;
+        }
+        if (_enemyHpBarDrain is not null)
+        {
+            _enemyHpBarDrain.MaxValue = 1;
+            _enemyHpBarDrain.Value = 0;
+        }
+    }
+
+    /// <summary>① ドレインバーの追従 Tween を明示的に Kill する（新減少前・退場時）。</summary>
+    private void KillEnemyHpDrain()
+    {
+        if (_enemyHpDrainTween is not null && _enemyHpDrainTween.IsValid())
+        {
+            _enemyHpDrainTween.Kill();
+        }
+        _enemyHpDrainTween = null;
+    }
+
+    /// <summary>HP バー（ProgressBar）の塗り（fill）stylebox を指定色で差し替える。</summary>
+    private static void ApplyBarFillColor(ProgressBar bar, Color color)
+    {
+        var fill = new StyleBoxFlat { BgColor = color };
+        fill.SetCornerRadiusAll(2);
+        bar.AddThemeStyleboxOverride("fill", fill);
+    }
+
+    /// <summary>
+    /// 重ね描き用の ProgressBar を 1 本組み立てる。パーセント表記は伏せ、背景・塗りの
+    /// stylebox を与えて FullRect で親トラックいっぱいに広げる。
+    /// </summary>
+    private static ProgressBar BuildHpBar(StyleBox background, Color fillColor, string testId)
+    {
+        var bar = new ProgressBar
+        {
+            ShowPercentage = false,
+            MinValue = 0,
+            MaxValue = 1,
+            Value = 0,
+        };
+        bar.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        bar.AddThemeStyleboxOverride("background", background);
+
+        var fill = new StyleBoxFlat { BgColor = fillColor };
+        fill.SetCornerRadiusAll(2);
+        bar.AddThemeStyleboxOverride("fill", fill);
+
+        bar.SetMeta(TestIdMetaKey, testId);
+        return bar;
     }
 
     /// <summary>
@@ -679,31 +859,12 @@ public partial class BattleUI : Godot.Control
     /// </summary>
     private void ShakeCamera()
     {
-        if (_rootShakeTarget is null || !GodotObject.IsInstanceValid(_rootShakeTarget)) return;
-
-        // 直近のシェイクが生きていれば Kill し、基準位置へ戻してからやり直す（ドリフト根絶）。
+        // 直近のシェイクが生きていれば Kill してからやり直す（多重起動・位置ドリフト根絶）。
+        // 揺れの生成自体は無状態ヘルパ JuiceDirector.Shake に委譲し、本体は「永続ノードを
+        // 対象に取る演出は直近 1 本のハンドルを保持して Kill する」規律だけを負う。
         KillCameraShake();
-        _rootShakeTarget.Position = Vector2.Zero;
-
-        // 減衰する 4 ジョルト → 最後に基準（Zero）へ収束。係数で揺れ幅を徐々に小さくする。
-        var offsets = new[]
-        {
-            new Vector2(CameraShakeAmplitude,         -CameraShakeAmplitude * 0.60f),
-            new Vector2(-CameraShakeAmplitude * 0.80f, CameraShakeAmplitude * 0.50f),
-            new Vector2(CameraShakeAmplitude * 0.55f,  CameraShakeAmplitude * 0.35f),
-            new Vector2(-CameraShakeAmplitude * 0.35f, -CameraShakeAmplitude * 0.25f),
-            Vector2.Zero,
-        };
-
-        var tween = _rootShakeTarget.CreateTween();
-        foreach (var offset in offsets)
-        {
-            tween.TweenProperty(_rootShakeTarget, "position", offset, CameraShakeStepSeconds)
-                 .SetTrans(Tween.TransitionType.Sine)
-                 .SetEase(Tween.EaseType.InOut);
-        }
-
-        _cameraShakeTween = tween;
+        _cameraShakeTween = JuiceDirector.Shake(
+            _rootShakeTarget, CameraShakeAmplitude, CameraShakeStepSeconds);
     }
 
     /// <summary>
@@ -742,15 +903,7 @@ public partial class BattleUI : Godot.Control
     ///   次の再描画で QueueFree される際、この Tween も自動失効する（明示台帳は不要）。
     /// </summary>
     private static void FlashControl(Control? node, Color flashColor)
-    {
-        if (node is null || !GodotObject.IsInstanceValid(node)) return;
-
-        node.Modulate = flashColor;
-        var tween = node.CreateTween();
-        tween.TweenProperty(node, "modulate", Colors.White, RowFlashSeconds)
-             .SetTrans(Tween.TransitionType.Quad)
-             .SetEase(Tween.EaseType.Out);
-    }
+        => JuiceDirector.Flash(node, flashColor, RowFlashSeconds);
 
     // ─── 手触り演出: 自己崩壊型ダメージポップアップ（生成→上昇フェード→自己 QueueFree） ──
 
@@ -760,6 +913,19 @@ public partial class BattleUI : Godot.Control
         if (_unitPanels.TryGetValue(unitId, out var panel))
         {
             SpawnDamagePopup(panel, text, color);
+        }
+    }
+
+    /// <summary>
+    /// ③ 撃破された英霊のマス Panel を引き、低アルファのセピアへ沈める死亡退場フェードを焚く。
+    /// Tween は Panel 自身へバインドされるため、次の RenderBoard で Panel が QueueFree される際に
+    /// 自動失効する（明示台帳は不要・リーク/ゾンビ化なし）。
+    /// </summary>
+    private void FadeUnitToDeath(Guid unitId)
+    {
+        if (_unitPanels.TryGetValue(unitId, out var panel))
+        {
+            JuiceDirector.FadeToDeath(panel, DeathFadeTint, DeathFadeSeconds);
         }
     }
 
@@ -776,43 +942,64 @@ public partial class BattleUI : Godot.Control
     /// </summary>
     private void SpawnDamagePopup(Control? anchor, string text, Color color)
     {
-        if (_popupLayer is null || anchor is null || !GodotObject.IsInstanceValid(anchor)) return;
-
-        var label = new Label
-        {
-            Text         = text,
-            Modulate     = color,
-            ZIndex       = 100,                          // オーバーレイ層内でも確実に最前面
-            MouseFilter  = Control.MouseFilterEnum.Ignore, // クリックを透過（下のボタンを妨げない）
-        };
-        label.SetMeta(TestIdMetaKey, $"battle-damage-popup-{_popupSpawnCount}");
+        // 生成・上昇フェード・自己 QueueFree の規律は無状態ヘルパ JuiceDirector.RisingPopup に
+        // 委譲する。本体は testid の連番（battle-damage-popup-{n}）だけを払い出して渡す（① 準拠の
+        // 表示テキスト・testid 組み立ては呼び出し側＝本体の責務）。
+        JuiceDirector.RisingPopup(
+            _popupLayer, anchor, text, color,
+            TestIdMetaKey, $"battle-damage-popup-{_popupSpawnCount}",
+            DamagePopupRiseDistance, DamagePopupLifeSeconds);
         _popupSpawnCount++;
-        _popupLayer.AddChild(label);
+    }
 
-        // アンカーのグローバル矩形から、その上部中央を初期位置に取る（global → ローカルへ反映）。
-        var anchorRect = anchor.GetGlobalRect();
-        label.GlobalPosition = new Vector2(
-            anchorRect.Position.X + anchorRect.Size.X * 0.5f,
-            anchorRect.Position.Y + anchorRect.Size.Y * 0.25f);
+    // ─── ② ローテーション滑走（旧位置 → 新位置へ各マスを position 補間） ─────────
 
-        var risenLocalPosition = label.Position + new Vector2(0.0f, -DamagePopupRiseDistance);
-
-        var tween = label.CreateTween();
-        // 上昇とフェードを並行（Parallel）で走らせる。
-        tween.TweenProperty(label, "position", risenLocalPosition, DamagePopupLifeSeconds)
-             .SetTrans(Tween.TransitionType.Quad)
-             .SetEase(Tween.EaseType.Out);
-        tween.Parallel().TweenProperty(label, "modulate:a", 0.0f, DamagePopupLifeSeconds)
-             .SetTrans(Tween.TransitionType.Sine)
-             .SetEase(Tween.EaseType.In);
-        // 並行ブロックの後（Chain）に、自分自身を QueueFree する自己崩壊ステップを連結。
-        tween.Chain().TweenCallback(Callable.From(() =>
+    /// <summary>
+    /// 現在 tree にある各ユニットマスの画面上 global 位置を控える。回転解決の【前】に呼び、
+    /// 再構築後の新マスを「元居た場所」から滑り込ませるための始点として使う。
+    /// </summary>
+    private Dictionary<Guid, Vector2> CaptureUnitGlobalPositions()
+    {
+        var snapshot = new Dictionary<Guid, Vector2>();
+        foreach (var pair in _unitPanels)
         {
-            if (GodotObject.IsInstanceValid(label))
+            if (GodotObject.IsInstanceValid(pair.Value))
             {
-                label.QueueFree();
+                snapshot[pair.Key] = pair.Value.GlobalPosition;
             }
-        }));
+        }
+        return snapshot;
+    }
+
+    /// <summary>
+    /// 再構築済みの盤面に対し、各ユニットマスを旧 global 位置から現在のレイアウト位置へ
+    /// 滑り込ませる。コンテナの sort（レイアウト確定）は AddChild と同フレームでは完了せず
+    /// 遅延するため、1 プロセスフレーム待ってマスが最終位置を報告できる状態にしてから焚く。
+    ///
+    /// ★ ライフサイクル安全（Req 4）: await の前後で this / 各マスの IsInstanceValid を検査し、
+    ///   待機中に画面（BattleUI）やマスが破棄されても安全に no-op する。滑走 Tween は各マス
+    ///   自身へバインドされるため、次の RenderBoard でマスが QueueFree される際に自動失効する。
+    /// </summary>
+    private async void PlayRotationSlide(Dictionary<Guid, Vector2> previousGlobalPositions)
+    {
+        if (!GodotObject.IsInstanceValid(this)) return;
+
+        // コンテナ sort の確定を 1 フレーム待つ（新マスが最終 global 位置を報告できるように）。
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        if (!GodotObject.IsInstanceValid(this)) return;
+
+        foreach (var pair in _unitPanels)
+        {
+            var panel = pair.Value;
+            if (!GodotObject.IsInstanceValid(panel)) continue;
+            if (!previousGlobalPositions.TryGetValue(pair.Key, out var oldGlobal)) continue;
+
+            // 動いていないマス（同じ場所に留まったユニット）は滑走させない。
+            if (oldGlobal.DistanceSquaredTo(panel.GlobalPosition) < RotationSlideMinTravelSquared) continue;
+
+            JuiceDirector.SlideTo(panel, oldGlobal, RotationSlideSeconds);
+        }
     }
 
     // ─── コマンド操作（すべて ChronicleGlobal の API を呼ぶだけ） ─────────
@@ -841,7 +1028,22 @@ public partial class BattleUI : Godot.Control
     {
         if (_chronicleGlobal is null) return;
 
+        // ② ローテーション滑走の種: 回転作戦を伴うときだけ、解決の【前】に各ユニットの
+        //    現在の画面上 global 位置を控えておく。解決すると BattleChanged 経由で盤面が
+        //    丸ごと再構築（新しい配置のマスへ）されるため、旧位置はここでしか掴めない。
+        var preRotationPositions = rotation is null
+            ? null
+            : CaptureUnitGlobalPositions();
+
         var events = _chronicleGlobal.ResolveBattleTurn(rotation);
+
+        // 盤面はこの時点で BattleChanged → RenderBoard により新配置へ再構築済み。
+        // 控えた旧位置から新位置へ各マスを滑り込ませる（コンテナ sort 確定を 1 フレーム待つ）。
+        if (preRotationPositions is { Count: > 0 })
+        {
+            PlayRotationSlide(preRotationPositions);
+        }
+
         AppendTurnEvents(events);
     }
 
@@ -1084,6 +1286,9 @@ public partial class BattleUI : Godot.Control
             case EnemyOffenseEvent enemy:
                 // 敵の攻撃が対象行へ着弾 → 行全体を予告と同じ赤でフラッシュ（カメラシェイク対象）。
                 FlashRow(enemy.TargetRow);
+                // ④ 予告ワインドアップ: 着弾の瞬間に敵カードをスケールパンチさせ「敵が振り抜いた」
+                //    手応えを出す。scale は modulate（フラッシュ）とも position（シェイク）とも独立。
+                JuiceDirector.Punch(_enemyCard, EnemyWindupPunchScale, EnemyWindupPunchSeconds);
                 return true;
 
             case UnitDamagedEvent damaged:
@@ -1094,6 +1299,10 @@ public partial class BattleUI : Godot.Control
             case UnitDefeatedEvent defeated:
                 // 撃破（完全ロスト）→ 当人のマス上に撃破記号を出す（カメラシェイク対象）。
                 SpawnDamagePopupForUnit(defeated.UnitId, DefeatPopupMark, DamagePopupColor);
+                // ③ 英霊の死亡退場: 当人のカードを低アルファのセピアへ沈め、とどめの儀式へ移る前に
+                //    「褪せて退場する」気配を残す。FadeToDeath は被弾フラッシュ（同じ modulate）の
+                //    後に焚かれるため、より長い本フェードが最終的に勝ち、セピアで静止する。
+                FadeUnitToDeath(defeated.UnitId);
                 return true;
 
             case UnitHealedEvent healed:
