@@ -145,4 +145,69 @@ public class MetricsReporterTests
             Assert.Equal(direct.Epochs[i].PopulationSurvivalRate, viaPipeline.Epochs[i].PopulationSurvivalRate, RatePrecision);
         }
     }
+
+    // ─── 4. マクロレポート（章別の勝率・生存率・黒字幅の ASCII カラム表） ───
+
+    private static void AssertAsciiOnly(string text)
+    {
+        Assert.All(text, c => Assert.True(c < 128, $"non-ASCII char detected: {(int)c}"));
+    }
+
+    [Fact]
+    public void FormatMacroReport_RendersAsciiColumnsWithEpochsAndTotal()
+    {
+        var metrics = MetricsCollector.Aggregate(new[]
+        {
+            Sample(10, earned: 10, spent: 4, combatants: 10, lost: 1, BattleOutcome.BattalionVictory),
+            Sample(20, earned: 6,  spent: 2, combatants: 10, lost: 2, BattleOutcome.BattalionVictory),
+            Sample(25, earned: 20, spent: 0, combatants: 10, lost: 3, BattleOutcome.BattalionVictory, boss: true),
+        });
+
+        var report = MetricsReporter.FormatMacroReport(metrics);
+
+        // 見出し・列キー・全 4 章・TOTAL 行が揃う。
+        Assert.Contains("chronicle-macro-metrics", report);
+        Assert.Contains("winrate", report);
+        Assert.Contains("survival", report);
+        Assert.Contains("boss_win", report);
+        Assert.Contains("epoch-dawn", report);
+        Assert.Contains("epoch-upheaval", report);
+        Assert.Contains("epoch-decline", report);
+        Assert.Contains("epoch-twilight", report);
+        Assert.Contains("TOTAL", report);
+
+        // 黎明の特徴的なセル（勝率 1.000・生存率 0.800・平均黒字 10.00・章ボス 1/1）。
+        Assert.Contains("1.000", report);
+        Assert.Contains("0.800", report);
+        Assert.Contains("10.00", report);
+        Assert.Contains("1/1", report);
+
+        AssertAsciiOnly(report);
+    }
+
+    [Fact]
+    public void BuildReportFromLogs_EqualsDirectFormatOfAggregate()
+    {
+        var samples = new[]
+        {
+            Sample(10, 10, 4, 10, 1, BattleOutcome.BattalionVictory),
+            Sample(40, 0,  5, 9,  9, BattleOutcome.BattalionDefeat),
+            Sample(100, 12, 3, 9, 0, BattleOutcome.BattalionVictory, boss: true),
+        };
+
+        var lines = new List<string> { "noise" };
+        lines.AddRange(samples.Select(MetricsLogFormatter.FormatSample));
+
+        var viaLogs = MetricsReporter.BuildReportFromLogs(lines);
+        var direct = MetricsReporter.FormatMacroReport(MetricsCollector.Aggregate(samples));
+
+        Assert.Equal(direct, viaLogs); // ログ → 集約 → 整形が直接整形と完全一致。
+    }
+
+    [Fact]
+    public void DumpMacroReport_DoesNotThrow()
+    {
+        var metrics = MetricsCollector.Aggregate(System.Array.Empty<BattleMetricSample>());
+        MetricsReporter.DumpMacroReport(metrics); // 標準出力へ一過性ダンプ（例外を投げない）。
+    }
 }

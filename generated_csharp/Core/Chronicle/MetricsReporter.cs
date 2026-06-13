@@ -28,6 +28,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using ChronicleKnights.Core.Battle;
 
@@ -71,6 +73,94 @@ public static class MetricsReporter
         }
 
         return builder.ToImmutable();
+    }
+
+    // ─── マクロレポート（章別の勝率・生存率・黒字幅を一望する ASCII カラム表） ──
+
+    /// <summary>全数値整形を ASCII（"." 小数点）に固定する不変カルチャ。</summary>
+    private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
+
+    /// <summary>
+    /// ログ行配列から一気通貫でマクロレポート文字列を編む純粋導管:
+    /// ParseLogLines → MetricsCollector.Aggregate → FormatMacroReport。SoT を一切持たず、
+    /// 同一ログからは常に同一レポートを返す（決定論・副作用ゼロ）。
+    /// </summary>
+    public static string BuildReportFromLogs(IEnumerable<string> logLines)
+        => FormatMacroReport(MetricsCollector.Aggregate(ParseLogLines(logLines)));
+
+    /// <summary>
+    /// 集約済みマクロ統計を、章ごとの勝率・生存率・黒字幅（Earned vs Spent）が一望できる整然とした
+    /// ASCII カラム表へ整形する純粋関数。見出し・キーはすべて ASCII（設計憲法①）。末尾に全体総計の
+    /// TOTAL 行を置く。Godot 非依存ゆえ xUnit で完全検証可能（GD.Print は呼ばない）。
+    /// </summary>
+    public static string FormatMacroReport(ChronicleMetrics metrics)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("=== chronicle-macro-metrics (100-year) ===");
+        builder.AppendLine(FormatRow(
+            "epoch", "battles", "winrate", "survival", "earned", "spent", "net", "avg_net", "inv_eff", "boss_win"));
+
+        foreach (var epoch in metrics.Epochs)
+        {
+            builder.AppendLine(FormatRow(
+                epoch.EpochNameKey,
+                epoch.BattleCount.ToString(Invariant),
+                epoch.VictoryRate.ToString("F3", Invariant),
+                epoch.PopulationSurvivalRate.ToString("F3", Invariant),
+                epoch.TotalEarned.ToString(Invariant),
+                epoch.TotalSpent.ToString(Invariant),
+                epoch.NetSurplus.ToString(Invariant),
+                epoch.AverageNetSurplus.ToString("F2", Invariant),
+                epoch.InvestmentEfficiency.ToString("F2", Invariant),
+                epoch.BossVictories.ToString(Invariant) + "/" + epoch.BossBattles.ToString(Invariant)));
+        }
+
+        var overallAverageNet = metrics.TotalBattles <= 0
+            ? 0.0
+            : (double)metrics.NetSurplus / metrics.TotalBattles;
+
+        builder.AppendLine(FormatRow(
+            "TOTAL",
+            metrics.TotalBattles.ToString(Invariant),
+            metrics.OverallVictoryRate.ToString("F3", Invariant),
+            metrics.OverallSurvivalRate.ToString("F3", Invariant),
+            metrics.TotalEarned.ToString(Invariant),
+            metrics.TotalSpent.ToString(Invariant),
+            metrics.NetSurplus.ToString(Invariant),
+            overallAverageNet.ToString("F2", Invariant),
+            metrics.OverallInvestmentEfficiency.ToString("F2", Invariant),
+            metrics.TotalBossVictories.ToString(Invariant) + "/" + metrics.TotalBossBattles.ToString(Invariant)));
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// 集約済みマクロ統計を ASCII カラム表として標準出力へ一過性にダンプする（100 年シミュレーション
+    /// 末尾・マクロテスト環境の通電点）。整形は純粋層 FormatMacroReport に委譲し、本メソッドは
+    /// Console.WriteLine への一過性委譲のみ＝SoT・永続キャッシュを一切増設しない。
+    /// </summary>
+    public static void DumpMacroReport(ChronicleMetrics metrics)
+    {
+        Console.WriteLine(FormatMacroReport(metrics));
+    }
+
+    /// <summary>10 列の固定幅 ASCII カラム 1 行を組む（章名は左詰め・数値は右詰め）。</summary>
+    private static string FormatRow(
+        string epoch, string battles, string winRate, string survival, string earned,
+        string spent, string net, string averageNet, string investmentEfficiency, string bossWin)
+    {
+        return epoch.PadRight(16)
+            + battles.PadLeft(9)
+            + winRate.PadLeft(9)
+            + survival.PadLeft(10)
+            + earned.PadLeft(9)
+            + spent.PadLeft(8)
+            + net.PadLeft(8)
+            + averageNet.PadLeft(9)
+            + investmentEfficiency.PadLeft(9)
+            + bossWin.PadLeft(9);
     }
 
     /// <summary>
