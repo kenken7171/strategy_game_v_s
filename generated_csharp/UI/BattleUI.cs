@@ -75,13 +75,6 @@ public partial class BattleUI : Godot.Control
     private const string TestIdMetaKey = "data_testid";
 
     /// <summary>
-    /// デモ用に戦闘を起動する際の世代年（敵スケールの基準）。本画面はゲーム進行の
-    /// 一部としては Timeline/年の駆動を受けて StartBattle される想定だが、画面単体でも
-    /// ライフサイクルを実演できるよう、ブートストラップ用の公称年を 1 つ持つ。
-    /// </summary>
-    private const int DemoBattleGenerationYear = 100;
-
-    /// <summary>
     /// 危険スロット赤枠の脈動 1 山あたりの秒数（明 → 暗 / 暗 → 明 の片道）。
     /// ループ Tween がこの周期で self_modulate のアルファを上下させ、予告対象行を脈打たせる。
     /// </summary>
@@ -199,6 +192,9 @@ public partial class BattleUI : Godot.Control
     private Label? _statusLabel;
     private VBoxContainer? _enemyCard;
     private Label? _enemyNameLabel;
+
+    /// <summary>時代スケール敵の原型を機械可読 testid（battle-enemy-instance-{archetype}）で晒す無表示ビーコン。</summary>
+    private Control? _enemyInstanceMarker;
     private Label? _enemyHpLabel;
     private VBoxContainer? _boardContainer;
     private VBoxContainer? _logContainer;
@@ -340,6 +336,16 @@ public partial class BattleUI : Godot.Control
         _enemyNameLabel.SetMeta(TestIdMetaKey, "battle-enemy-name");
         enemyCard.AddChild(_enemyNameLabel);
 
+        // 時代スケール敵の原型を晒す無表示の testid ビーコン（RenderEnemy で原型ごとに meta を更新）。
+        // 一度だけ生成し以後は更新のみ＝再描画でノードを増やさない（リークフリー）。
+        _enemyInstanceMarker = new Control
+        {
+            MouseFilter       = MouseFilterEnum.Ignore,
+            CustomMinimumSize = Vector2.Zero,
+        };
+        _enemyInstanceMarker.SetMeta(TestIdMetaKey, "battle-enemy-instance-none");
+        enemyCard.AddChild(_enemyInstanceMarker);
+
         _enemyHpLabel = new Label();
         _enemyHpLabel.SetMeta(TestIdMetaKey, "battle-enemy-hp");
         enemyCard.AddChild(_enemyHpLabel);
@@ -401,6 +407,16 @@ public partial class BattleUI : Godot.Control
         _startButton.SetMeta(TestIdMetaKey, "battle-command-start");
         _startButton.Pressed += OnStartPressed;
         commandRow.AddChild(_startButton);
+
+        // 戦闘開始トリガーが「時代スケール敵生成」であることを晒す無表示の testid ビーコン
+        // （E2E・マクロ調律の計測点。既存 battle-command-start を改名せず追加する）。
+        var eraStartBeacon = new Control
+        {
+            MouseFilter       = MouseFilterEnum.Ignore,
+            CustomMinimumSize = Vector2.Zero,
+        };
+        eraStartBeacon.SetMeta(TestIdMetaKey, "battle-start-era-scaled");
+        commandRow.AddChild(eraStartBeacon);
 
         _commandNoneButton = new Button { Text = "▶ 無作戦で1ターン" };
         _commandNoneButton.SetMeta(TestIdMetaKey, "battle-command-none");
@@ -530,19 +546,42 @@ public partial class BattleUI : Godot.Control
         {
             _enemyNameLabel.Text = "敵: ―";
             _enemyHpLabel.Text = string.Empty;
+            _enemyInstanceMarker?.SetMeta(TestIdMetaKey, "battle-enemy-instance-none");
             ResetEnemyHpBars();
             return;
         }
 
         var enemy = battle.Enemy;
-        // 敵の表示名は現状 ASCII 列挙キー（localization 解決は次段の拡張余地）。
+        // 敵の表示名は現状 ASCII 列挙キー（display 名の localization 解決は次段の拡張余地）。
         _enemyNameLabel.Text = $"敵: {enemy.Archetype}";
+        // 時代スケール敵の原型を機械可読 testid へ反映（E2E・マクロ調律の計測点）。
+        _enemyInstanceMarker?.SetMeta(TestIdMetaKey, $"battle-enemy-instance-{ArchetypeSlug(enemy.Archetype)}");
         var percent = (int)Math.Round(enemy.HpRatio * 100.0);
         _enemyHpLabel.Text =
             $"HP {enemy.Hp} / {enemy.MaxHp} ({percent}%)  ATK {enemy.Attack}  SPD {enemy.Speed}";
 
         // ① 前面バーは即座に新 HP を示し、背面ドレインバーが遅れて追従する（被害の重みの可視化）。
         DriveEnemyHpBars(enemy.Hp, enemy.MaxHp, enemy.HpRatio);
+    }
+
+    /// <summary>
+    /// 敵原型 enum を testid 用 ASCII kebab スラッグへ写す（EternalSovereign → "eternal-sovereign"）。
+    /// 表示テキストではなく機械可読キーゆえ localization は不要（PascalCase の語境界に '-' を差す）。
+    /// </summary>
+    private static string ArchetypeSlug(EnemyArchetype archetype)
+    {
+        var name = archetype.ToString();
+        var builder = new System.Text.StringBuilder(name.Length + 4);
+        for (int i = 0; i < name.Length; i++)
+        {
+            char c = name[i];
+            if (char.IsUpper(c) && i > 0)
+            {
+                builder.Append('-');
+            }
+            builder.Append(char.ToLowerInvariant(c));
+        }
+        return builder.ToString();
     }
 
     // ─── ① 敵 HP ドレインバーの駆動（前面＝即時 / 背面＝遅延追従） ──────────────
@@ -1023,15 +1062,17 @@ public partial class BattleUI : Godot.Control
     // ─── コマンド操作（すべて ChronicleGlobal の API を呼ぶだけ） ─────────
 
     /// <summary>
-    /// 戦闘開始: デモ用にスケールした試練の門の守護者を生成し、StartBattle を依頼する。
-    /// 戦闘の真実差し替え・再描画は BattleChanged 経由で自動的に行われる（単方向フロー）。
+    /// 戦闘開始: 現在年に応じた時代スケール敵を「正本ファクトリ」CreateCurrentYearEnemy で生成し、
+    /// StartBattle を依頼する。章ボス出現年（25/50/75/100）はその章の章ボス、それ以外は通常敵が、
+    /// 100 年史の難易度曲線（章の難易度・環境補正＋個体差ジッタ）を纏って戦場へ立つ。
+    /// 戦闘の真実差し替え・再描画は BattleChanged 経由で自動的に行われる（単方向フロー・無状態）。
     /// </summary>
     private void OnStartPressed()
     {
         if (_chronicleGlobal is null) return;
 
-        // デモ起動用の敵を決定論ファクトリでスケールする（ブートストラップ）。
-        var enemy = EnemyScaler.ScaleTrialGuardian(DemoBattleGenerationYear, new Random());
+        // デモ用固定敵（旧 ScaleTrialGuardian 仮置き）を排し、歴史の年数を貫いた時代スケール敵を生成。
+        var enemy = _chronicleGlobal.CreateCurrentYearEnemy();
 
         ClearLog();
         AppendLogLine("戦闘開始", "battle-log-start");
