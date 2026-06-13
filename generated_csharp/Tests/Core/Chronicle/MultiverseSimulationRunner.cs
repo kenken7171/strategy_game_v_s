@@ -212,4 +212,32 @@ public class MultiverseSimulationRunner
         Assert.Equal(first.NetSurplus, second.NetSurplus);
         Assert.Equal(first.TotalVictories, second.TotalVictories);
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  初期ベースライン・多重宇宙レポートの完全ダンプ（現行 3 ノブ設定）
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 50 宇宙を連続巡航 → UniverseEvaluator.Evaluate で多重宇宙集約 → 標準出力へ ASCII カラム表として
+    /// ダンプする。冒頭に「=== MULTIVERSE BASELINE REPORT ===」を付与し、現行 3 ノブ設定での絶滅率・
+    /// 各章 avg_net・章ボス突破率を人間が一目で読み取れる状態にする（ノブ最適化の基準点）。
+    /// </summary>
+    [Fact]
+    public void DumpBaselineMultiverseReport()
+    {
+        var metrics = RunUniverses(BaselineSeeds);
+        var universe = UniverseEvaluator.Evaluate(metrics);
+
+        Console.WriteLine("=== MULTIVERSE BASELINE REPORT ===");
+        Console.WriteLine("config: current knobs (no tuning applied)");
+        Console.WriteLine(
+            "seeds: 1.." + DefaultUniverseCount
+            + "   years-per-universe: " + ChronicleTimelineConfig.TotalYears
+            + "   total-years: " + (DefaultUniverseCount * ChronicleTimelineConfig.TotalYears));
+        UniverseEvaluator.DumpUniverseReport(universe);
+
+        // 露出が健全に成立すること（例外なく 50 宇宙の統計が出揃う）を最小アサート。
+        Assert.Equal(DefaultUniverseCount, universe.UniverseCount);
+        Assert.Equal(4, universe.Epochs.Length);
+    }
 }
