@@ -40,6 +40,7 @@
 using System;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
+using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 using Godot;
 
@@ -69,9 +70,19 @@ public partial class FormationUI : Godot.Control
     private VBoxContainer? _boardContainer;
     private VBoxContainer? _benchContainer;
 
+    // 兵装スロット（無償脱着）セクションのリストコンテナ
+    private VBoxContainer? _equipListContainer;
+
     // ─── 操作カーソル（盤面状態ではなく「次に配置する控え」を指す一過性の値） ──
 
     private Guid? _selectedUnitId;
+
+    /// <summary>
+    /// 兵装脱着ダイアログを開いている行の対象 Id（一過性の操作カーソル）。null なら全行が
+    /// 閉じている。これは盤面状態ではなく「いまどの行のダイアログを開いているか」だけを指す。
+    /// Roster 再描画をまたいでも保持する（再描画で誤って閉じないため）。
+    /// </summary>
+    private Guid? _pendingEquipId;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -148,6 +159,30 @@ public partial class FormationUI : Godot.Control
         };
         hintLabel.SetMeta(TestIdMetaKey, "formation-hint");
         root.AddChild(hintLabel);
+
+        // ── 兵装スロット（無償脱着・無状態。RosterChanged ごとに再構築） ─────
+        // 現役全員（配置済み・控え問わず）に対し、SoT の EquippedItemId を毎描画で読み直して
+        // 兵装スロットを並べる。スロット押下で 5 大マスター + 外す の脱着ダイアログを展開し、
+        // ChronicleGlobal.EquipItem / UnequipItem（無償）を単方向に呼ぶだけ（UI は状態を持たない）。
+        var equipSection = new VBoxContainer();
+        equipSection.SetMeta(TestIdMetaKey, "roster-equip-section");
+        root.AddChild(equipSection);
+
+        var equipTitle = new Label { Text = "── 🛡 兵装スロット（無償脱着） ──" };
+        equipTitle.SetMeta(TestIdMetaKey, "roster-equip-title");
+        equipSection.AddChild(equipTitle);
+
+        var equipHint = new Label
+        {
+            Text = "💡 スロットを押して兵装を着脱（緑の数値が装備中の ATK/DEF/SPD 補正）",
+        };
+        equipHint.SetMeta(TestIdMetaKey, "roster-equip-hint");
+        equipSection.AddChild(equipHint);
+
+        _equipListContainer = new VBoxContainer();
+        _equipListContainer.AddThemeConstantOverride("separation", 4);
+        _equipListContainer.SetMeta(TestIdMetaKey, "roster-equip-list");
+        equipSection.AddChild(_equipListContainer);
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -193,6 +228,7 @@ public partial class FormationUI : Godot.Control
         RenderSummary();
         RenderBoard();
         RenderBench();
+        RenderEquipmentSlots();
     }
 
     /// <summary>
@@ -309,6 +345,112 @@ public partial class FormationUI : Godot.Control
         }
     }
 
+    /// <summary>
+    /// 兵装スロット（無償脱着）セクションを、現在の生存者から無状態に再構築する。
+    ///
+    /// 各行は次の 3 つを常設する（SoT を一切キャッシュせず毎描画で読み直す）:
+    ///   - 氏名 [ジョブ]      … ① 準拠で Resolve 経由。
+    ///   - 兵装スロット        … <see cref="Unit.MainEquipment"/>（= EquippedItemId の出所）を
+    ///                            パッシブに読み、装備名 Lv を表示。押下でこの行の脱着ダイアログを開閉。
+    ///   - 戦力プレビュー      … <see cref="BattleManager"/> の floor 整数補正（ATK/DEF/SPD）。
+    ///                            装備時のみ緑でハイライト（色価言語：プラス補正の発火を一目で）。
+    ///
+    /// 武装状態（<see cref="_pendingEquipId"/> 一致）の行だけ、5 大マスターの装着ボタン群＋[外す]＋
+    /// [やめる] を同じ行へ展開する（行内インラインの脱着ダイアログ）。装着・取り外しは
+    /// ChronicleGlobal.EquipItem / UnequipItem（無償）を単方向に呼ぶだけで、UI は状態を書き換えない。
+    ///
+    /// リークフリー: 再構築の冒頭で既存行を <see cref="ClearChildren"/>（QueueFree）して
+    /// ゾンビ行を残さない。購読解除は <see cref="_ExitTree"/> が一括で担う。
+    /// </summary>
+    private void RenderEquipmentSlots()
+    {
+        if (_chronicleGlobal is null || _equipListContainer is null) return;
+
+        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない＝リークフリー）。
+        ClearChildren(_equipListContainer);
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        if (alive.Count == 0)
+        {
+            var empty = new Label { Text = "（兵装を着脱できる現役がいません）" };
+            empty.SetMeta(TestIdMetaKey, "roster-equip-empty");
+            _equipListContainer.AddChild(empty);
+            return;
+        }
+
+        foreach (var unit in alive)
+        {
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"roster-equip-row-{capturedId}");
+
+            // 氏名・ジョブ（① 準拠で Resolve 経由・日本語データ名はハードコードしない）。
+            var name = new Label
+            {
+                Text = $"[{_chronicleGlobal.ResolveJobName(unit.Job)}] "
+                       + _chronicleGlobal.ResolveDisplayName(unit),
+            };
+            name.SetMeta(TestIdMetaKey, $"roster-equip-name-{capturedId}");
+            row.AddChild(name);
+
+            // 兵装スロット（無状態：描画の瞬間に SoT の MainEquipment／EquippedItemId を
+            // パッシブに読むだけ）。押下でこの行の脱着ダイアログを開閉する操作トリガ。
+            var equip = unit.MainEquipment;
+            var slotButton = new Button
+            {
+                Text = equip is null
+                    ? "兵装スロット: —"
+                    : $"兵装スロット: {ItemName(equip.ItemId)} Lv{equip.Level}",
+            };
+            slotButton.SetMeta(TestIdMetaKey, $"roster-equip-slot-{capturedId}");
+            slotButton.Pressed += () => OnEquipSlotPressed(capturedId);
+            row.AddChild(slotButton);
+
+            // 戦力プレビュー：装備由来 ATK/DEF/SPD ボーナス（floor 整数）を即時可視化する。
+            // 数値は常に正直（未装備なら 0）。兵装を帯びている時だけ緑でハイライトする。
+            var atkBonus = BattleManager.EquipmentAttackBonus(unit);
+            var defBonus = BattleManager.EquipmentDefenseBonus(unit);
+            var spdBonus = BattleManager.EquipmentSpeedBonus(unit);
+            var preview = new Label
+            {
+                Text = $"ATK +{atkBonus}  DEF +{defBonus}  SPD +{spdBonus}",
+            };
+            preview.SetMeta(TestIdMetaKey, $"roster-equip-stats-{capturedId}");
+            if (equip is not null)
+            {
+                preview.AddThemeColorOverride("font_color", Colors.LightGreen);
+            }
+            row.AddChild(preview);
+
+            // 武装状態の行だけ、5 大マスター＋[外す]＋[やめる] の脱着ダイアログを同じ行へ展開する。
+            if (_pendingEquipId == capturedId)
+            {
+                foreach (var item in Enum.GetValues<ItemId>())
+                {
+                    var capturedItem = item;
+                    var pickButton = new Button { Text = ItemName(item) };
+                    pickButton.SetMeta(TestIdMetaKey, $"roster-equip-pick-{item}");
+                    pickButton.Pressed += () => OnEquipPickPressed(capturedId, capturedItem);
+                    row.AddChild(pickButton);
+                }
+
+                var unequipButton = new Button { Text = "外す" };
+                unequipButton.SetMeta(TestIdMetaKey, $"roster-unequip-btn-{capturedId}");
+                unequipButton.Pressed += () => OnUnequipPressed(capturedId);
+                row.AddChild(unequipButton);
+
+                var cancelButton = new Button { Text = "やめる" };
+                cancelButton.SetMeta(TestIdMetaKey, $"roster-equip-cancel-{capturedId}");
+                cancelButton.Pressed += OnEquipCancelPressed;
+                row.AddChild(cancelButton);
+            }
+
+            _equipListContainer.AddChild(row);
+        }
+    }
+
     // ─── クリック操作（すべて ChronicleGlobal の API を呼ぶだけ） ─────────
 
     /// <summary>
@@ -348,6 +490,69 @@ public partial class FormationUI : Godot.Control
         _chronicleGlobal?.RotateFormation(direction);
     }
 
+    // ─── 兵装スロット（無償脱着）ハンドラ ─────────────────────────────────
+
+    /// <summary>
+    /// 兵装スロット押下: この行の脱着ダイアログを開閉する（同じスロット再押下で閉じるトグル）。
+    /// これは盤面状態の変更ではなく一過性の操作カーソル更新なので API は呼ばず、当該セクションのみ
+    /// 再描画してダイアログの開閉を反映する（盤面・ロスタの真実は不変のまま）。
+    /// </summary>
+    private void OnEquipSlotPressed(Guid unitId)
+    {
+        _pendingEquipId = (_pendingEquipId == unitId) ? null : unitId;
+        RenderEquipmentSlots();
+    }
+
+    /// <summary>
+    /// 装着ボタン（5 大マスターのいずれか）押下: ChronicleGlobal.EquipItem で無償装着する。
+    /// 成功時は RosterChanged 経由で全体が自動再描画されるため、ここでは武装解除だけ行う。
+    /// 失敗（未初期化／対象不在）時はシグナルが飛ばないので手動で再描画してダイアログを畳む。
+    /// </summary>
+    private void OnEquipPickPressed(Guid unitId, ItemId itemId)
+    {
+        if (_chronicleGlobal is null) return;
+
+        // 武装は結果に関わらず解除（成功なら行が組み変わり、失敗なら通常表示へ戻る）。
+        _pendingEquipId = null;
+
+        var affected = _chronicleGlobal.EquipItem(unitId, itemId);
+        if (affected is null)
+        {
+            GD.Print($"[FormationUI] equip failed (uninitialized or unit not found): Id={unitId} Item={itemId}");
+            RenderEquipmentSlots(); // 失敗時はシグナル無し → 手動で武装解除を反映。
+            return;
+        }
+
+        GD.Print($"[FormationUI] equip {ItemName(itemId)} -> Id={unitId}");
+        // 成功時の再描画は RosterChanged シグナル経由で自動（単方向フロー）。
+    }
+
+    /// <summary>
+    /// [外す] 押下: ChronicleGlobal.UnequipItem で無償取り外しする。元から未装備（RosterMutated=false）
+    /// の場合はシグナルが飛ばないため、結果に関わらずここで必ず再描画してダイアログを畳む
+    /// （装備ありの成功時はシグナルと二重描画になり得るが、本メソッドは冪等・リークフリーで安全）。
+    /// </summary>
+    private void OnUnequipPressed(Guid unitId)
+    {
+        if (_chronicleGlobal is null) return;
+
+        _pendingEquipId = null;
+
+        var affected = _chronicleGlobal.UnequipItem(unitId);
+        GD.Print(affected is null
+            ? $"[FormationUI] unequip failed (uninitialized or unit not found): Id={unitId}"
+            : $"[FormationUI] unequip -> Id={unitId}");
+
+        RenderEquipmentSlots();
+    }
+
+    /// <summary>[やめる] 押下: 脱着ダイアログを畳むだけ（何も着けない・外さない）。</summary>
+    private void OnEquipCancelPressed()
+    {
+        _pendingEquipId = null;
+        RenderEquipmentSlots();
+    }
+
     // ─── 補助 ─────────────────────────────────────────────────────────────
 
     /// <summary>占有者 ID から「氏名 [ジョブ]」表示を組み立てる（ジョブ名は ① 準拠）。</summary>
@@ -380,4 +585,12 @@ public partial class FormationUI : Godot.Control
     // 委譲する。本ファイルには日本語の「データ名」を一切ハードコードしない（① 準拠）。
     // 分隊行ラベルは現状 enum 名（ASCII）で表示しており、squadRows セクションの
     // ローカライズ解決は次段の拡張余地として残している。
+
+    /// <summary>
+    /// 装備種別の表示名を ChronicleGlobal.ResolveItemName（内部で純粋層 MasterDataNameResolver が
+    /// localization_ja.json の items.{ItemId}.name を引く）に委譲する。Autoload 未取得時は enum 名
+    /// （ASCII）へフォールバックして画面を落とさない（① 準拠・日本語データ名を持たない）。
+    /// </summary>
+    private string ItemName(ItemId item)
+        => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();
 }
