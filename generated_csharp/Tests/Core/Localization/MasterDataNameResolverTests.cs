@@ -42,6 +42,10 @@ public class MasterDataNameResolverTests
     private const string SkillPincerValue  = "SKILL-PINCER";
     private const string SkillSingleKey    = "enemy-skill-single-strike";
     private const string SkillPincerKey    = "enemy-skill-pincer";
+    private const string EpochDawnValue    = "EPOCH-DAWN";
+    private const string EpochTwilightValue = "EPOCH-TWILIGHT";
+    private const string EpochDawnKey      = "epoch-dawn";
+    private const string EpochTwilightKey  = "epoch-twilight";
 
     // jobs / items / prophecyKinds を部分的に持つ最小フィクスチャ。
     //   - キーは enum.ToString()（PascalCase）に一致させる。
@@ -68,6 +72,11 @@ public class MasterDataNameResolverTests
         "{{SkillSingleKey}}": { "name": "{{SkillSingleValue}}" },
         "{{SkillPincerKey}}": { "name": "{{SkillPincerValue}}" }
       },
+      "epochs": {
+        "_note": "章名も平坦な ASCII キーで引く（enum 非依存）",
+        "{{EpochDawnKey}}":     { "name": "{{EpochDawnValue}}" },
+        "{{EpochTwilightKey}}": { "name": "{{EpochTwilightValue}}" }
+      },
       "ui": { "ignored": "should-not-be-loaded" }
     }
     """;
@@ -88,6 +97,24 @@ public class MasterDataNameResolverTests
         Assert.Equal(2, resolver.ProphecyKindNameCount);
         Assert.Equal(2, resolver.ProphecyKindIconCount);
         Assert.Equal(2, resolver.SkillNameCount);
+        Assert.Equal(2, resolver.EpochNameCount);
+    }
+
+    // ─── 章（Epoch）名（平坦な ASCII キーで引く・enum 非依存） ───────────────
+
+    [Theory]
+    [InlineData(EpochDawnKey, EpochDawnValue)]
+    [InlineData(EpochTwilightKey, EpochTwilightValue)]
+    public void ResolveEpochName_KnownKey_ReturnsDisplayString(string key, string expected)
+    {
+        Assert.Equal(expected, SampleResolver().ResolveEpochName(key));
+    }
+
+    [Fact]
+    public void ResolveEpochName_UnknownKey_FallsBackToRawKey()
+    {
+        // 未登録の章キーは生キー（ASCII）をそのまま返す（登録漏れを画面から判別可能に）。
+        Assert.Equal("epoch-decline", SampleResolver().ResolveEpochName("epoch-decline"));
     }
 
     // ─── 敵スキル名（平坦な ASCII キーで引く・enum 非依存） ──────────────────

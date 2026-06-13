@@ -1585,6 +1585,13 @@ public partial class ChronicleGlobal : Godot.Node
     public string ResolveSkillName(string skillNameKey)
         => _masterDataNameResolver?.ResolveSkillName(skillNameKey) ?? skillNameKey;
 
+    /// <summary>
+    /// 章（Epoch）の表示用日本語名を localization 経由で解決する。Autoload 未初期化や
+    /// 未登録キーのときは生キー（"epoch-*"）へフォールバックして画面を落とさない。
+    /// </summary>
+    public string ResolveEpochName(string epochNameKey)
+        => _masterDataNameResolver?.ResolveEpochName(epochNameKey) ?? epochNameKey;
+
     // ════════════════════════════════════════════════════════════════════════
     //  読み取り専用クエリヘルパー（UI 利便用）
     // ════════════════════════════════════════════════════════════════════════

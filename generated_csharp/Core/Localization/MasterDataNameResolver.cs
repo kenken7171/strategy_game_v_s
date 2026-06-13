@@ -52,6 +52,7 @@ public sealed class MasterDataNameResolver
     private const string ItemsSectionName         = "items";
     private const string ProphecyKindsSectionName = "prophecyKinds";
     private const string EnemySkillsSectionName   = "enemySkills";
+    private const string EpochsSectionName        = "epochs";
     private const string NameFieldName            = "name";
     private const string IconFieldName            = "icon";
 
@@ -67,6 +68,11 @@ public sealed class MasterDataNameResolver
     //  が払い出す平坦な ASCII キー（例 "enemy-skill-single-strike"）をそのままキーに引く。
     private readonly Dictionary<string, string> _skillNames;
 
+    // ─── 章（Epoch）名（100 年史の章キー → 表示テキスト） ─────────────────────
+    //  ChronicleTimelineConfig が払い出す平坦な ASCII キー（例 "epoch-twilight"）を
+    //  そのままキーに引く。章ボス前兆 UI（時間の矢）が章名を解決するのに使う。
+    private readonly Dictionary<string, string> _epochNames;
+
     /// <summary>
     /// 解決辞書を直接注入して構築する。テストや、JSON 以外の供給元から構築したい
     /// 場合に使う。null キー / 値は安全に無視する。敵スキル名（第 5 引数）は任意で、
@@ -77,7 +83,8 @@ public sealed class MasterDataNameResolver
         IReadOnlyDictionary<string, string> itemNames,
         IReadOnlyDictionary<string, string> prophecyKindNames,
         IReadOnlyDictionary<string, string> prophecyKindIcons,
-        IReadOnlyDictionary<string, string>? skillNames = null)
+        IReadOnlyDictionary<string, string>? skillNames = null,
+        IReadOnlyDictionary<string, string>? epochNames = null)
     {
         _jobNames          = Sanitize(jobNames);
         _itemNames         = Sanitize(itemNames);
@@ -86,6 +93,9 @@ public sealed class MasterDataNameResolver
         _skillNames        = skillNames is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : Sanitize(skillNames);
+        _epochNames        = epochNames is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : Sanitize(epochNames);
     }
 
     /// <summary>null/空キー・null 値を除いた Ordinal 辞書へ写し替える防御的コピー。</summary>
@@ -121,6 +131,9 @@ public sealed class MasterDataNameResolver
     /// <summary>登録済み敵スキル名エントリ数。</summary>
     public int SkillNameCount => _skillNames.Count;
 
+    /// <summary>登録済み章（Epoch）名エントリ数。</summary>
+    public int EpochNameCount => _epochNames.Count;
+
     // ─── 構築（localization JSON 文字列から） ─────────────────────────────
 
     /// <summary>
@@ -149,9 +162,10 @@ public sealed class MasterDataNameResolver
         var prophecyKindNames = ExtractField(root, ProphecyKindsSectionName, NameFieldName);
         var prophecyKindIcons = ExtractField(root, ProphecyKindsSectionName, IconFieldName);
         var skillNames        = ExtractField(root, EnemySkillsSectionName,   NameFieldName);
+        var epochNames        = ExtractField(root, EpochsSectionName,        NameFieldName);
 
         return new MasterDataNameResolver(
-            jobNames, itemNames, prophecyKindNames, prophecyKindIcons, skillNames);
+            jobNames, itemNames, prophecyKindNames, prophecyKindIcons, skillNames, epochNames);
     }
 
     /// <summary>
@@ -215,6 +229,13 @@ public sealed class MasterDataNameResolver
     /// 画面から判別できるようにするため）。
     /// </summary>
     public string ResolveSkillName(string skillNameKey) => Lookup(_skillNames, skillNameKey);
+
+    /// <summary>
+    /// 章（Epoch）の表示用日本語名を、ChronicleTimelineConfig の平坦な ASCII キー
+    /// （例 "epoch-twilight"）から解決する。未登録キー・null/空は生キーへフォールバック
+    /// （登録漏れを画面から判別できるようにするため）。
+    /// </summary>
+    public string ResolveEpochName(string epochNameKey) => Lookup(_epochNames, epochNameKey);
 
     /// <summary>
     /// 辞書引き。未登録キーは生キーをそのまま返す（フォールバック）。null/空は空文字へ。

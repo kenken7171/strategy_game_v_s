@@ -109,6 +109,15 @@ public partial class ProphecyTimelineOverlay : Godot.Control
     /// <summary>非対象（安全）行セルの色（沈めた灰青）。</summary>
     private static readonly Color SafeRowColor = new(0.16f, 0.18f, 0.24f);
 
+    /// <summary>章ボス接近前兆の警告色（緋色 ≒ Colors.Crimson。危急を告げる色価言語）。</summary>
+    private static readonly Color OmenWarningColor = new(0.86f, 0.08f, 0.24f);
+
+    /// <summary>章ボス前兆バナーの寸法（当該カードの上端へ重ねる横長の警告帯）。</summary>
+    private static readonly Vector2 OmenBannerSize = new(212.0f, 46.0f);
+
+    /// <summary>前兆バナーが灯る（赤フラッシュ）一過性演出の秒数。</summary>
+    private const double OmenFlashSeconds = 0.6;
+
     // ─── 外部 API（マウント側 = GameDirector が AddChild 前に設定する） ─────
 
     /// <summary>何ターン先まで読むか。AddChild 前に設定する（無状態の徹底）。</summary>
@@ -286,8 +295,9 @@ public partial class ProphecyTimelineOverlay : Godot.Control
         // 番兵: 過大値・非正値をクランプ（Forecast 側でも守られるが UI 側でも二重に倒す）。
         var turns = Math.Clamp(LookaheadTurns, 0, AttackIntentRoller.MaxForecastTurns);
 
-        // SoT からその場で手繰り寄せる（キャッシュしない・決定論）。
-        var band = _chronicleGlobal.ForecastEnemyIntents(turns);
+        // SoT からその場で手繰り寄せる（キャッシュしない・決定論）。現在年の章ボス接近前兆を
+        // 重ねた帯を引く（通常脅威は ForecastEnemyIntents と 1 ビット一致・前兆だけが上乗せ）。
+        var band = _chronicleGlobal.ForecastEnemyIntentsWithOmens(turns);
 
         if (band.Count == 0)
         {
@@ -308,7 +318,7 @@ public partial class ProphecyTimelineOverlay : Godot.Control
     /// 帯を水平方向に等間隔で並べる。各カードは画面幅を人数 +1 で割った位置に中央を置き、Y は
     /// 盤面中央に揃える。配置と同時にカード中心を _cardCenters へ控え、後段の「時間の矢」端点に使う。
     /// </summary>
-    private void LayoutCards(IReadOnlyList<AttackIntent> band)
+    private void LayoutCards(IReadOnlyList<ForecastEntry> band)
     {
         if (_canvas is null) return;
 
@@ -326,8 +336,17 @@ public partial class ProphecyTimelineOverlay : Godot.Control
             var center = new Vector2(centerX, centerY);
             _cardCenters[i] = center;
 
+            var entry = band[i];
+
             float alpha = Mathf.Max(MinConfidenceAlpha, 1.0f - i * ConfidenceFadePerTurn);
-            SpawnCard(i, band[i], center, alpha);
+            SpawnCard(i, entry.Threat, center, alpha);
+
+            // 章ボス接近前兆が重なっているターンだけ、当該カードの上端へ赤い警告帯を重ねる。
+            // switch を介さない null パターンマッチ（is { }）ゆえ既存の網羅 switch（CS8509）を壊さない。
+            if (entry.BossOmen is { } omen)
+            {
+                SpawnBossOmen(i, omen, center);
+            }
         }
 
         // 全カードの中心が _cardCenters に出揃った後で、隣接ターン間へ「時間の矢」を張る。
@@ -483,6 +502,71 @@ public partial class ProphecyTimelineOverlay : Godot.Control
     }
 
     /// <summary>
+    /// 章ボス接近前兆（<see cref="EpochBossOmen"/>）を、当該ターンカードの上端へ重ねる赤い警告帯として
+    /// 描く。「??ターン後にボス接近中」を localization（epochs / enemySkills キー）から解決し、危急を
+    /// 告げる緋色（<see cref="OmenWarningColor"/>）で不穏に物質化する。出現時に一過性の赤フラッシュを灯す。
+    ///
+    /// ★ リークフリー: 生成した警告帯（root）は既存台帳 _timelineNodes に登録し、再描画冒頭・退場時の
+    ///   ClearTimeline で一括 QueueFree される（サブツリーは芋づる解放）。JuiceDirector.Flash の Tween は
+    ///   当の root へバインドされ、root の解放で自動失効する（新たなビュー状態を一切増設しない）。
+    /// ★ 設計憲法①: 章名は ResolveEpoch（epochs キー）、前兆見出しは ResolveSkill（enemySkills の
+    ///   "epoch-boss-omen-approach"）で localization 解決し、データ名を直書きしない。testid は機械生成 ASCII。
+    /// </summary>
+    private void SpawnBossOmen(int turnIndex, EpochBossOmen omen, Vector2 center)
+    {
+        if (_canvas is null) return;
+
+        int turn = turnIndex + 1; // 表示は 1 始まり（T+1, T+2, ...）
+        var epochSlug = EpochSlug(omen.EpochNameKey);
+
+        var root = new Panel
+        {
+            Position          = new Vector2(
+                center.X - OmenBannerSize.X * 0.5f,
+                center.Y - CardSize.Y * 0.5f - OmenBannerSize.Y - 6.0f),
+            Size              = OmenBannerSize,
+            CustomMinimumSize = OmenBannerSize,
+            MouseFilter       = MouseFilterEnum.Ignore,
+        };
+        root.SetMeta(TestIdMetaKey, $"prophecy-omen-root-{turn}");
+
+        var column = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        column.AddThemeConstantOverride("separation", 0);
+        column.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        root.AddChild(column);
+
+        // 前兆見出し（enemySkills の "epoch-boss-omen-approach" → 「章ボス接近」）。
+        var warning = new Label
+        {
+            Text                = $"⚠ {ResolveSkill(omen.OmenSkillNameKey)}",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter         = MouseFilterEnum.Ignore,
+        };
+        warning.AddThemeFontSizeOverride("font_size", 14);
+        warning.AddThemeColorOverride("font_color", OmenWarningColor);
+        warning.SetMeta(TestIdMetaKey, $"prophecy-omen-warning-{turn}");
+        column.AddChild(warning);
+
+        // 残りターン + 章名（epochs キー → 「終焉」等）。「??ターン後にボス接近中」の体感。
+        var text = new Label
+        {
+            Text                = OmenCountdownText(ResolveEpoch(omen.EpochNameKey), omen.TurnsUntilArrival),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter         = MouseFilterEnum.Ignore,
+        };
+        text.AddThemeFontSizeOverride("font_size", 12);
+        text.AddThemeColorOverride("font_color", OmenWarningColor);
+        text.SetMeta(TestIdMetaKey, $"prophecy-omen-text-{epochSlug}-{turn}");
+        column.AddChild(text);
+
+        _canvas.AddChild(root);
+        _timelineNodes.Add(root);   // 台帳へ登録（更地化で一括解放）
+
+        // 出現時に緋色の一過性フラッシュで不穏に灯す。Tween は root 自身へバインドされ解放で自動失効。
+        JuiceDirector.Flash(root, OmenWarningColor, OmenFlashSeconds);
+    }
+
+    /// <summary>
     /// 描くべき予言が無い場合の空表示（中央のクローム文言）を盤面へ置く。台帳に積んで次の
     /// 更地化で消えるようにする。
     /// </summary>
@@ -509,6 +593,32 @@ public partial class ProphecyTimelineOverlay : Godot.Control
 
     private string ResolveSkill(string skillNameKey)
         => _chronicleGlobal?.ResolveSkillName(skillNameKey) ?? skillNameKey;
+
+    /// <summary>章（Epoch）名を localization 経由で解決する。Autoload 不在時は生キーへフォールバック。</summary>
+    private string ResolveEpoch(string epochNameKey)
+        => _chronicleGlobal?.ResolveEpochName(epochNameKey) ?? epochNameKey;
+
+    /// <summary>
+    /// 章キー（"epoch-twilight"）から testid 用 ASCII スラッグ（"twilight"）を作る。先頭の "epoch-"
+    /// を剥がし、空になる異常時は "boss" へ穏当に倒す（testid が壊れないための番兵）。
+    /// </summary>
+    private static string EpochSlug(string epochNameKey)
+    {
+        const string prefix = "epoch-";
+        var slug = epochNameKey.StartsWith(prefix, StringComparison.Ordinal)
+            ? epochNameKey[prefix.Length..]
+            : epochNameKey;
+        return string.IsNullOrEmpty(slug) ? "boss" : slug;
+    }
+
+    /// <summary>
+    /// 章ボス接近の残りターン文言（クローム日本語。データ名ではない警告語）。残り 0 は「今ここに到来」、
+    /// それ以外は「??ターン後に接近」を、解決済みの章名とともに告げる。
+    /// </summary>
+    private static string OmenCountdownText(string epochName, int turnsUntilArrival)
+        => turnsUntilArrival <= 0
+            ? $"{epochName}の章ボス、今ここに到来"
+            : $"{epochName}の章ボス接近まで残り {turnsUntilArrival} ターン";
 
     /// <summary>攻撃パターン種別 → 表示ラベル（クローム日本語。データ名ではない攻撃様式の説明語）。</summary>
     private static string KindLabel(AttackPatternKind kind) => kind switch
