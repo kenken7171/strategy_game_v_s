@@ -83,6 +83,63 @@ public sealed record EquipmentLoss
     public required ItemId ItemId { get; init; }
 }
 
+// ─── 婚姻ポイント算出の内訳（式の見える化・純粋な派生射影） ──────────────────
+
+/// <summary>
+/// <see cref="BattleSpoils.CalculateEarnedMarriagePoints"/> の算出内訳を、UI が
+/// 「なぜこの点数になったか」を一目で説明できるよう展開した完全不変の派生射影。
+///
+/// ★ 自前の状態（SoT）を 1 ミリも増やさない:
+///   本構造体は <see cref="BattleSpoils"/> の既存フィールドからその場で算出される
+///   一過性の値オブジェクトであり、どこにも保持されない。合計（<see cref="Total"/>）は
+///   <see cref="BattleSpoils.CalculateEarnedMarriagePoints"/> と完全に一致する
+///   （後者は本射影の Total を返すだけ＝式の単一の真実）。
+///
+/// ★ 表示テキストを持たない（設計憲法 ①）:
+///   見出し・単位等の文言は UI 層が持ち、本構造体は数値だけを運ぶ。
+/// </summary>
+public readonly record struct MarriagePointsBreakdown
+{
+    /// <summary>勝利だったか（false のときポイントは全要素 0）。</summary>
+    public required bool IsVictory { get; init; }
+
+    /// <summary>勝利基礎報酬（勝利時のみ非 0）。</summary>
+    public required int VictoryBase { get; init; }
+
+    /// <summary>昇級した件数。</summary>
+    public required int LevelGainCount { get; init; }
+
+    /// <summary>昇級 1 件あたりの加点レート。</summary>
+    public required int LevelGainRate { get; init; }
+
+    /// <summary>昇級ボーナスの小計（件数 × レート）。</summary>
+    public int LevelGainBonus => LevelGainCount * LevelGainRate;
+
+    /// <summary>装備進化した件数。</summary>
+    public required int EvolutionCount { get; init; }
+
+    /// <summary>装備進化 1 件あたりの加点レート。</summary>
+    public required int EvolutionRate { get; init; }
+
+    /// <summary>装備進化ボーナスの小計（件数 × レート）。</summary>
+    public int EvolutionBonus => EvolutionCount * EvolutionRate;
+
+    /// <summary>完全ロストした件数。</summary>
+    public required int LossCount { get; init; }
+
+    /// <summary>完全ロスト 1 件あたりの減点レート。</summary>
+    public required int LossRate { get; init; }
+
+    /// <summary>完全ロスト罰の小計（件数 × レート）。減算される正の値。</summary>
+    public int LossPenalty => LossCount * LossRate;
+
+    /// <summary>加点の総和（基礎 + 昇級 + 進化）。罰を引く前の粗利。</summary>
+    public int Gross => VictoryBase + LevelGainBonus + EvolutionBonus;
+
+    /// <summary>最終獲得ポイント（0 で底打ち）。CalculateEarnedMarriagePoints と一致。</summary>
+    public int Total => Math.Max(0, Gross - LossPenalty);
+}
+
 // ─── 戦果決算（開戦時 vs 終了時の Guid 突合の集約） ──────────────────────────
 
 /// <summary>
@@ -162,38 +219,60 @@ public sealed record BattleSpoils
     private const int PermanentLossPenalty = 3;
 
     /// <summary>
-    /// この戦果から獲得すべき婚姻ポイントを純粋に算出する。与えられた自前の戦果
-    /// （決着状態・昇級・完全ロスト・装備進化）から決定論的にポイント数を返す純粋写像で、
-    /// 内部状態を一切書き換えない。
+    /// 婚姻ポイント算出の内訳を、自前の戦果フィールドからその場で展開した純粋な派生射影
+    /// として返す。式の単一の真実（SoT）はここに集約され、<see cref="MarriagePointsBreakdown.Total"/>
+    /// が最終獲得ポイントになる。内部状態は一切書き換えない（完全副作用ゼロ）。
     ///
-    /// 算出式（勝利時のみ。敗北・未決着は 0）:
+    /// 算出式（勝利時のみ。敗北・未決着は全要素 0）:
     ///   gross   = VictoryBaseReward
     ///           + UnitLevelGains 件数      × LevelGainBounty
     ///           + EquipmentEvolutions 件数 × EquipmentEvolutionBounty
     ///   penalty = PermanentlyLostUnitIds 件数 × PermanentLossPenalty
-    ///   結果     = Math.Max(0, gross - penalty)
+    ///   Total    = Math.Max(0, gross - penalty)
     ///
-    /// 最終値は必ず 0 で底打ちされ、負のポイントが経済へ流れ込むことはない。
+    /// 勝利以外（敗北・未決着・空決算）は IsVictory=false で全要素 0 を返し、
+    /// ヌル安全の番兵もここで吸収する（Total は必ず 0）。
     /// </summary>
-    /// <returns>獲得婚姻ポイント（常に 0 以上）。</returns>
-    public int CalculateEarnedMarriagePoints()
+    /// <returns>算出内訳（合計は常に 0 以上）。</returns>
+    public MarriagePointsBreakdown DescribeMarriagePoints()
     {
-        // 勝利以外（敗北・未決着・空決算）は褒賞ゼロ。ヌル安全の番兵もここで吸収する。
+        // 勝利以外は全要素 0（レートは「式の見える化」のため参照値として運ぶ）。
         if (Outcome != BattleOutcome.BattalionVictory)
         {
-            return 0;
+            return new MarriagePointsBreakdown
+            {
+                IsVictory      = false,
+                VictoryBase    = 0,
+                LevelGainCount = 0,
+                LevelGainRate  = LevelGainBounty,
+                EvolutionCount = 0,
+                EvolutionRate  = EquipmentEvolutionBounty,
+                LossCount      = 0,
+                LossRate       = PermanentLossPenalty,
+            };
         }
 
-        var gross =
-            VictoryBaseReward
-            + (UnitLevelGains.Length * LevelGainBounty)
-            + (EquipmentEvolutions.Length * EquipmentEvolutionBounty);
-
-        var penalty = PermanentlyLostUnitIds.Length * PermanentLossPenalty;
-
-        // 境界ガード: 大量の損失でも負値へ沈ませず 0 で底打ちする。
-        return Math.Max(0, gross - penalty);
+        return new MarriagePointsBreakdown
+        {
+            IsVictory      = true,
+            VictoryBase    = VictoryBaseReward,
+            LevelGainCount = UnitLevelGains.Length,
+            LevelGainRate  = LevelGainBounty,
+            EvolutionCount = EquipmentEvolutions.Length,
+            EvolutionRate  = EquipmentEvolutionBounty,
+            LossCount      = PermanentlyLostUnitIds.Length,
+            LossRate       = PermanentLossPenalty,
+        };
     }
+
+    /// <summary>
+    /// この戦果から獲得すべき婚姻ポイントを純粋に算出する。<see cref="DescribeMarriagePoints"/>
+    /// の合計（<see cref="MarriagePointsBreakdown.Total"/>）をそのまま返す薄い委譲で、
+    /// 式の重複を排し単一の真実を保つ。最終値は必ず 0 で底打ちされ、負のポイントが
+    /// 経済へ流れ込むことはない。
+    /// </summary>
+    /// <returns>獲得婚姻ポイント（常に 0 以上）。</returns>
+    public int CalculateEarnedMarriagePoints() => DescribeMarriagePoints().Total;
 
     /// <summary>
     /// 開戦時と終了時の参加者静止画（いずれも Id → Unit）を Guid で突き合わせ、

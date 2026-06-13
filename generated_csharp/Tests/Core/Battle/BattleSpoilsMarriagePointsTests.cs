@@ -157,6 +157,88 @@ public class BattleSpoilsMarriagePointsTests
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  3.5 算出内訳（式の見える化）— DescribeMarriagePoints が UI へ渡す派生射影
+    // ════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void DescribeMarriagePoints_Victory_ExposesEveryComponent()
+    {
+        // 勝利・昇級2・進化1・ロスト1。内訳の各小計とレートが式どおり展開される。
+        var spoils    = MakeSpoils(BattleOutcome.BattalionVictory, levelGains: 2, evolutions: 1, losses: 1);
+        var breakdown = spoils.DescribeMarriagePoints();
+
+        Assert.True(breakdown.IsVictory);
+        Assert.Equal(5, breakdown.VictoryBase);
+
+        Assert.Equal(2, breakdown.LevelGainCount);
+        Assert.Equal(2, breakdown.LevelGainRate);
+        Assert.Equal(4, breakdown.LevelGainBonus);   // 2 * 2
+
+        Assert.Equal(1, breakdown.EvolutionCount);
+        Assert.Equal(1, breakdown.EvolutionRate);
+        Assert.Equal(1, breakdown.EvolutionBonus);   // 1 * 1
+
+        Assert.Equal(1, breakdown.LossCount);
+        Assert.Equal(3, breakdown.LossRate);
+        Assert.Equal(3, breakdown.LossPenalty);      // 1 * 3
+
+        Assert.Equal(10, breakdown.Gross);           // 5 + 4 + 1
+        Assert.Equal(7, breakdown.Total);            // 10 - 3
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(3, 0, 0)]
+    [InlineData(0, 2, 0)]
+    [InlineData(0, 0, 1)]
+    [InlineData(2, 1, 1)]
+    [InlineData(1, 1, 2)]
+    [InlineData(0, 0, 4)]   // 底打ちケース（Gross < Penalty）
+    [InlineData(0, 0, 99)]  // 破滅的損失でも Total は CalculateEarnedMarriagePoints と一致
+    public void DescribeMarriagePoints_Total_AlwaysEquals_CalculateEarnedMarriagePoints(
+        int levelGains, int evolutions, int losses)
+    {
+        var spoils = MakeSpoils(BattleOutcome.BattalionVictory, levelGains, evolutions, losses);
+
+        // 内訳の Total と純粋写像の戻り値は常に 1 ビットも違わない（式の単一の真実）。
+        Assert.Equal(spoils.CalculateEarnedMarriagePoints(), spoils.DescribeMarriagePoints().Total);
+    }
+
+    [Theory]
+    [InlineData(BattleOutcome.BattalionDefeat)]
+    [InlineData(BattleOutcome.Ongoing)]
+    public void DescribeMarriagePoints_NonVictory_AllComponentsZero_ButRatesPreserved(
+        BattleOutcome outcome)
+    {
+        // 勝利でなければ件数・基礎・小計はすべて 0（Total も 0）。
+        var breakdown = MakeSpoils(outcome, levelGains: 3, evolutions: 2, losses: 1).DescribeMarriagePoints();
+
+        Assert.False(breakdown.IsVictory);
+        Assert.Equal(0, breakdown.VictoryBase);
+        Assert.Equal(0, breakdown.LevelGainCount);
+        Assert.Equal(0, breakdown.EvolutionCount);
+        Assert.Equal(0, breakdown.LossCount);
+        Assert.Equal(0, breakdown.Gross);
+        Assert.Equal(0, breakdown.Total);
+
+        // ただしレートは「式の見える化」のため参照値として保たれる（UI が ×n を出せる）。
+        Assert.Equal(2, breakdown.LevelGainRate);
+        Assert.Equal(1, breakdown.EvolutionRate);
+        Assert.Equal(3, breakdown.LossRate);
+    }
+
+    [Fact]
+    public void DescribeMarriagePoints_FlooredAtZero_WhenPenaltyExceedsGross()
+    {
+        // 勝利・損失4。Gross 5 < Penalty 12 でも Total は 0 で底打ち（負へ沈まない）。
+        var breakdown = MakeSpoils(BattleOutcome.BattalionVictory, 0, 0, 4).DescribeMarriagePoints();
+
+        Assert.Equal(5, breakdown.Gross);
+        Assert.Equal(12, breakdown.LossPenalty);
+        Assert.Equal(0, breakdown.Total);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  4. 資源ループの合成 — 戦果 → ポイント → 経済 SoT の不変合算
     //     （ApplyBattleSpoils が内部で行う純粋合成を Core 層だけで等価再現）
     // ════════════════════════════════════════════════════════════════════════

@@ -67,6 +67,9 @@ public partial class BattleSpoilsScreen : Godot.Control
     /// <summary>昇級・装備進化という前向きな戦果の強調色（緑）。</summary>
     private static readonly Color GainHighlightColor = new(0.36f, 0.80f, 0.42f);
 
+    /// <summary>婚姻ポイント獲得の「コインがきらめく」一瞬のフラッシュ色（金）。</summary>
+    private static readonly Color CoinFlashColor = new(1.0f, 0.86f, 0.32f);
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -131,6 +134,9 @@ public partial class BattleSpoilsScreen : Godot.Control
         var outcomeLabel = new Label { Text = DescribeOutcome(spoils.Outcome) };
         outcomeLabel.SetMeta(TestIdMetaKey, "battle-spoils-outcome");
         outer.AddChild(outcomeLabel);
+
+        // ── 世代決算ダッシュボード（婚姻ポイント収支パネル・式の見える化） ──
+        RenderEconomyPanel(outer, spoils);
 
         // ── スクロール可能な本体（戦果が多くても収まる） ───────────
         var scroll = new ScrollContainer { CustomMinimumSize = BodyMinimumSize };
@@ -234,6 +240,157 @@ public partial class BattleSpoilsScreen : Godot.Control
         section.AddChild(new Label { Text = headerText });
         body.AddChild(section);
         return section;
+    }
+
+    // ─── 世代決算ダッシュボード（婚姻ポイント収支パネル・式の見える化） ───────
+    //
+    //  自前の状態を 1 ミリも持たないパッシブビュー。BattleSpoils.DescribeMarriagePoints()
+    //  という純粋な派生射影（Core の SoT から「その場で」展開される一過性の値）を読むだけで、
+    //  「なぜこの点数になったか」の内訳（基礎値・昇級ボーナス・進化ボーナス・ロスト罰・合計）を
+    //  更地描画する。経済 SoT（CurrentEconomy）はこの画面の表示時点ではまだ加算されていない
+    //  （加算は本画面の Confirmed → BattleUI.AdvancePhase → ApplyBattleSpoils で起きる）ため、
+    //  合計値は CalculateEarnedMarriagePoints の「予測（projected）」として提示し、残高行も
+    //  「獲得後（予測）」として現残高 + 予測獲得を見せる。
+
+    /// <summary>
+    /// 婚姻ポイント収支パネルを構築する。勝利時は内訳の全行を、敗北・未決着時は
+    /// 「獲得なし」の注記と合計 0 を描く。最後に勝利かつ獲得 &gt; 0 のときだけ
+    /// JuiceDirector で「勝利の脳汁」（合計値ロールアップ + コイン色フラッシュ）を点火する。
+    /// </summary>
+    private void RenderEconomyPanel(VBoxContainer outer, BattleSpoils spoils)
+    {
+        var breakdown = spoils.DescribeMarriagePoints();
+
+        var panel = new PanelContainer();
+        panel.SetMeta(TestIdMetaKey, "spoils-economy-panel");
+        outer.AddChild(panel);
+
+        var root = new VBoxContainer();
+        root.AddThemeConstantOverride("separation", 6);
+        root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        root.SetMeta(TestIdMetaKey, "spoils-economy-root");
+        panel.AddChild(root);
+
+        var header = new Label { Text = "💍 婚姻ポイント決算（収支明細）" };
+        header.AddThemeFontSizeOverride("font_size", 18);
+        header.SetMeta(TestIdMetaKey, "spoils-economy-title");
+        root.AddChild(header);
+
+        // ── 勝利以外: 獲得なしを明記して合計 0 だけを機械可読に出す ───────────
+        if (!breakdown.IsVictory)
+        {
+            var note = new Label { Text = "勝利に至らなかったため、婚姻ポイントの獲得はありません。" };
+            note.AddThemeColorOverride("font_color", DeathHighlightColor);
+            note.SetMeta(TestIdMetaKey, "spoils-economy-novictory");
+            root.AddChild(note);
+
+            AppendEconomyLine(
+                root, "獲得婚姻ポイント 合計", $"+{breakdown.Total} pt",
+                "spoils-economy-total-line", "spoils-economy-total-val", GainHighlightColor);
+            return;
+        }
+
+        // ── 加点（基礎値・昇級・進化）と減点（ロスト）を式どおりに展開 ─────────
+        AppendEconomyLine(
+            root, "基礎値（勝ち切った報酬）", $"+{breakdown.VictoryBase}",
+            "spoils-economy-base-line", "spoils-economy-base-val", GainHighlightColor);
+
+        AppendEconomyLine(
+            root, $"昇級ボーナス  {breakdown.LevelGainCount} 名 × {breakdown.LevelGainRate}",
+            $"+{breakdown.LevelGainBonus}",
+            "spoils-economy-bonus-line", "spoils-economy-bonus-val", GainHighlightColor);
+
+        AppendEconomyLine(
+            root, $"装備進化ボーナス  {breakdown.EvolutionCount} 件 × {breakdown.EvolutionRate}",
+            $"+{breakdown.EvolutionBonus}",
+            "spoils-economy-evolution-line", "spoils-economy-evolution-val", GainHighlightColor);
+
+        AppendEconomyLine(
+            root, $"完全ロスト罰  {breakdown.LossCount} 名 × {breakdown.LossRate}",
+            $"-{breakdown.LossPenalty}",
+            "spoils-economy-penalty-line", "spoils-economy-penalty-val", DeathHighlightColor);
+
+        var separator = new HSeparator();
+        separator.SetMeta(TestIdMetaKey, "spoils-economy-separator");
+        root.AddChild(separator);
+
+        // ── 合計（脳汁ロールアップの対象）─────────────────────────────────────
+        var totalValue = AppendEconomyLine(
+            root, "獲得婚姻ポイント 合計", $"+{breakdown.Total} pt",
+            "spoils-economy-total-line", "spoils-economy-total-val", GainHighlightColor);
+        totalValue.AddThemeFontSizeOverride("font_size", 20);
+
+        // ── 残高の射影（現残高 → 獲得後・予測）。SoT はまだ加算前なので予測値を見せる ──
+        var economy = _chronicleGlobal?.CurrentEconomy;
+        if (economy is not null)
+        {
+            var current   = economy.CurrentBalance;
+            var projected = current + breakdown.Total;
+            AppendEconomyLine(
+                root, "婚姻ポイント残高（獲得後・予測）", $"{current} → {projected}",
+                "spoils-economy-balance-line", "spoils-economy-balance-val", GainHighlightColor);
+        }
+
+        // ── 演出点火: 勝利かつ獲得 > 0 のときだけ「勝利の脳汁」を脈動させる ─────
+        IgniteEconomyJuice(panel, totalValue, breakdown.Total);
+    }
+
+    /// <summary>
+    /// 「説明（左・伸長）／値（右）」の 1 行を収支パネルへ足し、機械可読のため行・値の
+    /// 双方に ASCII testid を付ける。値ラベルを返すのは、合計行をロールアップ演出の対象へ
+    /// 渡すため（呼び出し側が必要に応じて捕捉する）。
+    /// </summary>
+    private Label AppendEconomyLine(
+        VBoxContainer root, string description, string valueText,
+        string lineTestId, string valueTestId, Color valueColor)
+    {
+        var line = new HBoxContainer();
+        line.AddThemeConstantOverride("separation", 12);
+        line.SetMeta(TestIdMetaKey, lineTestId);
+
+        var desc = new Label { Text = description };
+        desc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        line.AddChild(desc);
+
+        var value = new Label
+        {
+            Text                = valueText,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        value.AddThemeColorOverride("font_color", valueColor);
+        value.SetMeta(TestIdMetaKey, valueTestId);
+        line.AddChild(value);
+
+        root.AddChild(line);
+        return value;
+    }
+
+    /// <summary>合計値のロールアップ表示に使う整形デリゲート（呼び出し側が文言を所有）。</summary>
+    private static string FormatTotalPoints(int value) => $"+{value} pt";
+
+    /// <summary>
+    /// 「勝利の脳汁」を点火する。合計値ラベルを 0 → <paramref name="total"/> へカウントアップし、
+    /// 収支パネル全体をコイン色へ一瞬フラッシュさせる（被弾シェイク/フラッシュと対をなす
+    /// 最高峰のポジティブ・フィードバック）。
+    ///
+    /// ★ リークフリー: いずれの Tween も対象ノード（合計ラベル / 収支パネル）自身へ
+    ///   バインドされる。本画面の QueueFree（OnClosePressed / _ExitTree）でこれらの子が
+    ///   cascade 解放されると Tween は Godot 側で自動失効し、CountUp のコールバックは
+    ///   IsInstanceValid ガードにより安全に no-op となる（Line2D で実証済みの規律）。
+    ///   自前の状態（SoT）・台帳フィールドは一切増設しない。
+    /// </summary>
+    private void IgniteEconomyJuice(PanelContainer panel, Label totalValue, int total)
+    {
+        if (total <= 0)
+        {
+            return; // 獲得なし（敗北・損失過多）なら脳汁は焚かず静かに据え置く。
+        }
+
+        // コインの燐光: パネル全体を金色へ一瞬染め、白（恒等）へワンショットで戻す。
+        JuiceDirector.Flash(panel, CoinFlashColor, 0.55);
+
+        // 高揚感の本体: 合計値を 0 から total へ整数ロールアップ（わずかな溜めの後に駆け上がる）。
+        JuiceDirector.CountUp(totalValue, 0, total, FormatTotalPoints, 0.85, 0.10);
     }
 
     // ─── アクションハンドラ ───────────────────────────────────────────────

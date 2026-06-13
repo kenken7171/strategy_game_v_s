@@ -213,6 +213,60 @@ public static class JuiceDirector
         return tween;
     }
 
+    // ─── 数値ロールアップ（Label のテキストを from→to へ整数カウントアップ） ──────
+
+    /// <summary>
+    /// <see cref="Label"/> のテキストを <paramref name="fromValue"/> から
+    /// <paramref name="toValue"/> へ整数で滑らかにカウントアップさせ、獲得点数が
+    /// 勢いよく積み上がる「高揚感」を物質化する。各フレームの数値は
+    /// <paramref name="format"/>（呼び出し側が所有する整形デリゲート）でテキスト化される
+    /// ため、本クラス自身は表示文言を一切内包しない（設計憲法 ①）。
+    ///
+    /// ★ リーク・ゾンビ化の構造的根絶: Tween は対象 Label 自身へバインドされる。Label が
+    ///   QueueFree（更地描画 / _ExitTree）されると Tween は Godot 側で自動失効し、
+    ///   TweenMethod のコールバックは <see cref="GodotObject.IsInstanceValid"/> ガードに
+    ///   より安全に no-op となる（null 参照・二重発火なし）。
+    /// ★ 補間は float で進み、各ステップで最近傍整数へ丸めて表示する。終端では toValue に
+    ///   一致する（整数域の小さな値では丸め誤差は発生しない）。
+    /// </summary>
+    public static Tween? CountUp(
+        Label? label,
+        int fromValue,
+        int toValue,
+        System.Func<int, string>? format,
+        double seconds,
+        double delaySeconds = 0.0)
+    {
+        if (label is null || !GodotObject.IsInstanceValid(label) || format is null)
+        {
+            return null;
+        }
+
+        // null 確定済みの参照を非 nullable のローカルへ束ね、クロージャ内のフロー解析を安全化する。
+        Label target = label;
+        System.Func<int, string> render = format;
+
+        // 開始時は始点の整形済みテキストを即時反映（補間開始前のチラつきを防ぐ）。
+        target.Text = render(fromValue);
+
+        var tween = target.CreateTween();
+        tween.TweenMethod(
+                 Callable.From<float>(current =>
+                 {
+                     if (GodotObject.IsInstanceValid(target))
+                     {
+                         target.Text = render((int)System.MathF.Round(current));
+                     }
+                 }),
+                 (float)fromValue,
+                 (float)toValue,
+                 seconds)
+             .SetDelay(delaySeconds)
+             .SetTrans(Tween.TransitionType.Cubic)
+             .SetEase(Tween.EaseType.Out);
+        return tween;
+    }
+
     // ─── 線の伸長（Line2D の終点を始点から目標へ補間。親→子コネクタの開通演出） ──
 
     /// <summary>
