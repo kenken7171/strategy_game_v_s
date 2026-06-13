@@ -113,6 +113,57 @@ public static class BattleManager
     /// </summary>
     public const double Lv5GreedItemDestructionProbability = 1.0;
 
+    // ─── 装備由来のステータス補正（純粋・SoT 非汚染） ──────────────────────
+    //  眠っていた Equipment 資産（CurrentAttackPower / CurrentSquadDefense /
+    //  CurrentInitiativeBuff）を、実戦の ATK / DEF / SPD へ整数 floor で合流させる
+    //  純粋写像。職ステータスの SoT（JobMaster）にも Equipment レコードの SoT にも
+    //  一切触れず、読み取り専用で「血を通わせる」だけに徹する。
+    //
+    //  ★ マッピング（既存 Equipment SoT を流用し、新定数を増設しない）:
+    //      ATK 補正 = floor(MainEquipment.CurrentAttackPower)    … 攻撃力（全 5 種が保有）
+    //      DEF 補正 = floor(MainEquipment.CurrentSquadDefense)   … 分隊守護力（聖剣系が保有）
+    //      SPD 補正 = floor(MainEquipment.CurrentInitiativeBuff) … 突撃号令＝行動初動（破滅杖が保有）
+    //    未装備（MainEquipment == null）は全補正 0（ガード番兵）。
+
+    /// <summary>
+    /// 装着装備に由来する攻撃力（ATK）補正を返す純粋関数。未装備なら 0。
+    /// 既存 Equipment SoT の CurrentAttackPower を整数 floor して合流させる。
+    /// </summary>
+    /// <param name="unit">補正を引くユニット（null 不可）。</param>
+    public static int EquipmentAttackBonus(Unit unit)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        return unit.MainEquipment is { } equipment
+            ? (int)Math.Floor(equipment.CurrentAttackPower)
+            : 0;
+    }
+
+    /// <summary>
+    /// 装着装備に由来する分隊守護力（DEF）補正を返す純粋関数。未装備なら 0。
+    /// 既存 Equipment SoT の CurrentSquadDefense を整数 floor して合流させる。
+    /// </summary>
+    /// <param name="unit">補正を引くユニット（null 不可）。</param>
+    public static int EquipmentDefenseBonus(Unit unit)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        return unit.MainEquipment is { } equipment
+            ? (int)Math.Floor(equipment.CurrentSquadDefense)
+            : 0;
+    }
+
+    /// <summary>
+    /// 装着装備に由来する速度（SPD）補正を返す純粋関数。未装備なら 0。
+    /// 既存 Equipment SoT の CurrentInitiativeBuff（突撃号令＝行動初動）を整数 floor して合流させる。
+    /// </summary>
+    /// <param name="unit">補正を引くユニット（null 不可）。</param>
+    public static int EquipmentSpeedBonus(Unit unit)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        return unit.MainEquipment is { } equipment
+            ? (int)Math.Floor(equipment.CurrentInitiativeBuff)
+            : 0;
+    }
+
     // ─── 防衛力計算 (Phase C — Damage Scope) ───────────────────────────────
 
     /// <summary>
@@ -147,6 +198,11 @@ public static class BattleManager
         foreach (var unit in squadUnits)
         {
             if (!unit.IsAlive) continue;
+
+            // 装備由来の分隊守護は職パッシブ非依存（誰が着けても効く）。先に合流させる。
+            total += EquipmentDefenseBonus(unit);
+
+            // 職パッシブ由来の分隊守護（鉄壁系）は SquadDefense パッシブ保有者のみ加算。
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.SquadDefense)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
@@ -394,7 +450,7 @@ public static class BattleManager
 
         var def = JobMaster.Find(unit.Job);
         var baseSpeed = def?.Stats.Speed ?? 0;
-        return baseSpeed + CalculateBroadcastSpeedBonus(unit, battalion);
+        return baseSpeed + CalculateBroadcastSpeedBonus(unit, battalion) + EquipmentSpeedBonus(unit);
     }
 
     /// <summary>
@@ -477,8 +533,9 @@ public static class BattleManager
 
         var rowAttack = row == SquadRow.Front ? def.Stats.FrontAttack : def.Stats.RearAttack;
         var attackBonus = CalculateBroadcastAttackBonus(unit, battalion);
+        var equipmentAttack = EquipmentAttackBonus(unit); // 装備由来 ATK を素手攻撃へ合流。
         var repetitions = ResolveAttackRepetitions(unit, order);
-        return (rowAttack + attackBonus) * repetitions;
+        return (rowAttack + attackBonus + equipmentAttack) * repetitions;
     }
 
     // ─── ターン終了回復（TurnEndSquadHeal パッシブ — Turn End Scope） ───────

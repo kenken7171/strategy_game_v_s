@@ -203,6 +203,20 @@ public sealed record Unit
     /// <summary>装備を所持しているか（MainEquipment != null）。</summary>
     public bool HasEquipment => MainEquipment is not null;
 
+    /// <summary>
+    /// 現在装着している装備の種別（<see cref="ItemId"/>）を読み取り専用で射影する派生プロパティ。
+    /// 装備なし（<see cref="MainEquipment"/> == null）の場合は null を返す。
+    ///
+    /// ★ 単一 SoT の堅持（設計憲法③）:
+    ///   装備の正本はあくまで完全不変な <see cref="MainEquipment"/>（個体 Guid・レベル・Affix まで
+    ///   保持する豊かなレコード）であり、本プロパティはそこから ItemId だけを引き出す純粋な射影に
+    ///   過ぎない。ItemId を別フィールドとして二重に持たせる（＝SoT 分裂）ことはしない。また
+    ///   「装備なし」は ItemId enum に番兵 None を増設するのではなく nullable（ItemId?）の null で
+    ///   表現する。これにより BattleSpoils / ShopService / SaveSerializer 等の網羅 switch
+    ///   （CS8509/CS8524）を 1 つも破壊せず、5 大マスター enum の純度を保つ。
+    /// </summary>
+    public ItemId? EquippedItemId => MainEquipment?.ItemId;
+
     /// <summary>血統リンク（父母）を持つか。false の場合は系譜の根（初代）。</summary>
     public bool HasParentage => Parentage is not null;
 

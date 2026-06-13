@@ -806,6 +806,100 @@ public partial class ChronicleGlobal : Godot.Node
         return result;
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    //  編成: 装備の直接脱着（無償・ポイント経済を消費しない）
+    // ────────────────────────────────────────────────────────────────────────
+    //  設計憲法③「単一 SoT・単方向データフロー」。兵器廠（ExecuteBuyEquipment /
+    //  ExecuteUpgradeEquipment）が「共通サイフを消費して新品を購入・強化する」のに対し、
+    //  本 2 API は「すでに旅団が所有する装備種別を、編成段階でユニットへ素手で着け外しする」
+    //  無償の直接脱着を担う。FormationUI / RosterUI の装備スロット（第2段）が直接叩く窓口。
+    //
+    //  ★ 純粋ロジック（対象探索・WithEquipment 差し替え・番兵）は Godot 非依存の
+    //    EquipmentService (Core/Units) に分離済み。本メソッドは「ロスタの差し替えと
+    //    シグナル発火」だけに専念する（責務分離・テスト容易性）。
+    //
+    //  ★ 脱着は経済・盤面占有を一切動かさない（払い戻しなし・席は不動）。よって発火するのは
+    //    RosterChanged ただ 1 つ（装備の有無で 9 マスの占有は変わらないため FormationChanged 不要）。
+
+    /// <summary>
+    /// 指定 Id の旅団員へ、指定種別の新品 Lv1 装備を無償で装着する（既存装備は差し替えで手放す）。
+    ///
+    /// 実行内容:
+    ///   1. EquipmentService.TryEquip で対象探索 → 新装備生成 → 装着を一括試行（不在なら null）。
+    ///   2. 成功時のみ BattalionRoster を差し替える。
+    ///   3. RosterChanged を発火する。
+    ///
+    /// 戻り値:
+    ///   - Unit: 装着後のユニット（UI が「○○が装備した」演出に使う）。
+    ///   - null: 未初期化、または指定 Id がロスタに存在しない（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を装着する対象ユニット Id。</param>
+    /// <param name="itemId">装着する装備種別（5 大マスターのいずれか・型安全 enum）。</param>
+    public Unit? EquipItem(Guid unitId, ItemId itemId)
+    {
+        Unit? affected;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // 純粋ロジックへ委譲。対象不在は null で返る（no-op・例外なし）。
+            var result = EquipmentService.TryEquip(BattalionRoster, unitId, itemId);
+            if (result is null) return null;
+
+            // 成功 → ロスタを差し替え（脱着はロスタのみを動かす）。
+            BattalionRoster = result.NewRoster;
+            affected = result.AffectedUnit;
+        }
+
+        SafeEmit(SignalRosterChanged);
+
+        return affected;
+    }
+
+    /// <summary>
+    /// 指定 Id の旅団員から現装備を取り外す（無償・手放した装備は現状ロスト）。
+    ///
+    /// 実行内容:
+    ///   1. EquipmentService.TryUnequip で対象探索 → 取り外しを一括試行（不在なら null）。
+    ///   2. 実際に装備が外れた場合（RosterMutated=true）のみ BattalionRoster を差し替え、
+    ///      RosterChanged を発火する。元から未装備なら no-op（不要な再描画を抑止）。
+    ///
+    /// 戻り値:
+    ///   - Unit: 取り外し後（または元から未装備）のユニット（UI 反映に使う）。
+    ///   - null: 未初期化、または指定 Id がロスタに存在しない（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を取り外す対象ユニット Id。</param>
+    public Unit? UnequipItem(Guid unitId)
+    {
+        Unit? affected;
+        bool rosterMutated;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            // 純粋ロジックへ委譲。対象不在は null で返る（no-op・例外なし）。
+            var result = EquipmentService.TryUnequip(BattalionRoster, unitId);
+            if (result is null) return null;
+
+            rosterMutated = result.RosterMutated;
+            if (rosterMutated)
+            {
+                // 実際に外れた時だけロスタを差し替える（元から未装備なら据え置き）。
+                BattalionRoster = result.NewRoster;
+            }
+            affected = result.AffectedUnit;
+        }
+
+        if (rosterMutated)
+        {
+            SafeEmit(SignalRosterChanged);
+        }
+
+        return affected;
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  ゲームフェーズ状態マシン（一方通行の遷移）
     // ════════════════════════════════════════════════════════════════════════
