@@ -54,17 +54,26 @@ public class MultiverseSimulationRunner
     /// <summary>開始時の婚姻ポイント残高。</summary>
     private const int StartingPoints = 12;
 
-    /// <summary>初期大隊の戦力（敵攻撃力と突き合わせる攻撃力相当の代理値）。</summary>
-    private const int BasePower = 36;
+    /// <summary>
+    /// 初期大隊の戦力（敵攻撃力と突き合わせる攻撃力相当の代理値）。黎明期の安全マージンを縮小し
+    /// 難易度ラダーが噛むよう 36 → 30 へ締め上げ済み。
+    /// </summary>
+    private const int BasePower = 30;
 
-    /// <summary>強化 1 回あたりの戦力増（投資 → 戦力への還元）。</summary>
-    private const int InvestmentPerUpgrade = 8;
+    /// <summary>
+    /// 強化 1 回あたりの戦力還元。雪だるまインフレ（投資が難易度成長を凌駕する暴走）を止めるため
+    /// 8 → 3 へ締め上げ済み（投資の戦力還元を鈍化させ、難易度曲線に牙を取り戻させる）。
+    /// </summary>
+    private const int InvestmentPerUpgrade = 3;
 
     /// <summary>強化投資 1 回のコスト（ShopService.BaseUpgradeCost 相当の物価ノブ）。</summary>
     private const int UpgradeCost = 3;
 
-    /// <summary>戦力不足ぶんを完全ロスト数へ写す除数（不利なほど損失が増える）。</summary>
-    private const int LossDivisor = 16;
+    /// <summary>
+    /// 戦力不足ぶんを完全ロスト数へ写す除数（不利なほど損失が増える）。不利な戦闘の損耗を倍に
+    /// 厳罰化するため 16 → 8 へ締め上げ済み（後半章で絶滅が現実に発生するよう牙を立てる）。
+    /// </summary>
+    private const int LossDivisor = 8;
 
     /// <summary>ベースライン測定に用いる固定シード列（1..DefaultUniverseCount・決定論的に不変）。</summary>
     public static ImmutableArray<int> BaselineSeeds { get; } =
