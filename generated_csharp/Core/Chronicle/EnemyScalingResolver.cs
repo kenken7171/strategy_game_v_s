@@ -165,6 +165,52 @@ public static class EnemyScalingResolver
         return Math.Max(MinimumStatValue, afterEnvironment);
     }
 
+    // ─── 実戦合成（時代基準 × 個体差ジッタ → 戦闘に立つ 1 体） ────────────────
+
+    /// <summary>
+    /// 時代基準ステータス（<see cref="ResolveEnemyStats"/>）へ実戦の個体差ジッタ（±15%）と HP 集約を
+    /// 乗せ、「その年・その章で戦闘に立つ 1 体」を合成する純粋ファクトリ。乱数は外部注入の
+    /// <see cref="Random"/> から取り出すため、同一 (year, template, シード) からは 100% 同一の
+    /// <see cref="EnemyState"/> が返る（決定論）。個体差の SoT は <see cref="EnemyScaler.ApplyJitter"/>
+    /// を再利用し二重定義しない（Chronicle → Battle の一方向結合）。
+    ///
+    /// 合成順序（乱数消費を HP → 攻撃 → 速度 に固定＝EnemyScaler.ScaleTrialGuardian と同型）:
+    ///   era    = ResolveEnemyStats(year, template)                       // 章の難易度・環境を畳んだ時代基準
+    ///   hp     = ApplyJitter(era.Hp × HpAggregationFactor)               // 旧 10 体合算の集約＋個体差
+    ///   attack = ApplyJitter(era.Attack)
+    ///   speed  = ApplyJitter(era.Speed)
+    ///
+    /// 防御（era.Defense）は <see cref="EnemyState"/> が戦闘通貨として持たないため本合成では畳まず、
+    /// 時代基準の DEF はマスターデータとして resolver 側に留める（将来の戦闘式拡張に備える設計余地）。
+    /// </summary>
+    /// <param name="year">現在年（範囲外でもクランプされ安全）。</param>
+    /// <param name="template">スケール前の素テンプレート（null 不可）。</param>
+    /// <param name="rng">個体差ジッタ用の外部注入乱数（null 不可）。</param>
+    /// <returns>満タンの実戦用敵スナップショット。</returns>
+    /// <exception cref="ArgumentNullException">template または rng が null の場合。</exception>
+    public static EnemyState ComposeBattleEnemy(int year, EnemyTemplate template, Random rng)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(rng);
+
+        var era = ResolveEnemyStats(year, template);
+
+        // 乱数消費順序を HP → 攻撃 → 速度 に固定（決定論の核心・既存スケーラと同型）。
+        var hp = EnemyScaler.ApplyJitter(
+            (double)era.Hp * EnemyScaler.HpAggregationFactor, rng);
+        var attack = EnemyScaler.ApplyJitter(era.Attack, rng);
+        var speed = EnemyScaler.ApplyJitter(era.Speed, rng);
+
+        return EnemyState.CreateAtFullHealth(era.Archetype, hp, attack, speed);
+    }
+
+    /// <summary>
+    /// 原型から素テンプレートを引いて <see cref="ComposeBattleEnemy(int, EnemyTemplate, Random)"/> する
+    /// 簡易経路。未登録の原型は通常敵テンプレートへ安全にフォールバックする。
+    /// </summary>
+    public static EnemyState ComposeBattleEnemy(int year, EnemyArchetype archetype, Random rng)
+        => ComposeBattleEnemy(year, TemplateFor(archetype), rng);
+
     // ─── 敵テンプレート・カタログ（マスターデータ・スケール前の素値） ─────
 
     /// <summary>通常戦の標準敵（試練の門の守護者）の素テンプレート。</summary>

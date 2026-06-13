@@ -1648,6 +1648,52 @@ public partial class ChronicleGlobal : Godot.Node
     }
 
     /// <summary>
+    /// <see cref="ForecastEnemyIntents"/> に「現在年の章ボス接近前兆」を重ねた運命の帯を返す
+    /// 読み取り専用クエリ。各ターンの通常脅威は <see cref="ForecastEnemyIntents"/> と 1 ビットの
+    /// 狂いもなく一致し、章ボス出現年が近づくと該当ターンへ前兆（<see cref="EpochBossOmen"/>）が
+    /// 重なる。非戦闘時（<see cref="CurrentBattle"/> == null）は空配列。SoT は 1 ミリも変更しない。
+    ///
+    /// ★ 現在年コンテキストの導出（単一 SoT）:
+    ///   現在年は予言タイムラインの現ターン（<see cref="CurrentTimeline"/>.Turn）を唯一の真実とし、
+    ///   純粋関数 <see cref="ChronicleTimelineConfig.BuildOmenScheduleForYear"/> が次の章ボスまでの
+    ///   残り年から前兆スケジュールを決定論的に組む。先読みシードは通常 Forecast と同一の導出
+    ///   （<see cref="DeriveForecastSeed"/>）を用いるため、脅威列は完全に一致する。
+    /// </summary>
+    /// <param name="lookaheadTurns">何ターン先まで読むか（0 以下は空・上限は Forecast 側でクランプ）。</param>
+    /// <returns>通常脅威に章ボス前兆を重ねた帯（非戦闘時は空）。</returns>
+    public IReadOnlyList<ForecastEntry> ForecastEnemyIntentsWithOmens(int lookaheadTurns)
+    {
+        var battle = CurrentBattle;
+        if (battle is null)
+        {
+            return Array.Empty<ForecastEntry>();
+        }
+
+        var seed = DeriveForecastSeed(battle);
+        var currentYear = CurrentTimeline?.Turn ?? 0;
+        var schedule = ChronicleTimelineConfig.BuildOmenScheduleForYear(currentYear);
+        return AttackIntentRoller.ForecastWithOmens(battle.Enemy, seed, lookaheadTurns, schedule);
+    }
+
+    /// <summary>
+    /// 現在年（<see cref="CurrentTimeline"/>.Turn）の章の難易度・環境補正を畳んだ「時代基準」へ
+    /// 実戦の個体差ジッタ（±15%）を乗せ、その時代に立つ敵 1 体を合成する。100 年史の難易度曲線
+    /// （<see cref="EnemyScalingResolver"/>）を実戦の敵生成へ架橋する入口。SoT は変更しない（生成のみ）。
+    ///
+    /// <paramref name="seed"/> を与えれば決定論的に（同一年・同一シードから同一個体）、省略すれば
+    /// 既定乱数で個体差を振って生成する（<see cref="StartBattle"/> の battleSeed と同じ任意シード方針）。
+    /// </summary>
+    /// <param name="archetype">生成する敵の原型（章ボス/通常敵）。</param>
+    /// <param name="seed">個体差ジッタ用の任意シード（省略時は非決定的な既定乱数）。</param>
+    /// <returns>現在年で時代スケール＋個体差合成された満タンの敵。</returns>
+    public EnemyState CreateEraScaledEnemy(EnemyArchetype archetype, int? seed = null)
+    {
+        var currentYear = CurrentTimeline?.Turn ?? 0;
+        var rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        return EnemyScalingResolver.ComposeBattleEnemy(currentYear, archetype, rng);
+    }
+
+    /// <summary>
     /// 戦況スナップショットの不変観測量から、先読み用の決定論シードを織る純粋写像。大きな素数で
     /// 混ぜて分散させ、敵の個体差（攻撃力・敏捷・最大 HP）とターン経過の双方を反映させる。
     /// </summary>

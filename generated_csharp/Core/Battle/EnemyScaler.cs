@@ -134,14 +134,24 @@ public static class EnemyScaler
     // ─── 内部ヘルパー ───────────────────────────────────────────────────
 
     /// <summary>
-    /// 基準値に ±15% の個体差を 1 回掛けて整数化し、下限でクランプする。
-    /// rng.NextDouble() をちょうど 1 回消費する（呼び出し順が決定論を決める）。
-    /// 丸めは JS の Math.round（正の .5 は切り上げ）に合わせ AwayFromZero を用いる。
+    /// 基準値へ ±15% の個体差（jitter）を 1 回掛けて整数化し、下限でクランプする純粋プリミティブ。
+    /// rng.NextDouble() をちょうど 1 回消費する（呼び出し順が決定論を決める核心）。丸めは JS の
+    /// Math.round（正の .5 は切り上げ）に合わせ AwayFromZero を用いる。
+    ///
+    /// ★ 時代基準（EnemyScalingResolver.ResolveEnemyStats）へ実戦の個体差を乗せる合成でも、
+    ///   個体差の SoT を二重定義しないよう本プリミティブを再利用する（Chronicle → Battle の一方向）。
     /// </summary>
-    private static int RollStat(double baseValue, Random rng)
+    /// <param name="baseValue">個体差を乗せる前の基準値（時代基準ステータス等）。</param>
+    /// <param name="rng">外部注入の乱数発生器（null 不可）。</param>
+    /// <exception cref="ArgumentNullException">rng が null の場合。</exception>
+    public static int ApplyJitter(double baseValue, Random rng)
     {
+        ArgumentNullException.ThrowIfNull(rng);
         var jitter = JitterFloor + rng.NextDouble() * JitterSpan;
         var rounded = (int)Math.Round(baseValue * jitter, MidpointRounding.AwayFromZero);
         return Math.Max(MinimumStatValue, rounded);
     }
+
+    /// <summary>±15% 個体差を 1 回掛けて整数化する内部経路（<see cref="ApplyJitter"/> へ委譲）。</summary>
+    private static int RollStat(double baseValue, Random rng) => ApplyJitter(baseValue, rng);
 }

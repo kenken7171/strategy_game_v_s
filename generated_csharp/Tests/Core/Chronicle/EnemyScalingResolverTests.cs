@@ -23,6 +23,30 @@ namespace ChronicleKnights.Tests.Core.Chronicle;
 
 public class EnemyScalingResolverTests
 {
+    // ─── 乱数テストダブル（NextDouble は virtual なのでオーバーライド可能） ──
+
+    /// <summary>NextDouble が常に同一値を返す乱数（個体差ジッタを固定する）。</summary>
+    private sealed class FixedRandom : Random
+    {
+        private readonly double _value;
+        public FixedRandom(double value) => _value = value;
+        public override double NextDouble() => _value;
+    }
+
+    /// <summary>NextDouble が渡された配列を順に返す乱数（消費順序の検証用）。</summary>
+    private sealed class SequencedRandom : Random
+    {
+        private readonly double[] _values;
+        private int _index;
+        public SequencedRandom(params double[] values) => _values = values;
+        public override double NextDouble() => _values[_index++];
+    }
+
+    // 揺らぎ係数の代表点: 0.0 → 0.85（下限） / 0.5 → 1.0（無揺らぎ） / 1.0 → 1.15（上限）。
+    private const double NoJitterSample = 0.5;
+    private const double FloorJitterSample = 0.0;
+    private const double CeilingJitterSample = 1.0;
+
     // ─── 1. 決定論 ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -155,5 +179,81 @@ public class EnemyScalingResolverTests
     {
         Assert.Throws<ArgumentNullException>(
             () => EnemyScalingResolver.ResolveEnemyStats(10, null!));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  6. 実戦合成（ComposeBattleEnemy）— 時代基準 × 個体差ジッタ → 戦闘の 1 体
+    // ════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ComposeBattleEnemy_SameYearArchetypeSeed_ProducesIdenticalEnemy()
+    {
+        var first = EnemyScalingResolver.ComposeBattleEnemy(
+            42, EnemyArchetype.TrialGuardian, new Random(98765));
+        var second = EnemyScalingResolver.ComposeBattleEnemy(
+            42, EnemyArchetype.TrialGuardian, new Random(98765));
+
+        Assert.Equal(first, second); // record 値等価＝全フィールド一致（決定論）。
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_NoJitter_Year1_IsEraTimesAggregation()
+    {
+        // 無揺らぎ（jitter=1.0）。era(year1 TrialGuardian)=HP155/ATK31/SPD101。
+        // HP は ×10 集約: 155*10=1550。攻撃・速度は等倍。
+        var enemy = EnemyScalingResolver.ComposeBattleEnemy(
+            1, EnemyArchetype.TrialGuardian, new FixedRandom(NoJitterSample));
+
+        Assert.Equal(EnemyArchetype.TrialGuardian, enemy.Archetype);
+        Assert.Equal(1550, enemy.MaxHp);
+        Assert.Equal(31, enemy.Attack);
+        Assert.Equal(101, enemy.Speed);
+        Assert.Equal(enemy.MaxHp, enemy.Hp); // 満タン生成。
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_ConsumesRngInHpAttackSpeedOrder()
+    {
+        // 連続 3 値を HP / 攻撃 / 速度 が順に消費する（決定論の核心）。
+        //   HP   ← 0.0 → jitter 0.85 → round(1550*0.85=1317.5, AwayFromZero) = 1318
+        //   攻撃 ← 0.5 → jitter 1.00 → 31
+        //   速度 ← 1.0 → jitter 1.15 → round(101*1.15=116.15) = 116
+        var rng = new SequencedRandom(
+            FloorJitterSample, NoJitterSample, CeilingJitterSample);
+
+        var enemy = EnemyScalingResolver.ComposeBattleEnemy(
+            1, EnemyArchetype.TrialGuardian, rng);
+
+        Assert.Equal(1318, enemy.MaxHp);
+        Assert.Equal(31, enemy.Attack);
+        Assert.Equal(116, enemy.Speed);
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_BossArchetype_OutScalesGuardian_AtSameYear()
+    {
+        // 同年・無揺らぎで、章ボス（終焉の覇王）は通常敵を確実に上回る。
+        var boss = EnemyScalingResolver.ComposeBattleEnemy(
+            100, EnemyArchetype.EternalSovereign, new FixedRandom(NoJitterSample));
+        var guardian = EnemyScalingResolver.ComposeBattleEnemy(
+            100, EnemyArchetype.TrialGuardian, new FixedRandom(NoJitterSample));
+
+        Assert.Equal(EnemyArchetype.EternalSovereign, boss.Archetype);
+        Assert.True(boss.MaxHp > guardian.MaxHp);
+        Assert.True(boss.Attack > guardian.Attack);
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_NullTemplate_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => EnemyScalingResolver.ComposeBattleEnemy(10, (EnemyTemplate)null!, new Random(1)));
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_NullRng_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => EnemyScalingResolver.ComposeBattleEnemy(10, EnemyArchetype.TrialGuardian, null!));
     }
 }
