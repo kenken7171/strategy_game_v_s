@@ -1256,6 +1256,12 @@ public partial class ChronicleGlobal : Godot.Node
         }
 
         SafeEmit(SignalBattleChanged);
+
+        // 実走ログ（一過性ダンプ・SoT 不変・リーク無し）: 年・出現原型・敵素ステータスを
+        // 機械可読な ASCII 構造化ログとして標準出力へ。整形は純粋層 MetricsLogFormatter に委譲。
+        GD.Print(MetricsLogFormatter.FormatBattleStart(
+            CurrentTimeline?.Turn ?? 0, enemy.Archetype, enemy.MaxHp, enemy.Attack, enemy.Speed));
+
         return snapshot;
     }
 
@@ -1407,19 +1413,28 @@ public partial class ChronicleGlobal : Godot.Node
     {
         if (spoils is null) return 0;
 
-        // 純粋算出（副作用ゼロ・常に 0 以上）。ロック外で先に弾いておく。
-        var earned = spoils.CalculateEarnedMarriagePoints();
-        if (earned <= 0) return 0;
+        // 純粋算出（副作用ゼロ・常に 0 以上）。内訳ごと弾いておき、合計を獲得量として使う
+        // （breakdown.Total == CalculateEarnedMarriagePoints()。実走ログにも内訳を流す）。
+        var breakdown = spoils.DescribeMarriagePoints();
+        var earned = breakdown.Total;
 
         bool applied = false;
-        lock (_stateLock)
+        if (earned > 0)
         {
-            if (IsInitialized)
+            lock (_stateLock)
             {
-                CurrentEconomy = CurrentEconomy.EarnDirect(earned);
-                applied = true;
+                if (IsInitialized)
+                {
+                    CurrentEconomy = CurrentEconomy.EarnDirect(earned);
+                    applied = true;
+                }
             }
         }
+
+        // 実走ログ（一過性ダンプ・SoT 不変・リーク無し）: 年・内訳・適用後の総残高を機械可読な
+        // ASCII 構造化ログとして標準出力へ。勝敗を問わず決算 1 件を 1 行に映す（敗北＝獲得 0 も計上）。
+        GD.Print(MetricsLogFormatter.FormatSettlement(
+            CurrentTimeline?.Turn ?? 0, breakdown, CurrentEconomy.CurrentBalance));
 
         if (applied) SafeEmit(SignalEconomyChanged);
         return applied ? earned : 0;
