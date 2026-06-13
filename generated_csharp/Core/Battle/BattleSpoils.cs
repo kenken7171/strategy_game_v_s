@@ -131,6 +131,70 @@ public sealed record BattleSpoils
         || !EquipmentEvolutions.IsEmpty
         || !EquipmentLosses.IsEmpty;
 
+    // ─── 婚姻ポイント算出（戦果 → 経済 入口の純粋写像） ──────────────────────
+    //
+    //  戦果決算から「獲得すべき婚姻ポイント」を決定論的に弾き出す純粋関数。
+    //  本レコードが既に握っている自前のフィールドだけから算出し、内部状態を
+    //  1 ミリも書き換えない（完全副作用ゼロ・xUnit で完全検証可能）。
+    //
+    //  ★ 算出規律（戦果の質を点数へ写す）:
+    //    - 勝利のときだけポイントが立つ（敗北・未決着は 0）。婚姻は勝利の褒賞。
+    //    - 勝利基礎報酬: 勝ち切ったこと自体への定額。
+    //    - 昇級報酬: とどめの儀式を含む「育ち」の達成度の代理指標。
+    //      （UnitLevelGains は戦闘中＋とどめ成長を統合台帳として 1 枚に合算済み。）
+    //    - 装備進化報酬: 武具が研がれた戦果への加点。
+    //    - 完全ロスト罰: 散った味方ぶんの減点（＝「味方の生存数」の逆指標）。
+    //
+    //  ★ 境界ガード（設計憲法・経済の健全性）:
+    //    最終値は必ず Math.Max(0, …) で底打ちし、負の婚姻ポイントが経済へ
+    //    流れ込む（アンダーフロー・不正な負加算）ことを構造的に封じる。
+
+    /// <summary>勝利そのものへの定額報酬（勝ち切った事実への基礎点）。</summary>
+    private const int VictoryBaseReward = 5;
+
+    /// <summary>ユニット 1 名の昇級ごとの加点（とどめ達成を含む「育ち」の代理指標）。</summary>
+    private const int LevelGainBounty = 2;
+
+    /// <summary>装備 1 件の進化ごとの加点（武具が研がれた戦果）。</summary>
+    private const int EquipmentEvolutionBounty = 1;
+
+    /// <summary>完全ロスト 1 名ごとの減点（散った味方ぶんの褒賞縮小）。</summary>
+    private const int PermanentLossPenalty = 3;
+
+    /// <summary>
+    /// この戦果から獲得すべき婚姻ポイントを純粋に算出する。与えられた自前の戦果
+    /// （決着状態・昇級・完全ロスト・装備進化）から決定論的にポイント数を返す純粋写像で、
+    /// 内部状態を一切書き換えない。
+    ///
+    /// 算出式（勝利時のみ。敗北・未決着は 0）:
+    ///   gross   = VictoryBaseReward
+    ///           + UnitLevelGains 件数      × LevelGainBounty
+    ///           + EquipmentEvolutions 件数 × EquipmentEvolutionBounty
+    ///   penalty = PermanentlyLostUnitIds 件数 × PermanentLossPenalty
+    ///   結果     = Math.Max(0, gross - penalty)
+    ///
+    /// 最終値は必ず 0 で底打ちされ、負のポイントが経済へ流れ込むことはない。
+    /// </summary>
+    /// <returns>獲得婚姻ポイント（常に 0 以上）。</returns>
+    public int CalculateEarnedMarriagePoints()
+    {
+        // 勝利以外（敗北・未決着・空決算）は褒賞ゼロ。ヌル安全の番兵もここで吸収する。
+        if (Outcome != BattleOutcome.BattalionVictory)
+        {
+            return 0;
+        }
+
+        var gross =
+            VictoryBaseReward
+            + (UnitLevelGains.Length * LevelGainBounty)
+            + (EquipmentEvolutions.Length * EquipmentEvolutionBounty);
+
+        var penalty = PermanentlyLostUnitIds.Length * PermanentLossPenalty;
+
+        // 境界ガード: 大量の損失でも負値へ沈ませず 0 で底打ちする。
+        return Math.Max(0, gross - penalty);
+    }
+
     /// <summary>
     /// 開戦時と終了時の参加者静止画（いずれも Id → Unit）を Guid で突き合わせ、
     /// この戦闘で起きた変化だけを抽出した戦果決算を純粋生成する。

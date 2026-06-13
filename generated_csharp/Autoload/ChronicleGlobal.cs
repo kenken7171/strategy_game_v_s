@@ -947,6 +947,18 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentPhase = next;
         }
 
+        // ★ 資源ループの閉鎖（戦闘 → 経済の入口）:
+        //   Battle → Chronicle の幕引きでのみ、直近戦闘の戦果（LastBattleSpoils）から
+        //   婚姻ポイントを純粋算出して経済へ非破壊加算する。ApplyBattleSpoils は内部で
+        //   独自にロック → EarnDirect → EconomyChanged を流す単方向 API。勝利以外・戦果なしは
+        //   獲得 0 で安全に据え置かれ、画面切り替え（PhaseChanged）より前に経済が決算される。
+        //   戦果と世代交代は 1 : 1 対応のため二重加算は起こらない（LastBattleSpoils は
+        //   次戦闘の FinalizeBattleSpoils まで上書きされない）。
+        if (generationAdvanced)
+        {
+            ApplyBattleSpoils(LastBattleSpoils);
+        }
+
         // ロック解放後にシグナル発火。年送りがあった場合はデータ系を先に流し、
         // 画面切り替え契機の PhaseChanged を最後に発火する（順序保証）。
         if (generationAdvanced)
@@ -1373,6 +1385,44 @@ public partial class ChronicleGlobal : Godot.Node
 
             return LastBattleSpoils;
         }
+    }
+
+    /// <summary>
+    /// 戦果決算（<see cref="BattleSpoils"/>）から獲得婚姻ポイントを純粋算出し、その分を
+    /// 経済 SoT（<see cref="CurrentEconomy"/>）へ非破壊的に合算して最新総点を確定する
+    /// 単方向の決算 API。戦闘 → 経済の資源ループを 1 本の環へ閉じる入口。
+    ///
+    /// 規律:
+    ///   - 算出は <see cref="BattleSpoils.CalculateEarnedMarriagePoints"/> に委ね、本メソッドは
+    ///     「ロック内で <see cref="PointsEconomy.EarnDirect"/> による不変加算」だけを担う
+    ///     （<see cref="ResolveLastHit"/> の CoinGreed 強奪加算と同じ単方向の作法）。
+    ///   - 加算が起きたときだけロック解放後に <see cref="SignalEconomyChanged"/> を流す。
+    ///   - ヌル / 戦果なし / 勝利以外（獲得 0）/ 未初期化はすべて安全に no-op で素通りし、
+    ///     例外を投げない（番兵ガード・画面が落ちない方針）。獲得は常に 0 以上で底打ち
+    ///     済みのため、経済のアンダーフロー・不正な負加算は構造的に起こり得ない。
+    /// </summary>
+    /// <param name="spoils">決算対象の戦果（null は安全にスキップ）。</param>
+    /// <returns>実際に経済へ加算された婚姻ポイント（加算が起きなければ 0）。</returns>
+    public int ApplyBattleSpoils(BattleSpoils? spoils)
+    {
+        if (spoils is null) return 0;
+
+        // 純粋算出（副作用ゼロ・常に 0 以上）。ロック外で先に弾いておく。
+        var earned = spoils.CalculateEarnedMarriagePoints();
+        if (earned <= 0) return 0;
+
+        bool applied = false;
+        lock (_stateLock)
+        {
+            if (IsInitialized)
+            {
+                CurrentEconomy = CurrentEconomy.EarnDirect(earned);
+                applied = true;
+            }
+        }
+
+        if (applied) SafeEmit(SignalEconomyChanged);
+        return applied ? earned : 0;
     }
 
     // ════════════════════════════════════════════════════════════════════════
