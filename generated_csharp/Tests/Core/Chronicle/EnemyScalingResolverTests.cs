@@ -256,4 +256,50 @@ public class EnemyScalingResolverTests
         Assert.Throws<ArgumentNullException>(
             () => EnemyScalingResolver.ComposeBattleEnemy(10, EnemyArchetype.TrialGuardian, null!));
     }
+
+    // ─── 7. 戦闘開始ファクトリの心臓部（年 → 原型 → 合成 の一気通貫） ────────
+    //     ChronicleGlobal.CreateCurrentYearEnemy が内部で行う純粋合成を Core 層だけで等価再現。
+
+    [Theory]
+    [InlineData(25, EnemyArchetype.DawnWarden)]
+    [InlineData(50, EnemyArchetype.UpheavalConqueror)]
+    [InlineData(75, EnemyArchetype.DeclineTyrant)]
+    [InlineData(100, EnemyArchetype.EternalSovereign)]
+    public void ComposeBattleEnemy_AtBossYear_UsingArchetypeForYear_ProducesScaledEpochBoss(
+        int bossYear, EnemyArchetype expectedBoss)
+    {
+        // 年 → 原型 → 時代スケール合成。章ボス出現年では、その章の章ボスが時代スケールで立つ。
+        var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(bossYear);
+        Assert.Equal(expectedBoss, archetype);
+
+        var enemy = EnemyScalingResolver.ComposeBattleEnemy(
+            bossYear, archetype, new FixedRandom(NoJitterSample));
+
+        Assert.Equal(expectedBoss, enemy.Archetype);
+        Assert.True(enemy.MaxHp > EnemyScalingResolver.MinimumStatValue);
+        Assert.Equal(enemy.MaxHp, enemy.Hp); // 満タン生成。
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_AtRegularYear_UsingArchetypeForYear_ProducesTrialGuardian()
+    {
+        var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(40); // 激動の通常年
+        Assert.Equal(EnemyArchetype.TrialGuardian, archetype);
+
+        var enemy = EnemyScalingResolver.ComposeBattleEnemy(
+            40, archetype, new FixedRandom(NoJitterSample));
+
+        Assert.Equal(EnemyArchetype.TrialGuardian, enemy.Archetype);
+    }
+
+    [Fact]
+    public void ComposeBattleEnemy_YearArchetypePipeline_IsDeterministic_ForSameSeed()
+    {
+        // 同一年・同一シードからは、ファクトリの心臓部が 1 ビットの狂いもなく同一個体を弾く。
+        var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(50);
+        var first  = EnemyScalingResolver.ComposeBattleEnemy(50, archetype, new Random(31337));
+        var second = EnemyScalingResolver.ComposeBattleEnemy(50, archetype, new Random(31337));
+
+        Assert.Equal(first, second);
+    }
 }

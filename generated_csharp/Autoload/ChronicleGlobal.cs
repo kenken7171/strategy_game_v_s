@@ -1701,6 +1701,22 @@ public partial class ChronicleGlobal : Godot.Node
     }
 
     /// <summary>
+    /// 「今年は誰と戦うか」を暦から決め、現在年の時代スケール＋個体差で敵 1 体を生成する戦闘開始の正本。
+    /// 章ボス出現年（25/50/75/100）はその章の章ボス、それ以外は通常敵（試練の門の守護者）を、
+    /// <see cref="ChronicleTimelineConfig.BattleArchetypeForYear"/> で決定論的に選び、現在年で時代スケールする。
+    /// デモ用の固定敵生成（旧 EnemyScaler.ScaleTrialGuardian 仮置き）を置き換える戦闘開始ファクトリ。
+    /// SoT は変更しない（生成のみ）。
+    /// </summary>
+    /// <param name="seed">個体差ジッタ用の任意シード（省略時は非決定的な既定乱数）。</param>
+    /// <returns>現在年に応じた原型で時代スケール＋個体差合成された満タンの敵。</returns>
+    public EnemyState CreateCurrentYearEnemy(int? seed = null)
+    {
+        var currentYear = CurrentTimeline?.Turn ?? 0;
+        var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(currentYear);
+        return CreateEraScaledEnemy(archetype, seed);
+    }
+
+    /// <summary>
     /// 戦況スナップショットの不変観測量から、先読み用の決定論シードを織る純粋写像。大きな素数で
     /// 混ぜて分散させ、敵の個体差（攻撃力・敏捷・最大 HP）とターン経過の双方を反映させる。
     /// </summary>

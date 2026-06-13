@@ -109,6 +109,43 @@ public class ChronicleTimelineConfigTests
         Assert.Equal(expected, ChronicleTimelineConfig.IsEpochBossYear(year));
     }
 
+    // ─── 3.5 戦闘出現原型の選定（戦闘開始ファクトリの正本） ─────────────────
+
+    [Theory]
+    [InlineData(25, EnemyArchetype.DawnWarden)]
+    [InlineData(50, EnemyArchetype.UpheavalConqueror)]
+    [InlineData(75, EnemyArchetype.DeclineTyrant)]
+    [InlineData(100, EnemyArchetype.EternalSovereign)]
+    [InlineData(1, EnemyArchetype.TrialGuardian)]
+    [InlineData(24, EnemyArchetype.TrialGuardian)]
+    [InlineData(26, EnemyArchetype.TrialGuardian)]
+    [InlineData(74, EnemyArchetype.TrialGuardian)]
+    [InlineData(99, EnemyArchetype.TrialGuardian)]
+    public void BattleArchetypeForYear_BossYearsYieldEpochBoss_OthersTrialGuardian(
+        int year, EnemyArchetype expected)
+    {
+        Assert.Equal(expected, ChronicleTimelineConfig.BattleArchetypeForYear(year));
+    }
+
+    [Theory]
+    [InlineData(101)]
+    [InlineData(500)]
+    [InlineData(int.MaxValue)]
+    public void BattleArchetypeForYear_BeyondTotalYears_ClampsToFinalBoss(int year)
+    {
+        // 101 年目以降は最終年 100（章ボス出現年）へクランプ → 終焉の覇王。例外を投げない。
+        Assert.Equal(EnemyArchetype.EternalSovereign, ChronicleTimelineConfig.BattleArchetypeForYear(year));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void BattleArchetypeForYear_BelowFirstYear_IsTrialGuardian(int year)
+    {
+        // 0 年以下は黎明 1 年（通常年）へクランプ → 試練の門の守護者。
+        Assert.Equal(EnemyArchetype.TrialGuardian, ChronicleTimelineConfig.BattleArchetypeForYear(year));
+    }
+
     // ─── 4. 章ボス接近前兆スケジュールのビルダ ─────────────────────────────
 
     [Theory]

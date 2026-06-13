@@ -218,6 +218,22 @@ public static class ChronicleTimelineConfig
         return false;
     }
 
+    /// <summary>
+    /// その年の戦闘で出現すべき敵の原型を決定論的に選ぶ。章ボス出現年（25/50/75/100）はその章の
+    /// 章ボス、それ以外の年は章の通常敵（試練の門の守護者）を返す。年は [FirstYear, TotalYears] に
+    /// クランプされるため、101 年目以降は終焉の最終年（章ボス出現年）へ丸められ EternalSovereign を、
+    /// 0 年以下は黎明の通常年へ丸められ TrialGuardian を返す（例外を投げない）。
+    ///
+    /// 戦闘開始ファクトリ（ChronicleGlobal.CreateCurrentYearEnemy）が「今年は誰と戦うか」を引く正本。
+    /// </summary>
+    /// <param name="year">現在年（範囲外でもクランプされ安全）。</param>
+    public static EnemyArchetype BattleArchetypeForYear(int year)
+    {
+        var clampedYear = Math.Clamp(year, FirstYear, TotalYears);
+        var epoch = EpochForYear(clampedYear);
+        return epoch.IsBossYear(clampedYear) ? epoch.BossArchetype : epoch.RegularArchetype;
+    }
+
     // ─── 章ボス接近前兆スケジュールの決定論的ビルダ（要件③の窓口） ───────
 
     /// <summary>
