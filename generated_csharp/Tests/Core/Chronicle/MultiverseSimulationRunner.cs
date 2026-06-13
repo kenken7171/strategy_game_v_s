@@ -228,8 +228,9 @@ public class MultiverseSimulationRunner
 
     /// <summary>
     /// 50 宇宙を連続巡航 → UniverseEvaluator.Evaluate で多重宇宙集約 → 標準出力へ ASCII カラム表として
-    /// ダンプする。冒頭に「=== MULTIVERSE BASELINE REPORT ===」を付与し、現行 3 ノブ設定での絶滅率・
-    /// 各章 avg_net・章ボス突破率を人間が一目で読み取れる状態にする（ノブ最適化の基準点）。
+    /// ダンプする。冒頭に「=== MULTIVERSE CRISIS BASELINE REPORT ===」を付与し、締め上げ後の模型での
+    /// 絶滅率・各章 avg_net・章ボス突破率を人間が一目で読み取れる状態にする（ノブ最適化の基準点）。
+    /// 締め上げにより斜陽・終焉で勝率低下と絶滅（extinction-rate > 0%）が観測される（ピント合わせ）。
     /// </summary>
     [Fact]
     public void DumpBaselineMultiverseReport()
@@ -237,8 +238,8 @@ public class MultiverseSimulationRunner
         var metrics = RunUniverses(BaselineSeeds);
         var universe = UniverseEvaluator.Evaluate(metrics);
 
-        Console.WriteLine("=== MULTIVERSE BASELINE REPORT ===");
-        Console.WriteLine("config: current knobs (no tuning applied)");
+        Console.WriteLine("=== MULTIVERSE CRISIS BASELINE REPORT ===");
+        Console.WriteLine("config: tightened model (snowball halted; difficulty ladder has fangs)");
         Console.WriteLine(
             "seeds: 1.." + DefaultUniverseCount
             + "   years-per-universe: " + ChronicleTimelineConfig.TotalYears
