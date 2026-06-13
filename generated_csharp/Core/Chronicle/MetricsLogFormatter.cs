@@ -21,6 +21,7 @@
 //  略称（BDF/SDF/AB/HL — 正式名称のみを使う方針）は本ファイルでも完全未使用。
 // =============================================================================
 
+using System;
 using System.Text;
 using ChronicleKnights.Core.Battle;
 
@@ -34,6 +35,13 @@ public static class MetricsLogFormatter
 {
     /// <summary>全ログ行に付ける grep 用の固定接頭辞（ASCII）。</summary>
     public const string LogPrefix = "[metrics] ";
+
+    /// <summary>
+    /// 機械往復（逆シリアル化）専用イベント名。FormatSample が吐き、MetricsReporter が拾う。
+    /// battle-start / battle-settlement は人間向けの診断ダンプで、こちらは BattleMetricSample の
+    /// 全 7 フィールドを自己完結で運ぶ可逆キャリア（パーサはこのイベントだけを復元対象にする）。
+    /// </summary>
+    public const string EventBattleSample = "battle-sample";
 
     /// <summary>
     /// 戦闘開始の構造化ログ 1 行を整形する。年・出現した敵原型（kebab スラッグ）・敵の素ステータス
@@ -69,6 +77,27 @@ public static class MetricsLogFormatter
             + "\"loss_penalty\":" + breakdown.LossPenalty + ","
             + "\"earned_total\":" + breakdown.Total + ","
             + "\"balance_after\":" + balanceAfter
+            + "}";
+    }
+
+    /// <summary>
+    /// BattleMetricSample の全 7 フィールドを自己完結で運ぶ可逆ログ 1 行を整形する（機械往復キャリア）。
+    /// MetricsReporter.ParseLogLines がこの行を BattleMetricSample へ 1 ビットの狂いもなく逆コンパイルする。
+    /// Outcome は IsVictory（勝利か否か）だけを victory 真偽で運ぶ（非勝利は復元時 BattalionDefeat へ正規化）。
+    /// </summary>
+    public static string FormatSample(BattleMetricSample sample)
+    {
+        ArgumentNullException.ThrowIfNull(sample);
+
+        return LogPrefix + "{"
+            + "\"event\":\"" + EventBattleSample + "\","
+            + "\"year\":" + sample.Year + ","
+            + "\"earned\":" + sample.EarnedPoints + ","
+            + "\"spent\":" + sample.SpentPoints + ","
+            + "\"combatants\":" + sample.CombatantCount + ","
+            + "\"lost\":" + sample.LostCount + ","
+            + "\"victory\":" + (sample.IsVictory ? "true" : "false") + ","
+            + "\"boss\":" + (sample.IsEpochBoss ? "true" : "false")
             + "}";
     }
 
