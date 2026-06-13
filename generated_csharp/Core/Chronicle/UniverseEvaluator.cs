@@ -30,6 +30,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
+using System.Text;
 
 namespace ChronicleKnights.Core.Chronicle;
 
@@ -233,6 +235,92 @@ public static class UniverseEvaluator
             TotalCombatants = totalCombatants,
             TotalLost       = totalLost,
         };
+    }
+
+    // ─── 多重宇宙レポート（章別の平均値 + 絶滅率を一望する ASCII カラム表） ──
+
+    /// <summary>全数値整形を ASCII（"." 小数点）に固定する不変カルチャ。</summary>
+    private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
+
+    /// <summary>
+    /// 集約済み多重宇宙統計を、章ごとの平均勝率・平均生存率・平均獲得/消費/純増・章ボス突破率が
+    /// 一望でき、末尾に「TOTAL extinction-rate: X.X%」を据えた整然とした ASCII カラム表へ整形する純粋関数。
+    /// 見出し・列名はすべて ASCII（設計憲法①）。Godot 非依存ゆえ xUnit で完全検証可能（GD.Print は呼ばない）。
+    /// </summary>
+    public static string FormatUniverseReport(UniverseMetrics metrics)
+    {
+        ArgumentNullException.ThrowIfNull(metrics);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("=== chronicle-universe-metrics (multiverse) ===");
+        builder.AppendLine(
+            "universes: " + metrics.UniverseCount.ToString(Invariant)
+            + "   extinct: " + metrics.ExtinctCount.ToString(Invariant));
+        builder.AppendLine(FormatRow(
+            "epoch", "avg_winrate", "avg_survival", "avg_earned", "avg_spent", "avg_net", "boss_clear"));
+
+        foreach (var epoch in metrics.Epochs)
+        {
+            builder.AppendLine(FormatRow(
+                epoch.EpochNameKey,
+                epoch.AvgWinrate.ToString("F3", Invariant),
+                epoch.AvgSurvival.ToString("F3", Invariant),
+                epoch.AvgEarned.ToString("F2", Invariant),
+                epoch.AvgSpent.ToString("F2", Invariant),
+                epoch.AvgNet.ToString("F2", Invariant),
+                epoch.BossClearRate.ToString("F3", Invariant)));
+        }
+
+        // TOTAL 行（全体プール勝率・生存率・宇宙あたり平均・全章ボス突破率）。
+        var totalBossBattles = 0;
+        var totalBossVictories = 0;
+        foreach (var epoch in metrics.Epochs)
+        {
+            totalBossBattles += epoch.BossBattles;
+            totalBossVictories += epoch.BossVictories;
+        }
+
+        var overallBossClear = totalBossBattles <= 0 ? 0.0 : (double)totalBossVictories / totalBossBattles;
+        var avgEarned = metrics.UniverseCount <= 0 ? 0.0 : (double)metrics.TotalEarned / metrics.UniverseCount;
+        var avgSpent = metrics.UniverseCount <= 0 ? 0.0 : (double)metrics.TotalSpent / metrics.UniverseCount;
+
+        builder.AppendLine(FormatRow(
+            "TOTAL",
+            metrics.OverallWinrate.ToString("F3", Invariant),
+            metrics.OverallSurvival.ToString("F3", Invariant),
+            avgEarned.ToString("F2", Invariant),
+            avgSpent.ToString("F2", Invariant),
+            metrics.AvgNetPerUniverse.ToString("F2", Invariant),
+            overallBossClear.ToString("F3", Invariant)));
+
+        builder.AppendLine(
+            "TOTAL extinction-rate: " + (metrics.ExtinctionRate * 100.0).ToString("F1", Invariant) + "%");
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// 集約済み多重宇宙統計を ASCII カラム表として標準出力へ一過性にダンプする（複数回シミュレーション
+    /// 連続実行のマクロテスト環境・専用シミュレーションコマンドの末尾の通電点）。整形は純粋層
+    /// FormatUniverseReport に委譲し、本メソッドは Console.WriteLine への一過性委譲のみ＝SoT・永続
+    /// キャッシュを一切増設しない。
+    /// </summary>
+    public static void DumpUniverseReport(UniverseMetrics metrics)
+    {
+        Console.WriteLine(FormatUniverseReport(metrics));
+    }
+
+    /// <summary>7 列の固定幅 ASCII カラム 1 行を組む（章名は左詰め・数値は右詰め）。</summary>
+    private static string FormatRow(
+        string epoch, string winrate, string survival, string earned, string spent, string net, string bossClear)
+    {
+        return epoch.PadRight(16)
+            + winrate.PadLeft(13)
+            + survival.PadLeft(14)
+            + earned.PadLeft(12)
+            + spent.PadLeft(11)
+            + net.PadLeft(10)
+            + bossClear.PadLeft(12);
     }
 
     /// <summary>

@@ -205,4 +205,47 @@ public class UniverseEvaluatorTests
             new[] { EpochId.Dawn, EpochId.Upheaval, EpochId.Decline, EpochId.Twilight },
             metrics.Epochs.Select(e => e.Id));
     }
+
+    // ─── 5. 多重宇宙レポート（章別平均 + 絶滅率の ASCII カラム表） ──────────
+
+    private static void AssertAsciiOnly(string text)
+    {
+        Assert.All(text, c => Assert.True(c < 128, $"non-ASCII char detected: {(int)c}"));
+    }
+
+    [Fact]
+    public void FormatUniverseReport_RendersEpochsSummaryAndExtinctionRate()
+    {
+        // 3 宇宙のうち 1 つが 40 年で絶滅 → 絶滅率 1/3 ≒ 33.3%。
+        var metrics = UniverseEvaluator.Evaluate(new[]
+        {
+            BuildUniverse(100),
+            BuildUniverse(100),
+            BuildUniverse(40),
+        });
+
+        var report = UniverseEvaluator.FormatUniverseReport(metrics);
+
+        Assert.Contains("chronicle-universe-metrics", report);
+        Assert.Contains("universes: 3", report);
+        Assert.Contains("extinct: 1", report);
+        Assert.Contains("avg_winrate", report);
+        Assert.Contains("avg_survival", report);
+        Assert.Contains("boss_clear", report);
+        Assert.Contains("epoch-dawn", report);
+        Assert.Contains("epoch-upheaval", report);
+        Assert.Contains("epoch-decline", report);
+        Assert.Contains("epoch-twilight", report);
+        Assert.Contains("TOTAL", report);
+        Assert.Contains("TOTAL extinction-rate: 33.3%", report);
+
+        AssertAsciiOnly(report);
+    }
+
+    [Fact]
+    public void DumpUniverseReport_DoesNotThrow()
+    {
+        var metrics = UniverseEvaluator.Evaluate(Array.Empty<ChronicleMetrics>());
+        UniverseEvaluator.DumpUniverseReport(metrics); // 標準出力へ一過性ダンプ（例外を投げない）。
+    }
 }
