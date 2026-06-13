@@ -27,12 +27,28 @@ namespace ChronicleKnights.Core.Battle;
 
 /// <summary>
 /// 敵個体の原型（ボス種別）。表示名は本キーから localization 経由で解決する想定で、
-/// 列挙体には日本語・絵文字を一切含めない（設計憲法 ①）。現状は単体ボス 1 種のみ。
+/// 列挙体には日本語・絵文字を一切含めない（設計憲法 ①）。
+///
+/// <see cref="TrialGuardian"/> は通常戦の標準敵。残り 4 体は 100 年史の各 Epoch
+/// （黎明/激動/斜陽/終焉）の最終年に君臨する章ボス（EpochBoss）で、
+/// <c>ChronicleTimelineConfig</c> がどの年にどの章ボスが現れるかを司る。
 /// </summary>
 public enum EnemyArchetype
 {
-    /// <summary>試練の門の守護者（現行で唯一の単体ボス）。</summary>
+    /// <summary>試練の門の守護者（通常戦の標準敵）。</summary>
     TrialGuardian,
+
+    /// <summary>黎明（1-25 年）の章ボス。最初の試練を象徴する守り手。</summary>
+    DawnWarden,
+
+    /// <summary>激動（26-50 年）の章ボス。乱世を駆ける征服者。</summary>
+    UpheavalConqueror,
+
+    /// <summary>斜陽（51-75 年）の章ボス。衰亡の世に君臨する暴君。</summary>
+    DeclineTyrant,
+
+    /// <summary>終焉（76-100 年）の章ボス。100 年史を締めくくる永劫の覇王。</summary>
+    EternalSovereign,
 }
 
 // ─── 敵の戦闘状態スナップショット ──────────────────────────────────────────

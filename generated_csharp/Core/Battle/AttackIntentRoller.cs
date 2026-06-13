@@ -193,6 +193,83 @@ public static class AttackIntentRoller
         return builder.ToImmutable();
     }
 
+    // ─── 章ボス前兆つき先読み（運命の帯へ EpochBoss 接近を重ねる窓口） ──────
+
+    /// <summary>
+    /// 通常の運命の帯（<see cref="Forecast"/>）に、章ボス（EpochBoss）の接近前兆を重ねて返す純粋関数。
+    /// 各ターンの通常脅威は <see cref="Forecast"/> と「1 ビットの狂いもなく完全一致」する（同一シードの
+    /// 帯をそのまま再利用するため）。前兆（<see cref="EpochBossOmen"/>）は
+    /// <paramref name="schedule"/> の整数だけから決定論的に重ねられ、乱数・SoT には一切依存しない。
+    ///
+    /// ★ 前兆を重ねる範囲（決定論・整数のみ）:
+    ///   帯ターン t（1 始まり）における「到来までの残りターン」を remaining = TurnsUntilArrival − t と置き、
+    ///   <c>0 ≤ remaining ≤ ForewarnLeadTurns</c> を満たす t にのみ前兆を重ねる
+    ///   （remaining=0 がまさに到来するターン、remaining&gt;0 が先行告知）。到来後（remaining&lt;0）や
+    ///   先行告知窓の外（remaining&gt;Lead）には重ねない。<see cref="EpochBossOmenSchedule.None"/> や
+    ///   <c>BossApproaching=false</c> を渡せば前兆は一切重ならず、通常の帯と同一の意味になる。
+    ///
+    /// ★ ガード番兵: <paramref name="lookaheadTurns"/> の非正・過大クランプは <see cref="Forecast"/> に
+    ///   委譲（空帯・<see cref="MaxForecastTurns"/> クランプ）。添字アクセスは行わず固定回数のみ走る。
+    /// </summary>
+    /// <param name="enemy">予告主の敵スナップショット（攻撃力を威力の基値に使う、null 不可）。</param>
+    /// <param name="currentSeed">先読みの起点シード（<see cref="Forecast"/> と同じ帯を生む）。</param>
+    /// <param name="lookaheadTurns">何ターン先まで覗くか（0 以下は空・上限はクランプ）。</param>
+    /// <param name="schedule">章ボス接近の窓口仕様（暦から組み立て済み、null 不可）。</param>
+    /// <returns>通常脅威に前兆を重ねた不変の帯（要素数は <see cref="Forecast"/> と一致）。</returns>
+    /// <exception cref="ArgumentNullException">enemy または schedule が null の場合。</exception>
+    public static IReadOnlyList<ForecastEntry> ForecastWithOmens(
+        EnemyState enemy, uint currentSeed, int lookaheadTurns, EpochBossOmenSchedule schedule)
+    {
+        ArgumentNullException.ThrowIfNull(enemy);
+        ArgumentNullException.ThrowIfNull(schedule);
+
+        // 通常脅威の帯は既存 Forecast をそのまま再利用＝Threat は Forecast と完全一致（faithful projection）。
+        var threats = Forecast(enemy, currentSeed, lookaheadTurns);
+        if (threats.Count == 0)
+        {
+            return ImmutableArray<ForecastEntry>.Empty;
+        }
+
+        var builder = ImmutableArray.CreateBuilder<ForecastEntry>(threats.Count);
+        for (int index = 0; index < threats.Count; index++)
+        {
+            var turnOffset = index + 1; // 1 始まり（index 0 が T+1）
+            builder.Add(new ForecastEntry
+            {
+                TurnOffset = turnOffset,
+                Threat = threats[index],
+                BossOmen = BuildOmenForTurn(turnOffset, schedule),
+            });
+        }
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// 帯ターン <paramref name="turnOffset"/>（1 始まり）に章ボス前兆を重ねるべきなら生成し、
+    /// そうでなければ null を返す純粋ヘルパー。乱数・SoT 非依存（整数だけで判定する）。
+    /// </summary>
+    private static EpochBossOmen? BuildOmenForTurn(int turnOffset, EpochBossOmenSchedule schedule)
+    {
+        if (!schedule.BossApproaching)
+        {
+            return null; // 接近する章ボスなし。
+        }
+
+        var remaining = schedule.TurnsUntilArrival - turnOffset;
+        if (remaining < 0 || remaining > schedule.ForewarnLeadTurns)
+        {
+            return null; // 到来後、または先行告知窓の外。
+        }
+
+        return new EpochBossOmen
+        {
+            BossArchetype = schedule.BossArchetype,
+            TurnsUntilArrival = remaining,
+            EpochNameKey = schedule.EpochNameKey,
+            OmenSkillNameKey = schedule.OmenSkillNameKey,
+        };
+    }
+
     // ─── 内部ヘルパー ───────────────────────────────────────────────────
 
     /// <summary>

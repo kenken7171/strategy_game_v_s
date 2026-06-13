@@ -199,7 +199,25 @@
     "_note": "敵の攻撃予告（AttackIntent）の表示用スキル名。AttackIntentRoller が払い出す平坦な ASCII キー（enemy-skill-*）をそのままキーに引く。ジョブ/アイテムが enum 名で引くのに対し、敵スキルは enum を持たないためキー＝文字列。コード側（AttackIntentRoller.cs / BattleUI.cs）に日本語は一切ハードコードせず、MasterDataNameResolver.ResolveSkillName が本セクションから解決し、未登録キーは生キーへフォールバックする。",
     "enemy-skill-single-strike": { "name": "単一分隊強襲" },
     "enemy-skill-pincer":        { "name": "複数分隊挟撃" },
-    "enemy-skill-total-assault": { "name": "全大隊総攻撃" }
+    "enemy-skill-total-assault": { "name": "全大隊総攻撃" },
+    "epoch-boss-omen-approach":  { "name": "章ボス接近" }
+  },
+
+  "epochs": {
+    "_note": "100 年史を 4 分割した章（Epoch）の表示名。ChronicleTimelineConfig（Core/Chronicle）が払い出す ASCII キー（epoch-*）をそのままキーに引く。コード側に日本語は一切ハードコードせず、将来 UI（時間の矢・年代記）が MasterDataNameResolver 経由で本セクションから解決する。",
+    "epoch-dawn":     { "name": "黎明" },
+    "epoch-upheaval": { "name": "激動" },
+    "epoch-decline":  { "name": "斜陽" },
+    "epoch-twilight": { "name": "終焉" }
+  },
+
+  "enemyArchetypes": {
+    "_note": "敵原型（EnemyArchetype enum）の表示名。通常敵 1 種と 4 章ボスの ASCII キー（enemy-*）をキーに引く。ChronicleTimelineConfig / EnemyScalingResolver が払い出すテンプレート NameKey と一致させる。コード側に日本語は一切ハードコードせず、将来 UI が MasterDataNameResolver 経由で解決する。",
+    "enemy-trial-guardian":     { "name": "試練の門の守護者" },
+    "enemy-dawn-warden":        { "name": "黎明の守り手" },
+    "enemy-upheaval-conqueror": { "name": "激動の征服者" },
+    "enemy-decline-tyrant":     { "name": "斜陽の暴君" },
+    "enemy-eternal-sovereign":  { "name": "永劫の覇王" }
   },
 
   "names": {
