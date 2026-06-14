@@ -17,6 +17,7 @@
 //  略称（BDF/SDF/AB/HL）は本ファイルでも完全未使用。
 // =============================================================================
 
+using ChronicleKnights.UserInterface.Battle;
 using ChronicleKnights.UserInterface.Hub;
 using ChronicleKnights.UserInterface.Title;
 using Godot;
@@ -54,8 +55,19 @@ public partial class UserInterfaceRoot : Godot.Control
     /// <summary>タイトルの「Start」遷移要求を 1 度受け、拠点へ切り替える。</summary>
     private void OnStartRequested() => ShowHub();
 
-    /// <summary>拠点を前面へ立てる（タイトルは SwapTo の更地化で購読解除 + 解放される）。</summary>
-    private void ShowHub() => SwapTo(new HubView());
+    /// <summary>拠点を前面へ立て、その「MARCH」出撃要求を購読する（タイトルは更地化で解放）。</summary>
+    private void ShowHub()
+    {
+        var hub = new HubView();
+        SwapTo(hub);                          // 旧ビューを更地化してから前面へ
+        hub.BattleRequested += OnBattleRequested; // 切替後に購読（自己購読の取り違え防止）
+    }
+
+    /// <summary>拠点の「MARCH」出撃要求を受け、戦場へ切り替える。</summary>
+    private void OnBattleRequested() => ShowBattle();
+
+    /// <summary>戦場を前面へ立てる（拠点は SwapTo の更地化で購読解除 + 解放される）。</summary>
+    private void ShowBattle() => SwapTo(new BattleView());
 
     /// <summary>
     /// 旧ビューを購読解除 + QueueFree して更地化し、新ビューをフルレクトで前面へ追加する
@@ -68,6 +80,10 @@ public partial class UserInterfaceRoot : Godot.Control
             if (_currentView is TitleView outgoingTitle)
             {
                 outgoingTitle.StartRequested -= OnStartRequested; // 退場タイトルの購読解除
+            }
+            else if (_currentView is HubView outgoingHub)
+            {
+                outgoingHub.BattleRequested -= OnBattleRequested; // 退場拠点の購読解除
             }
 
             _currentView.QueueFree();

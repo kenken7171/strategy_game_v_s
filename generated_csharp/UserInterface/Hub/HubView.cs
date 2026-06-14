@@ -28,6 +28,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
@@ -44,6 +45,13 @@ public partial class HubView : Godot.Control
 {
     /// <summary>data-testid を載せる Godot メタキー。</summary>
     private const string TestIdMetaKey = "data_testid";
+
+    /// <summary>
+    /// 「MARCH」押下で出撃が要求されたことを上位ルータ（UserInterfaceRoot）へ知らせる。
+    /// 戦闘の SoT 起動（盤面着席 + StartBattle）は本ビューが済ませ、遷移だけを購読側へ委譲する
+    /// （TitleView.StartRequested と同じ「身体が動かし、頭が遷移する」分離）。
+    /// </summary>
+    public event Action? BattleRequested;
 
     /// <summary>拠点の背景色（落ち着いた紺）。</summary>
     private static readonly Color BackdropColor = new(0.06f, 0.07f, 0.12f, 1.0f);
@@ -161,6 +169,12 @@ public partial class HubView : Godot.Control
         _rosterContainer.AddThemeConstantOverride("separation", 6);
         _rosterContainer.SetMeta(TestIdMetaKey, "hub-view-roster-container");
         column.AddChild(_rosterContainer);
+
+        // ── 出撃（武装した旅団を盤面へ解き放つ。押下で SoT を起動し戦場へ遷移） ──
+        var marchButton = new Button { Text = "MARCH" };
+        marchButton.SetMeta(TestIdMetaKey, "hub-view-march-button");
+        marchButton.Pressed += OnMarchPressed;
+        column.AddChild(marchButton);
     }
 
     /// <summary>
@@ -255,6 +269,46 @@ public partial class HubView : Godot.Control
 
         // 現役筆頭の装備を 1 段階強化（デフレ物価 BaseUpgradeCost=2 が SoT 経由で適用される）。
         _chronicleGlobal.ExecuteUpgradeEquipment(units[0].Id);
+    }
+
+    // ─── 出撃（盤面着席 → 現在年敵生成 → 開戦 → 戦場へ遷移要求） ───────────────
+
+    /// <summary>
+    /// 武装した旅団を盤面へ着席させ、現在年の時代スケール敵を生成して開戦し、戦場への遷移を要求する。
+    /// SoT 起動（着席 + StartBattle）は本ビューが済ませ、画面遷移だけを BattleRequested で上位へ委譲する。
+    /// </summary>
+    private void OnMarchPressed()
+    {
+        if (_chronicleGlobal is null) return;
+
+        SeatRosterForMarch(); // 専用編成フェーズが無い間の自動着席（現役筆頭から 9 マスへ）。
+
+        var enemy = _chronicleGlobal.CreateCurrentYearEnemy(); // 現在年の章ボス/通常敵（正本ファクトリ）。
+        _chronicleGlobal.StartBattle(enemy);                    // CurrentBattle を起こし BattleChanged を発火。
+
+        BattleRequested?.Invoke(); // ルータへ「戦場を立てよ」（遷移は購読側に委譲）。
+    }
+
+    /// <summary>
+    /// 現役旅団員を盤面の正準順（Front/RearLeft/RearRight × 列 0..2）へ先頭から最大 9 名着席させる。
+    /// CreateInitial は盤面に居る者だけを戦闘参加者に採るため、出撃前にここで盤面を満たす。
+    /// </summary>
+    private void SeatRosterForMarch()
+    {
+        if (_chronicleGlobal is null) return;
+
+        var units = _chronicleGlobal.GetAliveUnits();
+        var index = 0;
+
+        foreach (var row in FormationBoard.RowOrder)
+        {
+            for (var column = 0; column < FormationBoard.ColumnsPerRow; column++)
+            {
+                if (index >= units.Count) return;
+                _chronicleGlobal.PlaceUnitOnFormation(new SlotCoordinate(row, column), units[index].Id);
+                index++;
+            }
+        }
     }
 
     // ─── 描画（SoT をその場で読み直して Push バインド） ─────────────────────
