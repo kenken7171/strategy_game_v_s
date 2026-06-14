@@ -198,7 +198,7 @@ public static class JuiceDirector
     /// 新 HP を示し、その背後でこのドレインバーが「遅れて追従」することで、削れた量の
     /// 重みを尾を引くように見せる（格闘ゲーム風のディレイ HP バー）。
     /// </summary>
-    public static Tween? DrainBar(Range? bar, double toValue, double delaySeconds, double durationSeconds)
+    public static Tween? DrainBar(Godot.Range? bar, double toValue, double delaySeconds, double durationSeconds)
     {
         if (bar is null || !GodotObject.IsInstanceValid(bar))
         {

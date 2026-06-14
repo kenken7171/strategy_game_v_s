@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 using Xunit;
@@ -71,7 +72,7 @@ public class RosterCardContractTests
     {
         var roster = new List<Unit>();
 
-        Assert.Empty(roster.Where(unit => unit.IsAlive));
+        Assert.DoesNotContain(roster, unit => unit.IsAlive);
     }
 
     // ─── 進化兵装スロット & 装備補正 POWER（BattleManager 単一 SoT 式の再利用） ──
@@ -108,8 +109,8 @@ public class RosterCardContractTests
                           + BattleManager.EquipmentDefenseBonus(lv3)
                           + BattleManager.EquipmentSpeedBonus(lv3);
 
-        Assert.Equal(4, equipPowerLv1); // 聖剣 Lv1: ATK3 + DEF1 + SPD0
-        Assert.Equal(9, equipPowerLv3); // 聖剣 Lv3: ATK6 + DEF3 + SPD0
+        Assert.Equal(4, equipPowerLv1);  // 聖剣 Lv1: ATK3 + DEF1 + SPD0
+        Assert.Equal(10, equipPowerLv3); // 聖剣 Lv3: ATK6 + DEF3 + SPD1（レベル倍率 floor の合算）
         Assert.True(equipPowerLv3 > equipPowerLv1); // UPGRADE で POWER が底上げされる
     }
 }

@@ -315,6 +315,7 @@ public static class PedigreeBuilder
         ImmutableArray<PedigreeEdge>.Builder edges)
     {
         if (parentId == Guid.Empty) return;
+        if (parentId == childId) return; // 自己ループ（自分が自分の親）は不正データ。線を張らない。
         if (!presentIds.Contains(parentId)) return;
         if (!presentIds.Contains(childId)) return;
         if (!edgeSeen.Add((parentId, childId))) return;

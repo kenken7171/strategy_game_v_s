@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.Battle;
+using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Units;
 using Xunit;
 

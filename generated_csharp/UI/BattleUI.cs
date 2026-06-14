@@ -717,7 +717,7 @@ public partial class BattleUI : Godot.Control
         _intentBanner.Visible = true;
 
         var intent = battle.NextEnemyIntent;
-        var skillName = ResolveSkillName(intent.SkillNameKey);
+        var skillName = _chronicleGlobal?.ResolveSkillName(intent.SkillNameKey) ?? intent.SkillNameKey;
 
         _intentHeadlineLabel.Text = "⚠ 次の敵攻撃予告";
         // スキル名（localization 解決）／パターン種別（ASCII enum）／1 体あたり威力を併記。

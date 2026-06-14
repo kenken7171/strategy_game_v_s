@@ -151,7 +151,7 @@ public class BattleSpoilsMarriagePointsTests
 
         // 算出後も戦果レコードは 1 ミリも変わらない（件数が保たれる）。
         Assert.Equal(2, spoils.UnitLevelGains.Length);
-        Assert.Equal(1, spoils.EquipmentEvolutions.Length);
+        Assert.Single(spoils.EquipmentEvolutions);
         Assert.Single(spoils.PermanentlyLostUnitIds);
         Assert.Equal(BattleOutcome.BattalionVictory, spoils.Outcome);
     }
