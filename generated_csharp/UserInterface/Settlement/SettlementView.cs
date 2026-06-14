@@ -103,10 +103,18 @@ public partial class SettlementView : Godot.Control
         margin.AddThemeConstantOverride("margin_top", 24);
         AddChild(margin);
 
+        // はみ出しを自動スクロールで完全防御（縦スクロールのみ。スクロール状態は UI に保持しない）。
+        var scroll = new ScrollContainer();
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SetMeta(TestIdMetaKey, "settlement-view-scroll");
+        margin.AddChild(scroll);
+
         var column = new VBoxContainer();
         column.AddThemeConstantOverride("separation", 14);
+        column.SizeFlagsHorizontal = SizeFlags.ExpandFill; // 横幅いっぱい → 縦にあふれてスクロール
         column.SetMeta(TestIdMetaKey, "settlement-view-panel");
-        margin.AddChild(column);
+        scroll.AddChild(column);
 
         var header = new Label { Text = "SETTLEMENT:" };
         header.AddThemeFontSizeOverride("font_size", 32);
@@ -182,6 +190,7 @@ public partial class SettlementView : Godot.Control
         {
             var unitId = unit.Id; // ループ毎の確定キャプチャ。
             var card = new Button { Text = unit.Job.ToString() };
+            card.Icon = JobTextureLibrary.TryLoad(unit.Job); // ジョブイラスト（資源欠落でも null で安全）。
             card.SetMeta(TestIdMetaKey, $"settlement-view-lasthit-card-{unitId}");
             card.Pressed += () => OnLastHitChosen(unitId);
             _lastHitContainer.AddChild(card);

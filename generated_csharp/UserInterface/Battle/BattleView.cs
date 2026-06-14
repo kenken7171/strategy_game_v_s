@@ -104,10 +104,18 @@ public partial class BattleView : Godot.Control
         margin.AddThemeConstantOverride("margin_top", 24);
         AddChild(margin);
 
+        // はみ出しを自動スクロールで完全防御（縦スクロールのみ。スクロール状態は UI に保持しない）。
+        var scroll = new ScrollContainer();
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SetMeta(TestIdMetaKey, "battle-view-scroll");
+        margin.AddChild(scroll);
+
         var column = new VBoxContainer();
         column.AddThemeConstantOverride("separation", 14);
+        column.SizeFlagsHorizontal = SizeFlags.ExpandFill; // 横幅いっぱい → 縦にあふれてスクロール
         column.SetMeta(TestIdMetaKey, "battle-view-panel");
-        margin.AddChild(column);
+        scroll.AddChild(column);
 
         var header = new Label { Text = "BATTLEFIELD:" };
         header.AddThemeFontSizeOverride("font_size", 32);
@@ -313,6 +321,16 @@ public partial class BattleView : Godot.Control
         var rowBox = new HBoxContainer();
         rowBox.AddThemeConstantOverride("separation", 8);
         rowBox.SetMeta(TestIdMetaKey, $"battle-view-ally-row-{unit.Id}");
+
+        // ジョブイラスト（ResourceLoader 経由・資源欠落でも空表示で安全。行解放で texture も解放）。
+        var portrait = new TextureRect
+        {
+            Texture           = JobTextureLibrary.TryLoad(unit.Job),
+            CustomMinimumSize = new Vector2(24, 24),
+            StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        portrait.SetMeta(TestIdMetaKey, $"battle-view-ally-portrait-{unit.Id}");
+        rowBox.AddChild(portrait);
 
         var jobLabel = new Label { Text = unit.Job.ToString() };
         jobLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;

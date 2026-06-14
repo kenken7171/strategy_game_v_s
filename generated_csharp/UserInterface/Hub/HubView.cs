@@ -116,10 +116,18 @@ public partial class HubView : Godot.Control
         margin.AddThemeConstantOverride("margin_top", 24);
         AddChild(margin);
 
+        // はみ出しを自動スクロールで完全防御（縦スクロールのみ。スクロール状態は UI に保持しない）。
+        var scroll = new ScrollContainer();
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SetMeta(TestIdMetaKey, "hub-view-scroll");
+        margin.AddChild(scroll);
+
         var column = new VBoxContainer();
         column.AddThemeConstantOverride("separation", 16);
+        column.SizeFlagsHorizontal = SizeFlags.ExpandFill; // 横幅いっぱい → 縦にあふれてスクロール
         column.SetMeta(TestIdMetaKey, "hub-view-panel");
-        margin.AddChild(column);
+        scroll.AddChild(column);
 
         var header = new Label { Text = "BASE HUB" };
         header.AddThemeFontSizeOverride("font_size", 32);
@@ -398,6 +406,16 @@ public partial class HubView : Godot.Control
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 12);
         card.AddChild(row);
+
+        // ジョブイラスト（ResourceLoader 経由・資源欠落でも空表示で安全。カード解放で texture も解放）。
+        var portrait = new TextureRect
+        {
+            Texture           = JobTextureLibrary.TryLoad(unit.Job),
+            CustomMinimumSize = new Vector2(28, 28),
+            StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        portrait.SetMeta(TestIdMetaKey, $"hub-view-roster-portrait-{unit.Id}");
+        row.AddChild(portrait);
 
         // ジョブ（役割。enum 名の ASCII。憲法①: 日本語ハードコードなし）。
         var jobLabel = new Label { Text = unit.Job.ToString() };
