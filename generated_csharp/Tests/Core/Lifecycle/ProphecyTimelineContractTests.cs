@@ -23,6 +23,9 @@ namespace ChronicleKnights.Tests.Core.Lifecycle;
 
 public class ProphecyTimelineContractTests
 {
+    /// <summary>オーバーレイ OmenThreshold と同値（残り 10 ターン以内で前兆カードを出す契約）。</summary>
+    private const int OmenCardThreshold = 10;
+
     [Fact]
     public void TimelineSpan_IsYearOneToHundred()
     {
@@ -55,6 +58,37 @@ public class ProphecyTimelineContractTests
         Assert.True(Fraction(25) < Fraction(50));
         Assert.True(Fraction(50) < Fraction(75));
         Assert.True(Fraction(75) < Fraction(100));
+    }
+
+    [Fact]
+    public void OmenSchedule_WithinThreshold_HeraldsApproachingBoss()
+    {
+        // 20 年: 次の章ボス（25 年）まで残り 5 ターン → 前兆カード（hub-view-omen-card）が出る圏内。
+        var omen = ChronicleTimelineConfig.BuildOmenScheduleForYear(20);
+
+        Assert.True(omen.BossApproaching);
+        Assert.Equal(5, omen.TurnsUntilArrival);
+        Assert.True(omen.TurnsUntilArrival <= OmenCardThreshold);
+    }
+
+    [Fact]
+    public void OmenSchedule_ImminentWindow_EntersForewarnFlash()
+    {
+        // 23 年: 残り 2 ターン ≤ 先行告知窓 → 秒読み段階（緋色フラッシュ＋コンソール警告）。
+        var omen = ChronicleTimelineConfig.BuildOmenScheduleForYear(23);
+
+        Assert.True(omen.BossApproaching);
+        Assert.Equal(2, omen.TurnsUntilArrival);
+        Assert.True(omen.TurnsUntilArrival <= omen.ForewarnLeadTurns);
+    }
+
+    [Fact]
+    public void OmenSchedule_AfterFinalBoss_IsInactive_NoCard()
+    {
+        // 100 年（終焉ボス年）以降は接近する章ボスが無い → 前兆カードは一切出ない。
+        var omen = ChronicleTimelineConfig.BuildOmenScheduleForYear(100);
+
+        Assert.False(omen.BossApproaching);
     }
 
     /// <summary>

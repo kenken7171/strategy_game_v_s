@@ -27,6 +27,7 @@
 using System.Collections.Generic;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.UI;
 using Godot;
 
 namespace ChronicleKnights.UserInterface.Hub;
@@ -44,12 +45,19 @@ public partial class ProphecyTimelineOverlay : Godot.Control
     private const float TimelineWidth = 420.0f;
     private const float TimelineHeight = 28.0f;
 
-    /// <summary>章ボス警告マーカーの色（緋色 ≒ Colors.Crimson。危急を告げる色価言語）。</summary>
+    /// <summary>前兆カードを出し始める残りターン閾値（残り 10 ターン以内で接近警告を物質化）。</summary>
+    private const int OmenThreshold = 10;
+
+    /// <summary>秒読み段階（緋色フラッシュ）の脈動秒数。</summary>
+    private const double OmenFlashSeconds = 0.6;
+
+    /// <summary>章ボス警告マーカー/前兆カードの色（緋色 ≒ Colors.Crimson。危急を告げる色価言語）。</summary>
     private static readonly Color OmenColor = new(0.86f, 0.08f, 0.24f);
 
     private ChronicleGlobal? _chronicleGlobal;
     private ProgressBar? _timelineProgress;
     private Control? _markerLayer;
+    private VBoxContainer? _omenSlot;
 
     /// <summary>動的生成したマーカー/前兆カードの台帳（再描画・退場で全 QueueFree）。</summary>
     private readonly List<Node> _timelineNodes = new();
@@ -103,6 +111,12 @@ public partial class ProphecyTimelineOverlay : Godot.Control
         _markerLayer.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         _markerLayer.SetMeta(TestIdMetaKey, "hub-view-timeline-markers");
         stack.AddChild(_markerLayer);
+
+        // 前兆カードの収納枠（接近する章ボスがあれば動的にカードを 1 枚生やす土台）。
+        _omenSlot = new VBoxContainer();
+        _omenSlot.AddThemeConstantOverride("separation", 4);
+        _omenSlot.SetMeta(TestIdMetaKey, "hub-view-omen-slot");
+        column.AddChild(_omenSlot);
     }
 
     // ─── シグナル購読 / 解除（年次進行に追従して無状態に描き直す） ──────────
@@ -161,6 +175,57 @@ public partial class ProphecyTimelineOverlay : Godot.Control
         foreach (var epoch in ChronicleTimelineConfig.Epochs)
         {
             PlaceBossMarker(epoch.BossYear);
+        }
+
+        // 直近に迫る章ボスがあれば前兆カードを 1 枚動的生成（残り 10 ターン以内）。
+        RenderOmenCard(year);
+    }
+
+    /// <summary>
+    /// 暦（現在年）だけから次の章ボスまでの残りターンを決定論的に弾き、接近圏（OmenThreshold）に
+    /// 入っていれば前兆カード（hub-view-omen-card）を 1 枚動的生成して台帳へ登録する。秒読み段階
+    /// （先行告知窓 ForewarnLeadTurns 以内）に入ったら緋色フラッシュ＋コンソール警告を焚く。
+    /// カードは台帳経由で再描画・退場時に必ず QueueFree される（リークフリー）。
+    /// </summary>
+    private void RenderOmenCard(int year)
+    {
+        if (_omenSlot is null) return;
+
+        var omen = ChronicleTimelineConfig.BuildOmenScheduleForYear(year);
+        if (!omen.BossApproaching || omen.TurnsUntilArrival > OmenThreshold)
+        {
+            return; // 接近する章ボスが無い、または残りターンが閾値外なら前兆を出さない。
+        }
+
+        var card = new PanelContainer();
+        card.SetMeta(TestIdMetaKey, "hub-view-omen-card");
+
+        var body = new VBoxContainer();
+        body.AddThemeConstantOverride("separation", 2);
+        card.AddChild(body);
+
+        var header = new Label { Text = "OMEN" };
+        header.AddThemeColorOverride("font_color", OmenColor);
+        header.SetMeta(TestIdMetaKey, "hub-view-omen-header");
+        body.AddChild(header);
+
+        // 接近中の章ボス原型は enum 名（ASCII）をそのまま表示（憲法①: 日本語ハードコードなし）。
+        var bossName = new Label { Text = omen.BossArchetype.ToString() };
+        bossName.SetMeta(TestIdMetaKey, "hub-view-omen-boss-name");
+        body.AddChild(bossName);
+
+        var countdown = new Label { Text = "BOSS ARRIVAL IN: " + omen.TurnsUntilArrival + " TURNS" };
+        countdown.SetMeta(TestIdMetaKey, "hub-view-omen-countdown");
+        body.AddChild(countdown);
+
+        _omenSlot.AddChild(card);
+        _timelineNodes.Add(card); // 台帳へ登録（更地化で一括解放）
+
+        // 秒読み段階（先行告知窓内）に入ったら緋色フラッシュ＋コンソール警告（Tween はカードへ束縛）。
+        if (omen.TurnsUntilArrival <= omen.ForewarnLeadTurns)
+        {
+            JuiceDirector.Flash(card, OmenColor, OmenFlashSeconds);
+            GD.Print($"[OMEN] {omen.BossArchetype} BOSS ARRIVAL IN {omen.TurnsUntilArrival} TURNS");
         }
     }
 
