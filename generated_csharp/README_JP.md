@@ -1,130 +1,161 @@
-# Chronicle Knights -- Ketteironteki 100-Nen Kuroniku RPG
+# Chronicle Knights — 決定論的100年クロニクルRPG
 
-(Nihongo Romaji-ban Kidou Seiten. Subete ASCII de kisai shite ari, donna compile kankyou demo
-binary anzen ni yomeru. Eigo-ban wa README.md wo sanshou.)
-
-> Ryodanchou, Dotnet no Pass wo Tooshi, Jikki no Hikari wo Tokihanate!!!
+> 日本語版 起動ガイド。英語版は [README.md](README.md) を参照してください。
+>
+> ※ 本ドキュメントは読みやすさのため日本語（ひらがな・漢字・カタカナ）で記述しています。
+> ただし**ソースコードの識別子・ノード名・testid・コア内部ログは開発憲法①により ASCII 限定**を
+> 1ビットの隙もなく死守しています（本書はあくまで人間向けの解説書です）。
 
 ---
 
-## Project Title & Architecture
+## タイトルと概要
 
-**Chronicle Knights** -- Ketteironteki (deterministic) 100-Nen Kuroniku RPG.
-Godot 4 / .NET 8 / C# 12. Kishi-dan (brigade) wo hikiite, tatta hitotsu no seed kara kessei
-sareru 100-nen no rekishi wo kakenukeru. 1-nen = dai-kairou (grand corridor) no 1-shuu:
+**Chronicle Knights** — 決定論的（deterministic）な100年クロニクル RPG。
+Godot 4 / .NET 8 / C# 12 で構築。騎士団（旅団）を率い、たった一つのシードから決定される
+100年の歴史を駆け抜けます。1年 = 大回廊（grand corridor）の1周です。
 
 ```
 Title  ->  Hub  ->  Battle  ->  Settlement  ->  Hub  ->  ...
-(seed)   (keizai/    (tekii      (todome +      (tsugi
-         yogen/      yochi +     senka kanryuu  no nen)
-         senryoku)   kessen)     + nendaiki)
+(シード)  (経済/      (敵意       (とどめ +       (次の
+          予言/       先読み +    戦果還流 +      年へ)
+          戦力)       決戦)       年代記印字)
 ```
 
-Onaji seed kara wa onaji 100-nen ga saigen sareru (kanzen ni ketteironteki).
+同じシードからは、まったく同じ100年が再現されます（完全な決定論）。
 
 ---
 
-## Prerequisites
+## 前提条件
 
-- **.NET 8 SDK** (project wa `net8.0` target, C# 12). **.NET 10 SDK** demo doukou suru
-  (roll-forward de testhost wo 10.x runtime jou de jikkou kanou).
-- **Godot Engine 4.x** with .NET / C# support (Godot.NET.Sdk 4.3.0 de kakunin zumi).
+- **.NET 8 SDK**（プロジェクトは `net8.0` ターゲット、C# 12）。**.NET 10 SDK** でも動作します
+  （テストは roll-forward で 10.x ランタイム上で実行可能）。
+- **Godot Engine 4.x**（.NET / C# 対応版。いわゆる「Mono」ビルド。Godot.NET.Sdk 4.3.0 で確認済み）。
 
 ---
 
-## Mac / zsh de 'command not found: dotnet' ga deta baai
+## Mac で `command not found: godot` が出たときの対策
 
-Kore wa dotnet ni Pass ga tootte inai dake. Tsugi no dochiraka de kaiketsu suru.
+Godot を `.app` でインストールしただけでは、ターミナルから `godot` を直接叩けません。
+次のいずれかで解決します。
 
-**Houhou 1 -- Homebrew de install:**
+**方法1 — アプリケーションを直接叩く（その場しのぎ）:**
+
+```sh
+/Applications/Godot.app/Contents/MacOS/Godot --path .
+```
+
+**方法2 — シンボリックリンクで恒久的にパスを通す（推奨）:**
+
+```sh
+sudo ln -s /Applications/Godot.app/Contents/MacOS/Godot /usr/local/bin/godot
+```
+
+以後はどこからでも `godot --path .` で起動できます。確認:
+
+```sh
+godot --version
+```
+
+（Godot のアプリ名が `Godot_mono.app` など異なる場合は、そのパスに読み替えてください。）
+
+---
+
+## Mac で `command not found: dotnet` が出たときの対策
+
+`dotnet` にパスが通っていないだけです。次のいずれかで解決します。
+
+**方法1 — Homebrew でインストール:**
 
 ```sh
 brew install --cask dotnet-sdk
 ```
 
-**Houhou 2 -- .zshrc he Pass wo tooshi (sudeni install zumi no baai):**
+**方法2 — `.zshrc` へパスを通す（インストール済みの場合）:**
 
 ```sh
 echo 'export PATH="$PATH:/usr/local/share/dotnet"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Kakunin:
+確認:
 
 ```sh
 dotnet --version
 ```
 
-(Windows no baai wa winget install Microsoft.DotNet.SDK.8, mata wa koushiki installer.
-Godot wa .NET-tsuki no "Mono" build wo dotnet site kara nyuushu suru koto.)
-
 ---
 
-## Build & Run (CLI)
+## ビルド＆実行コマンド
 
-Subete kono directory (`generated_csharp/`) kara jikkou suru.
+すべてこのディレクトリ（`generated_csharp/`）から実行します。
 
-**Build (Debug):**
+**ビルド（Debug）:**
 
 ```sh
 dotnet build ChronicleKnights.csproj --configuration Debug
 ```
 
-**Game wo kidou (Godot editor / windowed):**
-
-```sh
-godot --path .
-```
-
-Main.tscn ga tachiagari, mujoutai view router (UserInterfaceRoot) ga Title gamen kara boot suru.
-
-**Test wo jikkou (xUnit contracts):**
+**テスト（xUnit 契約テスト）:**
 
 ```sh
 dotnet test Tests/ChronicleKnights.Tests.csproj
 ```
 
-8.0 runtime ga naku 10.x dake no baai wa roll-forward de jikkou:
+`net8.0` のテストホストに対して 8.0 ランタイムが無く 10.x のみの環境では、roll-forward で実行します。
 
 ```sh
 DOTNET_ROLL_FORWARD=LatestMajor dotnet test Tests/ChronicleKnights.Tests.csproj
 ```
 
----
+**Godot で実機起動:**
 
-## Tetsu no Kenpo (Architectural Pillars)
+```sh
+godot --path .
+```
 
-1. **Fuben SoT (Single Source of Truth: `ChronicleGlobal`)**
-   `/root/ChronicleGlobal` no autoload singleton dake ga zen game joutai (keizai, timeline, roster,
-   battle snapshot, nendaiki log, eirei archive) wo motsu. Subete no henkou wa koko wo tooshi,
-   signal (EconomyChanged / TimelineChanged / RosterChanged / BattleChanged / PhaseChanged) de tsutaeru.
+`Main.tscn` が立ち上がり、無状態のシーンルータ（`UserInterfaceRoot`）が Title 画面から起動します。
+ヘッドレス（CI / スモークチェック）の場合:
 
-2. **Mushitai UI (Stateless UI)**
-   View wa game hensuu wo issai cache shinai. Egaku tabi ni SoT wo sono ba de yominaoshi, label / bar
-   he ichihoukou ni nagasu (push bind). Hoyuu suru no wa nijuu jikkou guard nado no UI latch dake de,
-   game data wa kessite motanai.
-
-3. **Leak-Free Lifecycle (4-Dai Daicho + Node-Bound Tweens)**
-   Dousei seisei shita node wa view goto no daicho (ledger) ni kiroku shi, saibyouga no boutou to
-   `_ExitTree` de `QueueFree()` shite koushichika suru:
-   `_timelineNodes` / `_rosterNodes` / `_battleNodes` / `_settlementNodes`.
-   Subete no juice tween (Flash / CountUp / Typewriter) wa taishou node he bind sare, node ga free
-   sareru to jidou shikkou suru (callback wa `IsInstanceValid` guard tsuki). Signal koudoku wa
-   `_Ready` de hari, `_ExitTree` (oyobi view kirikae) de kanzen kaijo suru.
-
-4. **Ketteironteki PRNG Seeding (Deterministic PRNG)**
-   Shinki game wa hitotsu no seed wo chuunyuu (`StartNewGame(seed)`). Onaji seed wa onaji 100-nen wo
-   saigen suru. Logic wa fukusayou nashi de gaibu seed sareru tame, kankyou ni izon shinai.
-
-5. **Kaihatsu Kenpo I (Strict ASCII)**
-   `Core/` to `UserInterface/` no shikibetsushi, component-mei, test id, hyouji text, comment wa
-   subete ASCII nomi (hi-ASCII byte zero). Hyouji you no localized label wa `Config/` no key kara kaiketsu.
+```sh
+godot --headless --path . --quit
+```
 
 ---
 
-## Jikki Kenshuu Kekka (Verification, kono kankyou de kakunin zumi)
+## プロジェクトの鉄の憲法（設計の四柱）
 
-- `dotnet build ChronicleKnights.csproj --configuration Debug` -> 0 keikoku / 0 error.
-- `dotnet test` (net8.0 wo 10.x he roll-forward) -> shippai 0 / goukaku 614 / keikoku 0.
+1. **不変 SoT（唯一の真実の源: `ChronicleGlobal`）**
+   `/root/ChronicleGlobal` という autoload シングルトンだけが、全ゲーム状態（経済・タイムライン・
+   ロスター・戦闘スナップショット・年代記ログ・英霊アーカイブ）を保持します。すべての変更はここを
+   通り、シグナル（EconomyChanged / TimelineChanged / RosterChanged / BattleChanged / PhaseChanged）で
+   観測側へ伝わります。
 
-Ryodanchou, dai-kairou wa hiraki, seiten wa oki, jikki no hikari wa hanatareta. Shutsujin no toki nari.
+2. **無状態 UI（Stateless UI）**
+   ビューはゲーム変数を一切キャッシュしません。描画のたびに SoT をその場で読み直し、ラベルや
+    HP バーへ一方通行で流し込みます（Push バインド）。保持するのは二重実行ガード等の UI ラッチのみで、
+   ゲームデータは決して持ちません。
+
+3. **完全リークフリーなライフサイクル（4大台帳 + ノード束縛 Tween）**
+   動的生成したノードはビューごとの台帳（registry）に記録し、再描画の冒頭とシーン退場（`_ExitTree`）で
+   `QueueFree()` して更地化します:
+   `_timelineNodes` / `_rosterNodes` / `_battleNodes` / `_settlementNodes`。
+   すべての演出 Tween（Flash / CountUp / Typewriter）は対象ノード自身へ束縛され、ノードが解放されると
+   自動的に失効します（コールバックは `IsInstanceValid` ガード付き）。シグナル購読は `_Ready` で張り、
+   `_ExitTree`（およびビュー切替）で完全に解除します。
+
+4. **完全決定論シード（Deterministic PRNG Seeding）**
+   新規ゲームは一つのシードを注入します（`StartNewGame(seed)`）。同じシードは同じ100年を再現します。
+   ロジックは副作用なしで外部からシードされるため、環境に依存しません。
+
+> 補足 — 開発憲法①（厳格 ASCII）: `Core/` および `UserInterface/` 層の識別子・コンポーネント名・
+> testid・表示テキスト・コメントはすべて ASCII のみ（非 ASCII バイトはゼロ）。表示用の日本語ラベルは
+> `Config/` のキーから解決します。本書のような人間向けドキュメントだけが日本語で記述されます。
+
+---
+
+## 実機検収の結果（この環境で確認済み）
+
+- `dotnet build ChronicleKnights.csproj --configuration Debug` → 0 警告 / 0 エラー。
+- `dotnet test`（net8.0 を 10.x へ roll-forward）→ 失敗 0 / 合格 614 / 警告 0。
+
+旅団長、大回廊は開き、聖典は据えられ、実機の光は放たれました。出陣の刻にございます。
