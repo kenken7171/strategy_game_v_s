@@ -77,6 +77,32 @@ public partial class HubView : Godot.Control
     /// <summary>動的生成した旅団員カードの台帳（再描画・退場で全 QueueFree）。</summary>
     private readonly List<Node> _rosterNodes = new();
 
+    // ─── ▲（デルタ）陣形のスロット土台と台帳 ─────────────────────────────
+    private HBoxContainer? _vanguardSlots;
+    private HBoxContainer? _centerSlots;
+    private HBoxContainer? _rearSlots;
+
+    /// <summary>動的生成した陣形スロットの台帳（再描画・退場で全 QueueFree）。</summary>
+    private readonly List<Node> _formationNodes = new();
+
+    // ▲ 陣形の 3 行を 3×3 盤面の 9 座標へ写す不変マップ（前衛1 / 中衛3 / 後衛5 = 9 = 盤面 9 マス）。
+    // 行＝敵意マッピング: 0:前衛=Front / 1:中衛=RearLeft / 2:後衛=RearRight（後衛の溢れ 2 枠は Front 余席へ）。
+    private static readonly SlotCoordinate[] VanguardCoordinates =
+    {
+        new(SquadRow.Front, 0),
+    };
+
+    private static readonly SlotCoordinate[] CenterCoordinates =
+    {
+        new(SquadRow.RearLeft, 0), new(SquadRow.RearLeft, 1), new(SquadRow.RearLeft, 2),
+    };
+
+    private static readonly SlotCoordinate[] RearCoordinates =
+    {
+        new(SquadRow.RearRight, 0), new(SquadRow.RearRight, 1), new(SquadRow.RearRight, 2),
+        new(SquadRow.Front, 1), new(SquadRow.Front, 2),
+    };
+
     public override void _Ready()
     {
         _chronicleGlobal = GetNodeOrNull<ChronicleGlobal>("/root/ChronicleGlobal");
@@ -92,12 +118,14 @@ public partial class HubView : Godot.Control
         RenderYear();
         RenderEconomyDirect();
         RenderRoster();
+        RenderFormation();
     }
 
     public override void _ExitTree()
     {
         UnsubscribeSignals();
         ClearRosterNodes();
+        ClearFormationNodes();
     }
 
     // ─── 不変クローム構築 ─────────────────────────────────────────────────
@@ -171,6 +199,21 @@ public partial class HubView : Godot.Control
         var prophecy = new ProphecyTimelineOverlay();
         column.AddChild(prophecy);
 
+        // ── ▲（デルタ）陣形（前衛1 / 中衛3 / 後衛5）。名簿からドラッグ＆ドロップで配置 ──
+        var formationHeader = new Label { Text = "FORMATION:" };
+        formationHeader.AddThemeFontSizeOverride("font_size", 20);
+        formationHeader.SetMeta(TestIdMetaKey, "hub-view-formation-header");
+        column.AddChild(formationHeader);
+
+        var formationPanel = new VBoxContainer();
+        formationPanel.AddThemeConstantOverride("separation", 4);
+        formationPanel.SetMeta(TestIdMetaKey, "hub-view-formation-panel");
+        column.AddChild(formationPanel);
+
+        _vanguardSlots = AddFormationRow(formationPanel, "VANGUARD", "vanguard");
+        _centerSlots   = AddFormationRow(formationPanel, "CENTER",   "center");
+        _rearSlots     = AddFormationRow(formationPanel, "REAR",     "rear");
+
         // ── 現役旅団員ロスター（投資の着弾先。GetAliveUnits から台帳方式で動的生成） ──
         var rosterHeader = new Label { Text = "Roster:" };
         rosterHeader.AddThemeFontSizeOverride("font_size", 20);
@@ -187,6 +230,30 @@ public partial class HubView : Godot.Control
         marchButton.SetMeta(TestIdMetaKey, "hub-view-march-button");
         marchButton.Pressed += OnMarchPressed;
         column.AddChild(marchButton);
+    }
+
+    /// <summary>
+    /// ▲ 陣形の 1 行（ラベル + スロット土台）を組み、スロットを生やす土台 HBox を返す。
+    /// スロット本体は RenderFormation が台帳方式で動的に張り替える（ここは静的クロームのみ）。
+    /// </summary>
+    private HBoxContainer AddFormationRow(VBoxContainer panel, string label, string slug)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 6);
+        row.SetMeta(TestIdMetaKey, $"hub-view-formation-row-{slug}");
+
+        var rowLabel = new Label { Text = label };
+        rowLabel.CustomMinimumSize = new Vector2(96, 0);
+        rowLabel.SetMeta(TestIdMetaKey, $"hub-view-formation-row-label-{slug}");
+        row.AddChild(rowLabel);
+
+        var slots = new HBoxContainer();
+        slots.AddThemeConstantOverride("separation", 4);
+        slots.SetMeta(TestIdMetaKey, $"hub-view-formation-slots-{slug}");
+        row.AddChild(slots);
+
+        panel.AddChild(row);
+        return slots;
     }
 
     /// <summary>
@@ -222,6 +289,7 @@ public partial class HubView : Godot.Control
         _chronicleGlobal.TimelineChanged  += OnTimelineChanged;
         _chronicleGlobal.EconomyChanged   += OnEconomyChanged;
         _chronicleGlobal.RosterChanged    += OnRosterChanged;
+        _chronicleGlobal.FormationChanged += OnFormationChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
     }
 
@@ -233,6 +301,7 @@ public partial class HubView : Godot.Control
             _chronicleGlobal.TimelineChanged  -= OnTimelineChanged;
             _chronicleGlobal.EconomyChanged   -= OnEconomyChanged;
             _chronicleGlobal.RosterChanged    -= OnRosterChanged;
+            _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
         }
         catch
@@ -246,8 +315,15 @@ public partial class HubView : Godot.Control
     /// <summary>経済変動: 現在表示値 → SoT の新値へロールアップ（脳汁カウントアップ）。</summary>
     private void OnEconomyChanged() => RollupEconomy();
 
-    /// <summary>ロスター変動（採用・解雇・世代交代・装備購入/強化）: 旅団員カードを台帳更地化して張り替え。</summary>
-    private void OnRosterChanged() => RenderRoster();
+    /// <summary>ロスター変動（採用・解雇・世代交代・装備購入/強化）: 旅団員カードと陣形を台帳更地化して張り替え。</summary>
+    private void OnRosterChanged()
+    {
+        RenderRoster();
+        RenderFormation(); // 占有者ラベルは現役ユニットに依存するため陣形も追従。
+    }
+
+    /// <summary>陣形変動（ドラッグ＆ドロップの配置/入替）: ▲ 陣形スロットを台帳更地化して張り替え。</summary>
+    private void OnFormationChanged() => RenderFormation();
 
     /// <summary>新規開始（世界初期化）: ロールアップせず SoT を直接 Push（更地からの再起動）。</summary>
     private void OnStateInitialized()
@@ -255,6 +331,7 @@ public partial class HubView : Godot.Control
         RenderYear();
         RenderEconomyDirect();
         RenderRoster();
+        RenderFormation();
     }
 
     // ─── 商店アクション（Core 経済 API を直接叩くだけ・無状態） ────────────
@@ -319,25 +396,40 @@ public partial class HubView : Godot.Control
     }
 
     /// <summary>
-    /// 現役旅団員を盤面の正準順（Front/RearLeft/RearRight × 列 0..2）へ先頭から最大 9 名着席させる。
-    /// CreateInitial は盤面に居る者だけを戦闘参加者に採るため、出撃前にここで盤面を満たす。
+    /// 手動の ▲ 配置を尊重しつつ、まだ盤面に居ない現役旅団員を空きスロットへ補充して出撃に備える。
+    /// CreateInitial は盤面に居る者だけを戦闘参加者に採るため、未配置者を空席へ詰めて取りこぼしを防ぐ。
+    /// （手動配置済みのスロット・ユニットは上書きしない＝ドラッグ＆ドロップの意図を破壊しない。）
     /// </summary>
     private void SeatRosterForMarch()
     {
         if (_chronicleGlobal is null) return;
 
-        var units = _chronicleGlobal.GetAliveUnits();
-        var index = 0;
+        foreach (var unit in _chronicleGlobal.GetAliveUnits())
+        {
+            if (_chronicleGlobal.CurrentFormation.Contains(unit.Id)) continue; // 既に盤面（手動配置含む）。
 
+            var empty = FindEmptyCoordinate();
+            if (empty is null) return; // 盤面満席。
+            _chronicleGlobal.PlaceUnitOnFormation(empty.Value, unit.Id);
+        }
+    }
+
+    /// <summary>盤面の正準順で最初の空きスロット座標を返す（満席なら null）。配置のたびに SoT を読み直す。</summary>
+    private SlotCoordinate? FindEmptyCoordinate()
+    {
+        if (_chronicleGlobal is null) return null;
+
+        var board = _chronicleGlobal.CurrentFormation;
         foreach (var row in FormationBoard.RowOrder)
         {
             for (var column = 0; column < FormationBoard.ColumnsPerRow; column++)
             {
-                if (index >= units.Count) return;
-                _chronicleGlobal.PlaceUnitOnFormation(new SlotCoordinate(row, column), units[index].Id);
-                index++;
+                var coord = new SlotCoordinate(row, column);
+                if (board.OccupantAt(coord) is null) return coord;
             }
         }
+
+        return null;
     }
 
     // ─── 描画（SoT をその場で読み直して Push バインド） ─────────────────────
@@ -397,10 +489,13 @@ public partial class HubView : Godot.Control
         }
     }
 
-    /// <summary>旅団員 1 名のカード（ジョブ・装備スロット・補正戦力）を組む。状態は持たない。</summary>
+    /// <summary>
+    /// 旅団員 1 名のカード（ジョブ・装備スロット・補正戦力）を組む。状態は持たない。
+    /// ドラッグ元（RosterDragCard）として、自身が表すユニット ID を ▲ 陣形スロットへ運ぶ。
+    /// </summary>
     private PanelContainer BuildRosterCard(Unit unit)
     {
-        var card = new PanelContainer();
+        var card = new RosterDragCard { UnitId = unit.Id, MouseFilter = MouseFilterEnum.Stop };
         card.SetMeta(TestIdMetaKey, $"hub-view-roster-card-{unit.Id}");
 
         var row = new HBoxContainer();
@@ -486,6 +581,88 @@ public partial class HubView : Godot.Control
         }
 
         _rosterNodes.Clear();
+    }
+
+    // ─── ▲（デルタ）陣形（SoT CurrentFormation を台帳方式で動的生成・更地化） ────
+
+    /// <summary>
+    /// SoT（CurrentFormation）をその場で読み直し、▲ 陣形スロットを台帳方式で総張り替えする。
+    /// 冒頭で必ず更地化するため、配置・入替・世代交代の再描画でスロットが累積しない。
+    /// </summary>
+    private void RenderFormation()
+    {
+        if (_vanguardSlots is null || _centerSlots is null || _rearSlots is null) return;
+
+        ClearFormationNodes(); // 何より先に更地化（古いスロットを一掃）
+
+        BuildFormationSlots(_vanguardSlots, VanguardCoordinates);
+        BuildFormationSlots(_centerSlots, CenterCoordinates);
+        BuildFormationSlots(_rearSlots, RearCoordinates);
+    }
+
+    /// <summary>指定座標群のスロットを生やし、占有者を SoT から読み Push、ドラッグ＆ドロップを結線する。</summary>
+    private void BuildFormationSlots(HBoxContainer holder, SlotCoordinate[] coordinates)
+    {
+        foreach (var coordinate in coordinates)
+        {
+            var occupantId = _chronicleGlobal?.CurrentFormation.OccupantAt(coordinate) ?? Guid.Empty;
+
+            var slot = new FormationSlotControl
+            {
+                Coordinate        = coordinate,
+                OccupantId        = occupantId,
+                PlaceRequested    = OnFormationPlace,
+                SwapRequested     = OnFormationSwap,
+                MouseFilter       = MouseFilterEnum.Stop,
+                CustomMinimumSize = new Vector2(96, 36),
+            };
+            slot.SetMeta(TestIdMetaKey, $"hub-view-formation-slot-{(int)coordinate.Row}-{coordinate.Column}");
+
+            var occupantLabel = new Label { Text = OccupantLabel(occupantId) };
+            occupantLabel.SetMeta(TestIdMetaKey, $"hub-view-formation-occupant-{(int)coordinate.Row}-{coordinate.Column}");
+            slot.AddChild(occupantLabel);
+
+            holder.AddChild(slot);
+            _formationNodes.Add(slot); // 台帳へ登録（更地化で一括解放）
+        }
+    }
+
+    /// <summary>占有者の表示名（ジョブ enum 名 ASCII）。空席は "EMPTY"。</summary>
+    private string OccupantLabel(Guid occupantId)
+    {
+        if (occupantId == Guid.Empty) return "EMPTY";
+
+        var units = _chronicleGlobal?.GetAliveUnits();
+        if (units is null) return "?";
+
+        foreach (var unit in units)
+        {
+            if (unit.Id == occupantId) return unit.Job.ToString();
+        }
+
+        return "?";
+    }
+
+    /// <summary>ドロップ確定: この座標へ配置を SoT へ要求（FormationChanged → 再描画）。</summary>
+    private void OnFormationPlace(SlotCoordinate coordinate, Guid unitId)
+        => _chronicleGlobal?.PlaceUnitOnFormation(coordinate, unitId);
+
+    /// <summary>ドロップ確定: 2 座標の入替を SoT へ要求（FormationChanged → 再描画）。</summary>
+    private void OnFormationSwap(SlotCoordinate first, SlotCoordinate second)
+        => _chronicleGlobal?.SwapFormationSlots(first, second);
+
+    /// <summary>台帳の全陣形スロットを一括解放して更地化する（再描画・退場で必ず呼ぶ）。</summary>
+    private void ClearFormationNodes()
+    {
+        foreach (var node in _formationNodes)
+        {
+            if (GodotObject.IsInstanceValid(node))
+            {
+                node.QueueFree();
+            }
+        }
+
+        _formationNodes.Clear();
     }
 
     /// <summary>整数値を ASCII の数値文字列へ整形する（CountUp の整形デリゲート）。</summary>
