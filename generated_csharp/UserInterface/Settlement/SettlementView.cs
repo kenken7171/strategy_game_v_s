@@ -28,6 +28,8 @@
 using System;
 using System.Collections.Generic;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Battle;
+using ChronicleKnights.UI;
 using Godot;
 
 namespace ChronicleKnights.UserInterface.Settlement;
@@ -44,6 +46,9 @@ public partial class SettlementView : Godot.Control
     /// <summary>決算の背景色（荘厳な紺）。</summary>
     private static readonly Color BackdropColor = new(0.05f, 0.06f, 0.09f, 1.0f);
 
+    /// <summary>年代記タイピングの 1 文字あたり秒数（荘厳な速度）。</summary>
+    private const double ChronicleCharSeconds = 0.04;
+
     /// <summary>
     /// 「ACCEPT HISTORY」押下で歴史を受領し、拠点（次なる年）へ還流することを上位ルータへ知らせる。
     /// 戦果の SoT 確定（ResolveLastHit → Finalize → ApplyBattleSpoils）は本ビューが済ませ、遷移だけを委譲する。
@@ -55,6 +60,7 @@ public partial class SettlementView : Godot.Control
     // ─── 表示ノード（SoT を流し込む先。戦果のキャッシュではない） ─────────────
     private Label? _spoilsValue;
     private VBoxContainer? _lastHitContainer;
+    private Label? _chronicleConsole;
     private Button? _acceptButton;
 
     /// <summary>動的生成したとどめカードの台帳（再描画・退場で全 QueueFree）。</summary>
@@ -122,6 +128,16 @@ public partial class SettlementView : Godot.Control
         _lastHitContainer.SetMeta(TestIdMetaKey, "settlement-view-lasthit-container");
         column.AddChild(_lastHitContainer);
 
+        // 年代記コンソール（とどめ確定後、戦場で紡がれた最新の1行を一文字ずつタイピング印字）。
+        var chronicleHeader = new Label { Text = "CHRONICLE:" };
+        chronicleHeader.SetMeta(TestIdMetaKey, "settlement-view-chronicle-header");
+        column.AddChild(chronicleHeader);
+
+        _chronicleConsole = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _chronicleConsole.CustomMinimumSize = new Vector2(420, 24);
+        _chronicleConsole.SetMeta(TestIdMetaKey, "settlement-view-chronicle-console");
+        column.AddChild(_chronicleConsole);
+
         // 歴史受領（とどめ確定まで無効。押下で次なる年の拠点へ還流）。
         _acceptButton = new Button { Text = "ACCEPT HISTORY", Disabled = true };
         _acceptButton.SetMeta(TestIdMetaKey, "settlement-view-accept-button");
@@ -135,7 +151,11 @@ public partial class SettlementView : Godot.Control
     {
         ClearSettlementNodes(); // 何より先に更地化（再描画でカードが累積しない）
 
-        if (_spoilsValue is null || _lastHitContainer is null || _acceptButton is null) return;
+        if (_spoilsValue is null || _lastHitContainer is null || _acceptButton is null
+            || _chronicleConsole is null)
+        {
+            return;
+        }
 
         // 戦果: とどめ確定前は "--"、確定後は LastBattleSpoils の獲得ポイント。
         _spoilsValue.Text = _lastHitResolved
@@ -145,7 +165,14 @@ public partial class SettlementView : Godot.Control
         // 歴史受領はとどめ確定後にのみ解禁（必須選択の強制）。
         _acceptButton.Disabled = !_lastHitResolved;
 
-        if (_lastHitResolved) return; // 確定後はとどめカードを出さない。
+        if (_lastHitResolved)
+        {
+            // 年代記: 戦場で紡がれた最新の1行を一文字ずつ荘厳にタイピング印字（ノード束縛・自動失効）。
+            JuiceDirector.Typewriter(_chronicleConsole, LatestChronicleLine(), ChronicleCharSeconds);
+            return; // 確定後はとどめカードを出さない。
+        }
+
+        _chronicleConsole.Text = string.Empty; // とどめ前は歴史を伏せる。
 
         var survivors = _chronicleGlobal?.GetAliveUnits();
         if (survivors is null) return;
@@ -164,6 +191,30 @@ public partial class SettlementView : Godot.Control
     /// <summary>確定済み統合台帳の獲得婚姻ポイント（純粋算出・常に 0 以上）。</summary>
     private int EarnedPoints()
         => _chronicleGlobal?.LastBattleSpoils.CalculateEarnedMarriagePoints() ?? 0;
+
+    /// <summary>
+    /// 年代記コンソールへ流す最新の1行を SoT から組む（すべて ASCII）。歴史ログに刻まれた最新エントリが
+    /// あればそれを、無ければ戦場で紡がれた最新の1行（年 + 決着 + 獲得）を合成する。
+    /// </summary>
+    private string LatestChronicleLine()
+    {
+        if (_chronicleGlobal is null) return "Year 0: NO CHRONICLE";
+
+        var log = _chronicleGlobal.GetChronicleLog();
+        if (log.Length > 0)
+        {
+            var entry = log[log.Length - 1];
+            return "Year " + entry.Generation + ": " + entry.Kind + " -- " + entry.Job
+                 + " LV" + entry.FromLevel + " -> " + entry.ToLevel;
+        }
+
+        // 歴史ログにまだ刻まれていなければ、直近戦闘の結末から最新の1行を合成する。
+        var year = _chronicleGlobal.CurrentTimeline?.Turn ?? 0;
+        var spoils = _chronicleGlobal.LastBattleSpoils;
+        return spoils.Outcome == BattleOutcome.BattalionVictory
+            ? "Year " + year + ": VICTORY -- ACQUIRED " + spoils.CalculateEarnedMarriagePoints() + " POINTS"
+            : "Year " + year + ": DEFEAT -- THE BRIGADE ENDURES";
+    }
 
     // ─── とどめの儀式 → 統合台帳確定 → 経済還流（一気通貫・SoT を叩くだけ） ───
 

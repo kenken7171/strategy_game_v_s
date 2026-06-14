@@ -267,6 +267,49 @@ public static class JuiceDirector
         return tween;
     }
 
+    // ─── タイピング印字（Label のテキストを一文字ずつ明かす。年代記の荘厳な記述演出） ──
+
+    /// <summary>
+    /// <see cref="Label"/> のテキストを <paramref name="fullText"/> の先頭から 1 文字ずつ明かし、
+    /// 「歴史が一文字ずつ厳かに刻まれる」タイピング演出を物質化する。表示文言は呼び出し側が所有し、
+    /// 本クラスは文字数の補間と部分文字列の反映だけに徹する（設計憲法 ①）。
+    ///
+    /// ★ リーク・ゾンビ化の構造的根絶: Tween は対象 Label 自身へバインドされる。Label が
+    ///   QueueFree（更地描画 / _ExitTree）されると Tween は Godot 側で自動失効し、TweenMethod の
+    ///   コールバックは <see cref="GodotObject.IsInstanceValid"/> ガードにより安全に no-op となる。
+    /// </summary>
+    public static Tween? Typewriter(Label? label, string? fullText, double charSeconds)
+    {
+        if (label is null || !GodotObject.IsInstanceValid(label))
+        {
+            return null;
+        }
+
+        Label target = label;
+        string text = fullText ?? string.Empty;
+
+        target.Text = string.Empty; // 始点は空（補間開始前のチラつきを防ぐ）。
+        if (text.Length == 0)
+        {
+            return null;
+        }
+
+        var tween = target.CreateTween();
+        tween.TweenMethod(
+            Callable.From<int>(count =>
+            {
+                if (GodotObject.IsInstanceValid(target))
+                {
+                    var revealed = Mathf.Clamp(count, 0, text.Length);
+                    target.Text = text.Substring(0, revealed);
+                }
+            }),
+            0,
+            text.Length,
+            charSeconds * text.Length);
+        return tween;
+    }
+
     // ─── 線の伸長（Line2D の終点を始点から目標へ補間。親→子コネクタの開通演出） ──
 
     /// <summary>
