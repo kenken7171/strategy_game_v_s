@@ -404,6 +404,57 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalPhaseChanged);
     }
 
+    /// <summary>
+    /// 「前世の完全粛清」: 全 SoT（経済・タイムライン・旅団ロスタ・英霊アーカイブ・旅団史・盤面・
+    /// 戦闘・戦果）を未初期化の更地へ戻す。ゲームオーバーや完走後にタイトルへ送還された際、前世の
+    /// メモリ（PedigreeGraph の素となる血統・TimelineEngine・ChronicleLog・PointsEconomy）を 1 バイトの
+    /// リークもなく解放する。SoT が握るのはすべて不変レコード／不変コレクションなので、フレッシュな
+    /// 空値へ再代入することで旧参照は解放（GC 回収）され、前世のデータは一切残らない。
+    ///
+    /// <see cref="Initialize"/> と異なり、新しい 1 周は始めない（<see cref="IsInitialized"/> = false へ
+    /// 戻すだけ）。新規開始はタイトルの「Start」が <see cref="StartNewGame"/> で行う。状態消滅を
+    /// 観測側へ知らせるため、データ変更シグナルのみ発火する（StateInitialized は発火しない）。
+    /// </summary>
+    public void Reset()
+    {
+        lock (_stateLock)
+        {
+            _rng                     = new Random();
+            CurrentEconomy           = PointsEconomy.CreateInitial();
+            BattalionRoster          = ImmutableList<Unit>.Empty;
+            CurrentTimeline          = null;
+            CurrentPhase             = GamePhaseFlow.InitialPhase;
+            CurrentFormation         = FormationBoard.Empty();
+            CurrentBattle            = null;
+            _battleRng               = new Random();
+            _pendingGenerationSkipYears = 0;
+            _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty;
+            _lastBattleOutcome       = BattleOutcome.Ongoing;
+            LastBattleSpoils         = BattleSpoils.Empty;
+            _chronicleLog            = ImmutableArray<ChronicleLogEntry>.Empty;
+            _ancestralArchive        = ImmutableDictionary<Guid, Unit>.Empty;
+            IsInitialized            = false; // ★ 未初期化へ回帰（前世の完全消滅）
+        }
+
+        // ロック解放後に「状態が更地化された」ことを観測側へ通知（StateInitialized は出さない）。
+        SafeEmit(SignalEconomyChanged);
+        SafeEmit(SignalTimelineChanged);
+        SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalFormationChanged);
+        SafeEmit(SignalPhaseChanged);
+    }
+
+    /// <summary>
+    /// タイトルの「Start」から呼ぶ新規開始の正本。与えられた決定論シードで PRNG を織り、その 1 本の
+    /// 乱数ストリームがこの 100 年史の運命を支配する（同一シードからは同一の歴史）。<see cref="Initialize"/>
+    /// は全 SoT を新規生成するため、それ自体が前世を完全に上書きする（粛清済みの状態から始めても二重に安全）。
+    /// </summary>
+    /// <param name="seed">この 100 年史を決定づける決定論 PRNG シード。</param>
+    public void StartNewGame(int seed)
+    {
+        Initialize(rng: new Random(seed));
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  ラストヒット解決の受領
     // ════════════════════════════════════════════════════════════════════════
