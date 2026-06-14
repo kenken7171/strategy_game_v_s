@@ -24,6 +24,7 @@
 //  略称（BDF/SDF/AB/HL）は本ファイルでも完全未使用。
 // =============================================================================
 
+using System.Collections.Generic;
 using System.Globalization;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Units;
@@ -55,6 +56,12 @@ public partial class HubView : Godot.Control
     private Label? _earnedValue;
     private Label? _spentValue;
 
+    /// <summary>現役旅団員カードを生やす土台（中身は再描画ごとに更地化して張り替える）。</summary>
+    private VBoxContainer? _rosterContainer;
+
+    /// <summary>動的生成した旅団員カードの台帳（再描画・退場で全 QueueFree）。</summary>
+    private readonly List<Node> _rosterNodes = new();
+
     public override void _Ready()
     {
         _chronicleGlobal = GetNodeOrNull<ChronicleGlobal>("/root/ChronicleGlobal");
@@ -69,11 +76,13 @@ public partial class HubView : Godot.Control
         // 初回は SoT を直接読んで Push（ロールアップなし。脳汁は以後の変動で焚く）。
         RenderYear();
         RenderEconomyDirect();
+        RenderRoster();
     }
 
     public override void _ExitTree()
     {
         UnsubscribeSignals();
+        ClearRosterNodes();
     }
 
     // ─── 不変クローム構築 ─────────────────────────────────────────────────
@@ -138,6 +147,17 @@ public partial class HubView : Godot.Control
         //    （本ビューが QueueFree されれば子として芋づる解放され _ExitTree で購読解除される）。
         var prophecy = new ProphecyTimelineOverlay();
         column.AddChild(prophecy);
+
+        // ── 現役旅団員ロスター（投資の着弾先。GetAliveUnits から台帳方式で動的生成） ──
+        var rosterHeader = new Label { Text = "Roster:" };
+        rosterHeader.AddThemeFontSizeOverride("font_size", 20);
+        rosterHeader.SetMeta(TestIdMetaKey, "hub-view-roster-header");
+        column.AddChild(rosterHeader);
+
+        _rosterContainer = new VBoxContainer();
+        _rosterContainer.AddThemeConstantOverride("separation", 6);
+        _rosterContainer.SetMeta(TestIdMetaKey, "hub-view-roster-container");
+        column.AddChild(_rosterContainer);
     }
 
     /// <summary>
@@ -172,6 +192,7 @@ public partial class HubView : Godot.Control
         if (_chronicleGlobal is null) return;
         _chronicleGlobal.TimelineChanged  += OnTimelineChanged;
         _chronicleGlobal.EconomyChanged   += OnEconomyChanged;
+        _chronicleGlobal.RosterChanged    += OnRosterChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
     }
 
@@ -182,6 +203,7 @@ public partial class HubView : Godot.Control
         {
             _chronicleGlobal.TimelineChanged  -= OnTimelineChanged;
             _chronicleGlobal.EconomyChanged   -= OnEconomyChanged;
+            _chronicleGlobal.RosterChanged    -= OnRosterChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
         }
         catch
@@ -195,11 +217,15 @@ public partial class HubView : Godot.Control
     /// <summary>経済変動: 現在表示値 → SoT の新値へロールアップ（脳汁カウントアップ）。</summary>
     private void OnEconomyChanged() => RollupEconomy();
 
+    /// <summary>ロスター変動（採用・解雇・世代交代・装備購入/強化）: 旅団員カードを台帳更地化して張り替え。</summary>
+    private void OnRosterChanged() => RenderRoster();
+
     /// <summary>新規開始（世界初期化）: ロールアップせず SoT を直接 Push（更地からの再起動）。</summary>
     private void OnStateInitialized()
     {
         RenderYear();
         RenderEconomyDirect();
+        RenderRoster();
     }
 
     // ─── 商店アクション（Core 経済 API を直接叩くだけ・無状態） ────────────
@@ -260,6 +286,67 @@ public partial class HubView : Godot.Control
         JuiceDirector.CountUp(_balanceValue, ShownValue(_balanceValue), economy.CurrentBalance, FormatValue, RollupSeconds);
         JuiceDirector.CountUp(_earnedValue,  ShownValue(_earnedValue),  economy.TotalEarned,    FormatValue, RollupSeconds);
         JuiceDirector.CountUp(_spentValue,   ShownValue(_spentValue),   economy.TotalSpent,     FormatValue, RollupSeconds);
+    }
+
+    // ─── 現役旅団員ロスター（GetAliveUnits から台帳方式で動的生成・更地化） ────
+
+    /// <summary>
+    /// SoT（GetAliveUnits）をその場で読み直し、旅団員カードを台帳方式で総張り替えする。
+    /// 冒頭で必ず更地化するため、年次進行・採用・解雇・装備変動の再描画でカードが累積しない。
+    /// </summary>
+    private void RenderRoster()
+    {
+        if (_rosterContainer is null) return;
+
+        ClearRosterNodes(); // 何より先に更地化（古いカードと購読を一掃）
+
+        var units = _chronicleGlobal?.GetAliveUnits();
+        if (units is null) return;
+
+        foreach (var unit in units)
+        {
+            var card = BuildRosterCard(unit);
+            _rosterContainer.AddChild(card);
+            _rosterNodes.Add(card); // 台帳へ登録（更地化で一括解放）
+        }
+    }
+
+    /// <summary>旅団員 1 名のカード（ジョブ・装備スロット・補正戦力）を組む。状態は持たない。</summary>
+    private PanelContainer BuildRosterCard(Unit unit)
+    {
+        var card = new PanelContainer();
+        card.SetMeta(TestIdMetaKey, $"hub-view-roster-card-{unit.Id}");
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        card.AddChild(row);
+
+        // ジョブ（役割。enum 名の ASCII。憲法①: 日本語ハードコードなし）。
+        var jobLabel = new Label { Text = unit.Job.ToString() };
+        jobLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        jobLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-card-job-{unit.Id}");
+        row.AddChild(jobLabel);
+
+        // 年齢。
+        var ageLabel = new Label { Text = "AGE " + unit.Age };
+        ageLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-card-age-{unit.Id}");
+        row.AddChild(ageLabel);
+
+        return card;
+    }
+
+    /// <summary>台帳の全旅団員カードを一括解放して更地化する（再描画・退場で必ず呼ぶ）。</summary>
+    private void ClearRosterNodes()
+    {
+        foreach (var node in _rosterNodes)
+        {
+            if (GodotObject.IsInstanceValid(node))
+            {
+                node.QueueFree();
+            }
+        }
+
+        _rosterNodes.Clear();
     }
 
     /// <summary>整数値を ASCII の数値文字列へ整形する（CountUp の整形デリゲート）。</summary>
