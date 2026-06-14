@@ -132,6 +132,12 @@ public partial class HubView : Godot.Control
         upgradeButton.SetMeta(TestIdMetaKey, "hub-view-upgrade-button");
         upgradeButton.Pressed += OnUpgradePressed;
         actionRow.AddChild(upgradeButton);
+
+        // ── 予言の赤き警告オーバーレイ（時間の矢 + 章ボス前兆。自前で無状態に SoT を読む） ──
+        //    HubView は土台へ載せるだけ。購読・再描画・リークフリー更地化はオーバーレイ自身が司る
+        //    （本ビューが QueueFree されれば子として芋づる解放され _ExitTree で購読解除される）。
+        var prophecy = new ProphecyTimelineOverlay();
+        column.AddChild(prophecy);
     }
 
     /// <summary>
