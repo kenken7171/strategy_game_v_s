@@ -8,8 +8,8 @@
 //  ★ 4 つの章（黎明 → 激動 → 斜陽 → 終焉）:
 //      黎明 Dawn       1- 25 年   難易度 100% / 環境 100%   章ボス: DawnWarden
 //      激動 Upheaval  26- 50 年   難易度 140% / 環境 110%   章ボス: UpheavalConqueror
-//      斜陽 Decline   51- 75 年   難易度 180% / 環境 120%   章ボス: DeclineTyrant
-//      終焉 Twilight  76-100 年   難易度 220% / 環境 130%   章ボス: EternalSovereign
+//      斜陽 Decline   51- 75 年   難易度 150% / 環境 110%   章ボス: DeclineTyrant（黄金均衡へ調律済）
+//      終焉 Twilight  76-100 年   難易度 170% / 環境 110%   章ボス: EternalSovereign（黄金均衡へ調律済）
 //    各章は最終年（25/50/75/100）に章ボスが君臨する。難易度・環境はいずれも整数パーセントで
 //    保持し、敵スケーリング（EnemyScalingResolver）が整数演算だけで忠実に投影できるようにする。
 //
@@ -162,8 +162,8 @@ public static class ChronicleTimelineConfig
             Id                         = EpochId.Decline,
             StartYear                  = 51,
             EndYear                    = 75,
-            DifficultyScalePercent     = 180,
-            EnvironmentModifierPercent = 120,
+            DifficultyScalePercent     = 150,
+            EnvironmentModifierPercent = 110,
             RegularArchetype           = EnemyArchetype.TrialGuardian,
             BossArchetype              = EnemyArchetype.DeclineTyrant,
             NameKey                    = "epoch-decline",
@@ -173,8 +173,8 @@ public static class ChronicleTimelineConfig
             Id                         = EpochId.Twilight,
             StartYear                  = 76,
             EndYear                    = 100,
-            DifficultyScalePercent     = 220,
-            EnvironmentModifierPercent = 130,
+            DifficultyScalePercent     = 170,
+            EnvironmentModifierPercent = 110,
             RegularArchetype           = EnemyArchetype.TrialGuardian,
             BossArchetype              = EnemyArchetype.EternalSovereign,
             NameKey                    = "epoch-twilight",
