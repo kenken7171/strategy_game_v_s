@@ -19,6 +19,7 @@
 
 using ChronicleKnights.UserInterface.Battle;
 using ChronicleKnights.UserInterface.Hub;
+using ChronicleKnights.UserInterface.Settlement;
 using ChronicleKnights.UserInterface.Title;
 using Godot;
 
@@ -74,11 +75,19 @@ public partial class UserInterfaceRoot : Godot.Control
         battle.BattleConcluded += OnBattleConcluded; // 切替後に購読（自己購読の取り違え防止）
     }
 
-    /// <summary>
-    /// 戦場の決着後の前進要求を受け、拠点へ戻す（戦果は既に経済へ還流済み。当面は拠点が次画面の座を担い、
-    /// 将来 SettlementView が割って入る継ぎ目）。
-    /// </summary>
-    private void OnBattleConcluded() => ShowHub();
+    /// <summary>戦場の決着後の前進要求を受け、決算画面（割り込み）へ切り替える。</summary>
+    private void OnBattleConcluded() => ShowSettlement();
+
+    /// <summary>決算画面を前面へ立て、その「ACCEPT HISTORY」還流要求を購読する（戦場は更地化で解放）。</summary>
+    private void ShowSettlement()
+    {
+        var settlement = new SettlementView();
+        SwapTo(settlement);                                 // 旧ビューを更地化してから前面へ
+        settlement.SettlementAccepted += OnSettlementAccepted; // 切替後に購読（自己購読の取り違え防止）
+    }
+
+    /// <summary>決算の「ACCEPT HISTORY」還流要求を受け、拠点（次なる年）へ戻す（100 年大回廊の還流）。</summary>
+    private void OnSettlementAccepted() => ShowHub();
 
     /// <summary>
     /// 旧ビューを購読解除 + QueueFree して更地化し、新ビューをフルレクトで前面へ追加する
@@ -99,6 +108,10 @@ public partial class UserInterfaceRoot : Godot.Control
             else if (_currentView is BattleView outgoingBattle)
             {
                 outgoingBattle.BattleConcluded -= OnBattleConcluded; // 退場戦場の購読解除
+            }
+            else if (_currentView is SettlementView outgoingSettlement)
+            {
+                outgoingSettlement.SettlementAccepted -= OnSettlementAccepted; // 退場決算の購読解除
             }
 
             _currentView.QueueFree();

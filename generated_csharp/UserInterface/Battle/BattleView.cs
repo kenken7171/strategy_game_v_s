@@ -49,9 +49,9 @@ public partial class BattleView : Godot.Control
     private const double FlashSeconds = 0.6;
 
     /// <summary>
-    /// 戦闘決着後「PROCEED」押下で、戦果還流を終え次画面（当面は拠点、将来は決算）へ進むことを
-    /// 上位ルータへ知らせる。戦果の SoT 確定（EndBattle → Finalize → ApplyBattleSpoils）は本ビューが
-    /// 済ませ、遷移だけを購読側へ委譲する。
+    /// 戦闘決着後「PROCEED」押下で、結末をロスタへ書き戻し（EndBattle）た後、決算画面へ進むことを
+    /// 上位ルータへ知らせる。とどめ → 統合台帳確定 → 経済還流の三段は決算画面（SettlementView）が担い、
+    /// 本ビューは EndBattle と遷移委譲だけに徹する。
     /// </summary>
     public event Action? BattleConcluded;
 
@@ -202,9 +202,10 @@ public partial class BattleView : Godot.Control
     }
 
     /// <summary>
-    /// 決着後の前進（PROCEED）。とどめの戦果を SoT へ確定して経済へ還流し、次画面へバトンを渡す。
-    /// EndBattle（ロスタ書戻し）→ FinalizeBattleSpoils（統合台帳確定）→ ApplyBattleSpoils（経済還流）の
-    /// 一気通貫を SoT 単一窓口へ集約し、遷移だけを BattleConcluded で上位へ委譲する。
+    /// 決着後の前進（PROCEED）。結末をロスタ本体へ書き戻し（EndBattle）、決算画面へバトンを渡す。
+    /// とどめ（ResolveLastHit）→ 統合台帳確定（FinalizeBattleSpoils）→ 経済還流（ApplyBattleSpoils）の
+    /// 三段は、とどめの必須選択を伴うため決算画面（SettlementView）へ委譲する。本ビューは EndBattle だけを
+    /// 済ませ（開戦時の参加者基準点は Finalize まで温存される）、遷移を BattleConcluded で上位へ委譲する。
     /// </summary>
     private void OnConcludePressed()
     {
@@ -213,11 +214,9 @@ public partial class BattleView : Godot.Control
         var battle = _chronicleGlobal.CurrentBattle;
         if (battle is null || !battle.IsConcluded) return; // 決着前は no-op。
 
-        _chronicleGlobal.EndBattle();                          // 結末をロスタ本体へ書き戻す。
-        var spoils = _chronicleGlobal.FinalizeBattleSpoils();  // 統合台帳（ターン成長＋とどめ）を確定。
-        _chronicleGlobal.ApplyBattleSpoils(spoils);            // 婚姻ポイントを経済へ還流（EconomyChanged）。
+        _chronicleGlobal.EndBattle(); // 結末をロスタ本体へ書き戻す（決算はまだ確定しない・遅延算出）。
 
-        BattleConcluded?.Invoke(); // ルータへ「次画面を立てよ」（当面は拠点、将来は決算）。
+        BattleConcluded?.Invoke(); // ルータへ「決算画面を立てよ」。
     }
 
     // ─── 更地化（台帳の全味方 HP バー行を一括解放） ──────────────────────────
