@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
+using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
@@ -58,6 +59,9 @@ public partial class HubView : Godot.Control
 
     /// <summary>経済ロールアップ（脳汁カウントアップ）の秒数。</summary>
     private const double RollupSeconds = 0.5;
+
+    /// <summary>GamePhase 一巡の長さ（Chronicle/Guild/Formation/Battle）。Battle 前進ループの安全上限。</summary>
+    private const int GamePhaseCycleLength = 4;
 
     private ChronicleGlobal? _chronicleGlobal;
 
@@ -281,12 +285,29 @@ public partial class HubView : Godot.Control
     {
         if (_chronicleGlobal is null) return;
 
-        SeatRosterForMarch(); // 専用編成フェーズが無い間の自動着席（現役筆頭から 9 マスへ）。
+        SeatRosterForMarch();    // 専用編成フェーズが無い間の自動着席（現役筆頭から 9 マスへ）。
+        AdvancePhaseToBattle();  // GamePhase 機械を Battle まで前進（決算の年送りが Battle→Chronicle で成立する前提）。
 
         var enemy = _chronicleGlobal.CreateCurrentYearEnemy(); // 現在年の章ボス/通常敵（正本ファクトリ）。
         _chronicleGlobal.StartBattle(enemy);                    // CurrentBattle を起こし BattleChanged を発火。
 
         BattleRequested?.Invoke(); // ルータへ「戦場を立てよ」（遷移は購読側に委譲）。
+    }
+
+    /// <summary>
+    /// GamePhase 機械を Chronicle → Guild → Formation → Battle まで隣接前進させる（TryAdvanceTo は
+    /// フェーズを進めるだけで年送り＝世代交代は伴わない）。これにより決算の AdvancePhase が
+    /// Battle → Chronicle の年送りを正しく成立させられる。既に Battle なら何もしない（多重前進ガード）。
+    /// </summary>
+    private void AdvancePhaseToBattle()
+    {
+        if (_chronicleGlobal is null) return;
+
+        for (var guard = 0; guard < GamePhaseCycleLength; guard++)
+        {
+            if (_chronicleGlobal.CurrentPhase == GamePhase.Battle) return;
+            if (!_chronicleGlobal.TryAdvanceTo(GamePhaseFlow.Next(_chronicleGlobal.CurrentPhase))) return;
+        }
     }
 
     /// <summary>

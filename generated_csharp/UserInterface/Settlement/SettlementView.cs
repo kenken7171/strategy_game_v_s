@@ -9,11 +9,11 @@
 //    （ChronicleGlobal.LastBattleSpoils / GetAliveUnits）から「その場で」読み直す。唯一の保持は
 //    とどめの二重解決を防ぐ UI 相互作用ラッチ（_lastHitResolved。TitleView._started と同種）。
 //
-//  ★ 三段の決算（戦闘 → とどめ → 統合台帳 → 経済還流）:
+//  ★ 三段の決算（戦闘 → とどめ → 統合台帳 → 年送りで経済還流）:
 //    戦闘決着（EndBattle 済み）を受けて生存者から「とどめを取った 1 名」を必須選択させ、
-//    ResolveLastHit → FinalizeBattleSpoils（統合台帳確定）→ ApplyBattleSpoils（婚姻ポイントを
-//    PointsEconomy へ非破壊還流）を一気通貫で執り行う。獲得ポイントは確定済み LastBattleSpoils から
-//    settlement-view-spoils-value へ一方通行で Push する。
+//    ResolveLastHit → FinalizeBattleSpoils（統合台帳確定・表示用）を執り行う。獲得ポイントは確定済み
+//    LastBattleSpoils から settlement-view-spoils-value へ一方通行で Push する。経済還流は ACCEPT 時の
+//    AdvancePhase（Battle→Chronicle の年送り）が ApplyBattleSpoils として一括で担う（二重加算を構造的に排除）。
 //
 //  ★ リークフリー（_settlementNodes 台帳方式・既存実証済みの規律）:
 //    動的生成したとどめカードはすべて _settlementNodes 台帳へ記録し、再描画の冒頭と退場（_ExitTree）で
@@ -51,7 +51,8 @@ public partial class SettlementView : Godot.Control
 
     /// <summary>
     /// 「ACCEPT HISTORY」押下で歴史を受領し、拠点（次なる年）へ還流することを上位ルータへ知らせる。
-    /// 戦果の SoT 確定（ResolveLastHit → Finalize → ApplyBattleSpoils）は本ビューが済ませ、遷移だけを委譲する。
+    /// とどめの確定（ResolveLastHit → FinalizeBattleSpoils）と年送り（AdvancePhase による経済還流 +
+    /// 世代交代）は本ビューが済ませ、遷移だけを委譲する。
     /// </summary>
     public event Action? SettlementAccepted;
 
@@ -222,16 +223,24 @@ public partial class SettlementView : Godot.Control
     {
         if (_chronicleGlobal is null || _lastHitResolved) return;
 
-        _chronicleGlobal.ResolveLastHit(unitId);              // とどめの成長/破壊/強奪を刻む。
-        var spoils = _chronicleGlobal.FinalizeBattleSpoils(); // 統合台帳（ターン成長 ＋ とどめ）を確定。
-        _chronicleGlobal.ApplyBattleSpoils(spoils);           // 婚姻ポイントを経済へ非破壊還流（EconomyChanged）。
+        _chronicleGlobal.ResolveLastHit(unitId);     // とどめの成長/破壊/強奪を刻む。
+        _chronicleGlobal.FinalizeBattleSpoils();     // 統合台帳（ターン成長 ＋ とどめ）を確定（表示用）。
+        // ★ 経済還流（ApplyBattleSpoils）は ACCEPT の AdvancePhase（Battle→Chronicle）が一括で担う。
+        //   ここで還流すると年送りと二重加算になるため、確定（表示）だけに留める。
 
         _lastHitResolved = true;
         RenderAll(); // 戦果表示 + ACCEPT 解禁 + とどめカード撤去。
     }
 
-    /// <summary>歴史を受領し、拠点（次なる年）へ還流する（遷移は購読側へ委譲）。</summary>
-    private void OnAcceptPressed() => SettlementAccepted?.Invoke();
+    /// <summary>
+    /// 歴史を受領し、戦果を跨いで次なる年へ送ってから拠点へ還流する。AdvancePhase（Battle→Chronicle）が
+    /// 戦果の経済還流と世代交代（加齢・寿命・予言再生成・年代記追記）を一括で執り行い、然る後に遷移を委譲する。
+    /// </summary>
+    private void OnAcceptPressed()
+    {
+        _chronicleGlobal?.AdvancePhase(); // Battle→Chronicle: 戦果還流 + 年送り（次なる年へ）。
+        SettlementAccepted?.Invoke();     // ルータへ「拠点（次なる年）を立てよ」。
+    }
 
     // ─── 更地化（台帳の全とどめカードを一括解放） ────────────────────────────
 
