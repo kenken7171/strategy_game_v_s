@@ -24,9 +24,12 @@
 //  略称（BDF/SDF/AB/HL）は本ファイルでも完全未使用。
 // =============================================================================
 
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 using ChronicleKnights.UI;
 using Godot;
@@ -327,12 +330,55 @@ public partial class HubView : Godot.Control
         jobLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-card-job-{unit.Id}");
         row.AddChild(jobLabel);
 
+        // 進化兵装スロット（EquippedItemId から逆算。BUY/UPGRADE 成功 → RosterChanged → 再描画で自動更新）。
+        var equipLabel = new Label { Text = FormatEquipSlot(unit) };
+        equipLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-equip-slot-{unit.Id}");
+        row.AddChild(equipLabel);
+
+        // 装備補正後の現役戦力値（BattleManager の兵装ステータス補正と同式。投資の脳汁フィードバック）。
+        var powerLabel = new Label { Text = "POWER: " + ComputeUnitPower(unit) };
+        powerLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-power-{unit.Id}");
+        row.AddChild(powerLabel);
+
         // 年齢。
         var ageLabel = new Label { Text = "AGE " + unit.Age };
         ageLabel.SetMeta(TestIdMetaKey, $"hub-view-roster-card-age-{unit.Id}");
         row.AddChild(ageLabel);
 
         return card;
+    }
+
+    /// <summary>
+    /// 進化兵装スロットの表示文字列を組む。EquippedItemId（= MainEquipment）から逆算し、
+    /// 装備があれば "EQUIP: {item} LV{level}"、無ければ "EQUIP: NONE"（すべて ASCII）。
+    /// UPGRADE 成功で MainEquipment.Level が増えると、再描画でこの表示が Lv1 → Lv2 と自動更新される。
+    /// </summary>
+    private static string FormatEquipSlot(Unit unit)
+    {
+        var equipment = unit.MainEquipment;
+        return equipment is null
+            ? "EQUIP: NONE"
+            : "EQUIP: " + equipment.ItemId + " LV" + equipment.Level;
+    }
+
+    /// <summary>
+    /// 装備補正後の現役戦力値（Power）を、Core の単一 SoT 式をそのまま再利用して算出する。
+    /// 基礎戦力 = JobMaster の職ステータス（攻撃は配置非依存ゆえ前後の高い方／分隊守護／速度）、
+    /// 装備補正 = BattleManager.Equipment{Attack,Defense,Speed}Bonus（ResolveOffenseDamage 等と同式）。
+    /// 装備のレベルが上がると装備補正が増えるため、UPGRADE 成功で Power が底上げされる。
+    /// </summary>
+    private static int ComputeUnitPower(Unit unit)
+    {
+        var def = JobMaster.Find(unit.Job);
+        var baseAttack  = def is null ? 0 : Math.Max(def.Stats.FrontAttack, def.Stats.RearAttack);
+        var baseDefense = def is null ? 0 : def.Stats.SquadDefense;
+        var baseSpeed   = def is null ? 0 : def.Stats.Speed;
+
+        var equipmentPower = BattleManager.EquipmentAttackBonus(unit)
+                           + BattleManager.EquipmentDefenseBonus(unit)
+                           + BattleManager.EquipmentSpeedBonus(unit);
+
+        return baseAttack + baseDefense + baseSpeed + equipmentPower;
     }
 
     /// <summary>台帳の全旅団員カードを一括解放して更地化する（再描画・退場で必ず呼ぶ）。</summary>

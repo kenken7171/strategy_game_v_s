@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 using Xunit;
 
@@ -71,5 +72,44 @@ public class RosterCardContractTests
         var roster = new List<Unit>();
 
         Assert.Empty(roster.Where(unit => unit.IsAlive));
+    }
+
+    // ─── 進化兵装スロット & 装備補正 POWER（BattleManager 単一 SoT 式の再利用） ──
+
+    [Fact]
+    public void EquipSlot_ReflectsEquippedItemAndLevel()
+    {
+        var bare = MakeUnit();
+        Assert.Null(bare.EquippedItemId); // EQUIP: NONE
+
+        var equipped = bare.WithEquipment(new Equipment
+        {
+            Id     = Guid.NewGuid(),
+            ItemId = ItemId.SwordKnight,
+            Level  = 2,
+        });
+
+        Assert.Equal(ItemId.SwordKnight, equipped.EquippedItemId); // EQUIP: SwordKnight LV2
+        Assert.Equal(2, equipped.MainEquipment!.Level);
+    }
+
+    [Fact]
+    public void UnitPower_EquipmentCorrection_RisesWhenUpgraded()
+    {
+        var bare = MakeUnit(job: JobId.IronWallKnight);
+        var lv1 = bare.WithEquipment(new Equipment { Id = Guid.NewGuid(), ItemId = ItemId.SwordKnight, Level = 1 });
+        var lv3 = bare.WithEquipment(new Equipment { Id = Guid.NewGuid(), ItemId = ItemId.SwordKnight, Level = 3 });
+
+        // POWER の装備補正分 = BattleManager 単一 SoT 式の合算（カードと同式）。
+        var equipPowerLv1 = BattleManager.EquipmentAttackBonus(lv1)
+                          + BattleManager.EquipmentDefenseBonus(lv1)
+                          + BattleManager.EquipmentSpeedBonus(lv1);
+        var equipPowerLv3 = BattleManager.EquipmentAttackBonus(lv3)
+                          + BattleManager.EquipmentDefenseBonus(lv3)
+                          + BattleManager.EquipmentSpeedBonus(lv3);
+
+        Assert.Equal(4, equipPowerLv1); // 聖剣 Lv1: ATK3 + DEF1 + SPD0
+        Assert.Equal(9, equipPowerLv3); // 聖剣 Lv3: ATK6 + DEF3 + SPD0
+        Assert.True(equipPowerLv3 > equipPowerLv1); // UPGRADE で POWER が底上げされる
     }
 }
