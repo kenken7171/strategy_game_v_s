@@ -19,11 +19,13 @@
 //  略称（BDF/SDF/AB/HL）は本ファイルでも完全未使用。
 // =============================================================================
 
+using System;
 using System.Collections.Generic;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Units;
+using ChronicleKnights.UI;
 using Godot;
 
 namespace ChronicleKnights.UserInterface.Battle;
@@ -40,13 +42,29 @@ public partial class BattleView : Godot.Control
     /// <summary>戦場の背景色（血と硝煙の暗赤）。</summary>
     private static readonly Color BackdropColor = new(0.10f, 0.05f, 0.06f, 1.0f);
 
+    /// <summary>敵意の赤枠脈動・とどめの緋色（≒ Colors.Crimson）。</summary>
+    private static readonly Color OmenColor = new(0.86f, 0.08f, 0.24f);
+
+    /// <summary>赤枠フラッシュの脈動秒数。</summary>
+    private const double FlashSeconds = 0.6;
+
+    /// <summary>
+    /// 戦闘決着後「PROCEED」押下で、戦果還流を終え次画面（当面は拠点、将来は決算）へ進むことを
+    /// 上位ルータへ知らせる。戦果の SoT 確定（EndBattle → Finalize → ApplyBattleSpoils）は本ビューが
+    /// 済ませ、遷移だけを購読側へ委譲する。
+    /// </summary>
+    public event Action? BattleConcluded;
+
     private ChronicleGlobal? _chronicleGlobal;
 
     // ─── 表示ノード（SoT を流し込む先。戦闘状態のキャッシュではない） ─────────
     private Label? _turnLabel;
+    private Label? _intentBanner;
     private ProgressBar? _enemyHpBar;
     private Label? _enemyHpLabel;
     private VBoxContainer? _allyContainer;
+    private Button? _resolveButton;
+    private Button? _concludeButton;
 
     /// <summary>動的生成した味方 HP バー行の台帳（再描画・退場で全 QueueFree）。</summary>
     private readonly List<Node> _battleNodes = new();
@@ -101,6 +119,11 @@ public partial class BattleView : Godot.Control
         _turnLabel.SetMeta(TestIdMetaKey, "battle-view-turn");
         column.AddChild(_turnLabel);
 
+        // ── 敵意の予告バナー（次手 / 決着の緋色警告） ────────────────────────
+        _intentBanner = new Label { Text = "INTENT: -" };
+        _intentBanner.SetMeta(TestIdMetaKey, "battle-view-intent-banner");
+        column.AddChild(_intentBanner);
+
         // ── 敵 HP セクション ──────────────────────────────────────────────
         var enemyHeader = new Label { Text = "ENEMY HP:" };
         enemyHeader.SetMeta(TestIdMetaKey, "battle-view-enemy-header");
@@ -131,10 +154,16 @@ public partial class BattleView : Godot.Control
         column.AddChild(_allyContainer);
 
         // ── ターン解決（SoT の ResolveBattleTurn を叩くだけ。再描画は BattleChanged 任せ） ──
-        var resolveButton = new Button { Text = "RESOLVE TURN" };
-        resolveButton.SetMeta(TestIdMetaKey, "battle-view-resolve-button");
-        resolveButton.Pressed += OnResolvePressed;
-        column.AddChild(resolveButton);
+        _resolveButton = new Button { Text = "RESOLVE TURN" };
+        _resolveButton.SetMeta(TestIdMetaKey, "battle-view-resolve-button");
+        _resolveButton.Pressed += OnResolvePressed;
+        column.AddChild(_resolveButton);
+
+        // ── 決着後の前進（とどめ → 戦果還流 → 次画面）。決着するまでは無効 ──────
+        _concludeButton = new Button { Text = "PROCEED", Disabled = true };
+        _concludeButton.SetMeta(TestIdMetaKey, "battle-view-conclude-button");
+        _concludeButton.Pressed += OnConcludePressed;
+        column.AddChild(_concludeButton);
     }
 
     // ─── シグナル購読 / 解除（戦闘進行に追従して無状態に描き直す） ────────────
@@ -172,6 +201,25 @@ public partial class BattleView : Godot.Control
         _chronicleGlobal.ResolveBattleTurn(null); // 無作戦で 1 ターン解決 → BattleChanged → 再描画。
     }
 
+    /// <summary>
+    /// 決着後の前進（PROCEED）。とどめの戦果を SoT へ確定して経済へ還流し、次画面へバトンを渡す。
+    /// EndBattle（ロスタ書戻し）→ FinalizeBattleSpoils（統合台帳確定）→ ApplyBattleSpoils（経済還流）の
+    /// 一気通貫を SoT 単一窓口へ集約し、遷移だけを BattleConcluded で上位へ委譲する。
+    /// </summary>
+    private void OnConcludePressed()
+    {
+        if (_chronicleGlobal is null) return;
+
+        var battle = _chronicleGlobal.CurrentBattle;
+        if (battle is null || !battle.IsConcluded) return; // 決着前は no-op。
+
+        _chronicleGlobal.EndBattle();                          // 結末をロスタ本体へ書き戻す。
+        var spoils = _chronicleGlobal.FinalizeBattleSpoils();  // 統合台帳（ターン成長＋とどめ）を確定。
+        _chronicleGlobal.ApplyBattleSpoils(spoils);            // 婚姻ポイントを経済へ還流（EconomyChanged）。
+
+        BattleConcluded?.Invoke(); // ルータへ「次画面を立てよ」（当面は拠点、将来は決算）。
+    }
+
     // ─── 更地化（台帳の全味方 HP バー行を一括解放） ──────────────────────────
 
     private void ClearBattleNodes()
@@ -193,7 +241,8 @@ public partial class BattleView : Godot.Control
     {
         ClearBattleNodes(); // 何より先に更地化（再描画で味方行が累積しない）
 
-        if (_turnLabel is null || _enemyHpBar is null || _enemyHpLabel is null || _allyContainer is null)
+        if (_turnLabel is null || _intentBanner is null || _enemyHpBar is null || _enemyHpLabel is null
+            || _allyContainer is null || _resolveButton is null || _concludeButton is null)
         {
             return;
         }
@@ -201,10 +250,13 @@ public partial class BattleView : Godot.Control
         var battle = _chronicleGlobal?.CurrentBattle;
         if (battle is null)
         {
-            // 非戦闘状態（開戦前・終戦後）。空のプレースホルダへ。
-            _turnLabel.Text   = "TURN: -";
-            _enemyHpBar.Value  = 0;
-            _enemyHpLabel.Text = "HP: 0 / 0";
+            // 非戦闘状態（開戦前・終戦後）。空のプレースホルダ + 行動ボタン全無効。
+            _turnLabel.Text          = "TURN: -";
+            _intentBanner.Text       = "INTENT: -";
+            _enemyHpBar.Value        = 0;
+            _enemyHpLabel.Text       = "HP: 0 / 0";
+            _resolveButton.Disabled  = true;
+            _concludeButton.Disabled = true;
             return;
         }
 
@@ -216,15 +268,42 @@ public partial class BattleView : Godot.Control
         _enemyHpBar.Value    = enemy.Hp;
         _enemyHpLabel.Text   = "HP: " + enemy.Hp + " / " + enemy.MaxHp;
 
-        // 味方 HP バー（盤面の各参加者を動的生成して台帳へ）。
+        var concluded = battle.IsConcluded;
+        var intent    = battle.NextEnemyIntent;
+
+        // 味方 HP バー（盤面の各参加者を動的生成。敵意の対象行に居る者は赤枠で脈動警告）。
         foreach (var combatant in battle.Combatants)
         {
-            BuildAllyHpBar(combatant.Value, battle);
+            var unit     = combatant.Value;
+            var unitRow  = battle.Board.CoordinateOf(unit.Id)?.Row;
+            var targeted = !concluded && unitRow is { } resolvedRow && intent.Targets(resolvedRow);
+            BuildAllyHpBar(unit, battle, targeted);
+        }
+
+        // 敵意バナー / 決着セレモニーと、行動ボタンの活殺。
+        if (concluded)
+        {
+            var victory = battle.Outcome == BattleOutcome.BattalionVictory;
+            _intentBanner.Text       = victory ? "CRITICAL -- VICTORY" : "DEFEAT";
+            JuiceDirector.Flash(_intentBanner, OmenColor, FlashSeconds); // とどめの緋色脈動。
+            _resolveButton.Disabled  = true;
+            _concludeButton.Disabled = false;
+        }
+        else
+        {
+            _intentBanner.Text       = "INTENT: " + intent.Kind + " DMG " + intent.DamagePerUnit;
+            JuiceDirector.Flash(_intentBanner, OmenColor, FlashSeconds); // 敵の次手が迫る緋色警告。
+            _resolveButton.Disabled  = false;
+            _concludeButton.Disabled = true;
         }
     }
 
-    /// <summary>味方 1 名の HP バー行（ジョブ + HP バー + HP 数値）を組み、台帳へ登録する。</summary>
-    private void BuildAllyHpBar(Unit unit, BattleSnapshot battle)
+    /// <summary>
+    /// 味方 1 名の HP バー行（ジョブ + HP バー + HP 数値）を組み、台帳へ登録する。
+    /// 敵意の対象行に居る（targeted）場合は、行ノードを緋色フラッシュで赤枠脈動させる
+    /// （Tween は行ノードへ束縛され、次の再描画で QueueFree される際に自動失効する）。
+    /// </summary>
+    private void BuildAllyHpBar(Unit unit, BattleSnapshot battle, bool targeted)
     {
         if (_allyContainer is null) return;
 
@@ -232,14 +311,14 @@ public partial class BattleView : Godot.Control
         // 最大 HP は職ステータスの SoT（JobMaster）から。BattleResolver.ResolveMaxHitPoints と同源。
         var maxHp = JobMaster.Find(unit.Job)?.Stats.MaxHp ?? 0;
 
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 8);
-        row.SetMeta(TestIdMetaKey, $"battle-view-ally-row-{unit.Id}");
+        var rowBox = new HBoxContainer();
+        rowBox.AddThemeConstantOverride("separation", 8);
+        rowBox.SetMeta(TestIdMetaKey, $"battle-view-ally-row-{unit.Id}");
 
         var jobLabel = new Label { Text = unit.Job.ToString() };
         jobLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         jobLabel.SetMeta(TestIdMetaKey, $"battle-view-ally-job-{unit.Id}");
-        row.AddChild(jobLabel);
+        rowBox.AddChild(jobLabel);
 
         var hpBar = new ProgressBar
         {
@@ -250,13 +329,18 @@ public partial class BattleView : Godot.Control
             CustomMinimumSize = new Vector2(200, 18),
         };
         hpBar.SetMeta(TestIdMetaKey, $"battle-view-hp-bar-{unit.Id}");
-        row.AddChild(hpBar);
+        rowBox.AddChild(hpBar);
 
         var hpText = new Label { Text = "HP: " + currentHp + " / " + maxHp };
         hpText.SetMeta(TestIdMetaKey, $"battle-view-hp-text-{unit.Id}");
-        row.AddChild(hpText);
+        rowBox.AddChild(hpText);
 
-        _allyContainer.AddChild(row);
-        _battleNodes.Add(row); // 台帳へ登録（更地化で一括解放）
+        _allyContainer.AddChild(rowBox);
+        _battleNodes.Add(rowBox); // 台帳へ登録（更地化で一括解放）
+
+        if (targeted)
+        {
+            JuiceDirector.Flash(rowBox, OmenColor, FlashSeconds); // 敵意の対象行＝赤枠脈動。
+        }
     }
 }

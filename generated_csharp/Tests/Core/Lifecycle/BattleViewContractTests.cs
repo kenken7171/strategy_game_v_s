@@ -18,6 +18,7 @@
 // =============================================================================
 
 using System;
+using System.Collections.Immutable;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
@@ -86,5 +87,42 @@ public class BattleViewContractTests
         Assert.Equal(0, snapshot.TurnNumber);
         Assert.False(snapshot.IsConcluded);
         Assert.Equal(BattleOutcome.Ongoing, snapshot.Outcome);
+    }
+
+    // ─── 敵意の赤枠脈動 & 戦果還流の契約 ─────────────────────────────────────
+
+    [Fact]
+    public void IntentRedFrame_TargetsOnlyUnitsInIntentRows()
+    {
+        var frontId = Guid.NewGuid();
+        var rearId  = Guid.NewGuid();
+        var board = FormationBoard.Empty()
+            .WithUnitAt(new SlotCoordinate(SquadRow.Front, 0), frontId)
+            .WithUnitAt(new SlotCoordinate(SquadRow.RearLeft, 0), rearId);
+
+        // 敵意が FRONT 行だけを狙う想定（BattleView の赤枠判定と同式: 行 → Targets(row)）。
+        var intent = new AttackIntent
+        {
+            Kind          = AttackPatternKind.SingleStrike,
+            SkillNameKey  = "skill-single-strike",
+            TargetRows    = ImmutableArray.Create(SquadRow.Front),
+            DamagePerUnit = 10,
+        };
+
+        var frontRow = board.CoordinateOf(frontId)?.Row;
+        var rearRow  = board.CoordinateOf(rearId)?.Row;
+
+        Assert.True(frontRow is { } fr && intent.Targets(fr));  // FRONT 行 = 赤枠脈動
+        Assert.False(rearRow is { } rr && intent.Targets(rr));  // REAR-L 行 = 対象外
+    }
+
+    [Fact]
+    public void EmptySpoils_EarnZero_NoReflowIntoEconomy()
+    {
+        // 敗北・戦果なしの還流は no-op（ApplyBattleSpoils が 0 を返し経済は不変）。
+        var spoils = BattleSpoils.Empty;
+
+        Assert.False(spoils.HasAnySpoils);
+        Assert.Equal(0, spoils.CalculateEarnedMarriagePoints());
     }
 }

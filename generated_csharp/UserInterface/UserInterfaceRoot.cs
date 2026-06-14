@@ -66,8 +66,19 @@ public partial class UserInterfaceRoot : Godot.Control
     /// <summary>拠点の「MARCH」出撃要求を受け、戦場へ切り替える。</summary>
     private void OnBattleRequested() => ShowBattle();
 
-    /// <summary>戦場を前面へ立てる（拠点は SwapTo の更地化で購読解除 + 解放される）。</summary>
-    private void ShowBattle() => SwapTo(new BattleView());
+    /// <summary>戦場を前面へ立て、その決着後の前進要求を購読する（拠点は更地化で解放）。</summary>
+    private void ShowBattle()
+    {
+        var battle = new BattleView();
+        SwapTo(battle);                              // 旧ビューを更地化してから前面へ
+        battle.BattleConcluded += OnBattleConcluded; // 切替後に購読（自己購読の取り違え防止）
+    }
+
+    /// <summary>
+    /// 戦場の決着後の前進要求を受け、拠点へ戻す（戦果は既に経済へ還流済み。当面は拠点が次画面の座を担い、
+    /// 将来 SettlementView が割って入る継ぎ目）。
+    /// </summary>
+    private void OnBattleConcluded() => ShowHub();
 
     /// <summary>
     /// 旧ビューを購読解除 + QueueFree して更地化し、新ビューをフルレクトで前面へ追加する
@@ -84,6 +95,10 @@ public partial class UserInterfaceRoot : Godot.Control
             else if (_currentView is HubView outgoingHub)
             {
                 outgoingHub.BattleRequested -= OnBattleRequested; // 退場拠点の購読解除
+            }
+            else if (_currentView is BattleView outgoingBattle)
+            {
+                outgoingBattle.BattleConcluded -= OnBattleConcluded; // 退場戦場の購読解除
             }
 
             _currentView.QueueFree();
