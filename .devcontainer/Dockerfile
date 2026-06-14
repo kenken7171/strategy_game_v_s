@@ -60,7 +60,12 @@ RUN set -eux; \
     wget -q "${GODOT_URL}" -O /tmp/godot.zip; \
     unzip -q /tmp/godot.zip -d /opt; \
     rm /tmp/godot.zip; \
-    ln -s "/opt/${GODOT_PKG}/${GODOT_PKG}" /usr/local/bin/godot; \
+    # The mono zip names the executable with a dot before the arch (e.g. ...mono_linux.x86_64) \
+    # while its folder uses an underscore; discover the real binary instead of guessing. \
+    GODOT_BIN="$(find /opt -maxdepth 2 -type f -name 'Godot_v*mono*' ! -name '*.sh' -print | head -n 1)"; \
+    test -n "${GODOT_BIN}"; \
+    chmod +x "${GODOT_BIN}"; \
+    ln -sf "${GODOT_BIN}" /usr/local/bin/godot; \
     godot --version
 
 # Default workdir is overridden by the Dev Container mount; kept for direct `docker run`.
