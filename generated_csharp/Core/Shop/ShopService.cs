@@ -99,12 +99,15 @@ public static class ShopService
     /// <summary>新品 Lv1 装備 1 個の購入コスト (pt)。固定。</summary>
     public const int BuyCost = 5;
 
-    /// <summary>装備強化コストの基準係数。実コストは現レベルに比例する。</summary>
-    public const int BaseUpgradeCost = 3;
+    /// <summary>
+    /// 装備強化コストの基準係数。実コストは現レベルに比例する。黄金均衡フェーズで投資効率を改善し
+    /// 後半インフレに戦力を追従させるため 3 → 2 へデフレ調律済み（多重宇宙の絶滅率 0% 均衡の物価ノブ）。
+    /// </summary>
+    public const int BaseUpgradeCost = 2;
 
     /// <summary>
     /// 現在レベルの装備を 1 段階強化するのに必要なコストを返す純粋関数。
-    /// 計算式: BaseUpgradeCost × currentLevel（Lv1→2 は 3pt、Lv2→3 は 6pt、… と逓増）。
+    /// 計算式: BaseUpgradeCost × currentLevel（Lv1→2 は 2pt、Lv2→3 は 4pt、… と逓増）。
     /// UI と ChronicleGlobal の双方がこの単一 SoT を参照し、コスト式を二重定義しない。
     /// </summary>
     /// <param name="currentLevel">強化前の装備レベル（1 以上を想定）。</param>

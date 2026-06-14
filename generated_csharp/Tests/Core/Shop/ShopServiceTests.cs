@@ -223,7 +223,7 @@ public class ShopServiceTests
         var id = Guid.NewGuid();
         var equip = MakeEquipment(ItemId.SwordKnight, level: 2);
         var roster = ImmutableList.Create(MakeUnit(id, equip));
-        var cost = ShopService.UpgradeCostFor(2); // 3 × 2 = 6
+        var cost = ShopService.UpgradeCostFor(2); // 2 × 2 = 4（デフレ物価 BaseUpgradeCost=2）
         var economy = EconomyWithBalance(cost);
 
         var result = ShopService.TryUpgradeEquipment(economy, roster, id, cost);
@@ -321,10 +321,10 @@ public class ShopServiceTests
     // ════════════════════════════════════════════════════════════════════════
 
     [Theory]
-    [InlineData(1, 3)]
-    [InlineData(2, 6)]
-    [InlineData(3, 9)]
-    [InlineData(4, 12)]
+    [InlineData(1, 2)]
+    [InlineData(2, 4)]
+    [InlineData(3, 6)]
+    [InlineData(4, 8)]
     public void UpgradeCostFor_ScalesLinearlyWithCurrentLevel(int level, int expectedCost)
     {
         Assert.Equal(expectedCost, ShopService.UpgradeCostFor(level));

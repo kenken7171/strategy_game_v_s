@@ -26,6 +26,7 @@
 
 using System.Globalization;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Units;
 using ChronicleKnights.UI;
 using Godot;
 
@@ -115,6 +116,22 @@ public partial class HubView : Godot.Control
         _balanceValue = AddEconomyRow(economyPanel, "Balance:", "hub-view-balance-value");
         _earnedValue  = AddEconomyRow(economyPanel, "Earned:",  "hub-view-earned-value");
         _spentValue   = AddEconomyRow(economyPanel, "Spent:",   "hub-view-spent-value");
+
+        // ── 商店アクション（兵装購入 / 強化）。押下で Core 経済 API を直接叩く ──
+        var actionRow = new HBoxContainer();
+        actionRow.AddThemeConstantOverride("separation", 12);
+        actionRow.SetMeta(TestIdMetaKey, "hub-view-economy-actions");
+        economyPanel.AddChild(actionRow);
+
+        var buyButton = new Button { Text = "BUY" };
+        buyButton.SetMeta(TestIdMetaKey, "hub-view-buy-button");
+        buyButton.Pressed += OnBuyPressed;
+        actionRow.AddChild(buyButton);
+
+        var upgradeButton = new Button { Text = "UPGRADE" };
+        upgradeButton.SetMeta(TestIdMetaKey, "hub-view-upgrade-button");
+        upgradeButton.Pressed += OnUpgradePressed;
+        actionRow.AddChild(upgradeButton);
     }
 
     /// <summary>
@@ -177,6 +194,32 @@ public partial class HubView : Godot.Control
     {
         RenderYear();
         RenderEconomyDirect();
+    }
+
+    // ─── 商店アクション（Core 経済 API を直接叩くだけ・無状態） ────────────
+    //   成功すると SoT 側が残高を減算し EconomyChanged を発火するため、拠点画面は
+    //   OnEconomyChanged 経由で自動的にロールアップ再描画される（一気通貫の環）。
+
+    private void OnBuyPressed()
+    {
+        if (_chronicleGlobal is null) return;
+
+        var units = _chronicleGlobal.GetAliveUnits();
+        if (units.Count == 0) return; // 対象不在なら no-op（API 側でも安全に弾かれる）。
+
+        // 現役筆頭へ新品 Lv1 装備を購入（成功で残高 −BuyCost → EconomyChanged）。
+        _chronicleGlobal.ExecuteBuyEquipment(units[0].Id, ItemId.SwordKnight);
+    }
+
+    private void OnUpgradePressed()
+    {
+        if (_chronicleGlobal is null) return;
+
+        var units = _chronicleGlobal.GetAliveUnits();
+        if (units.Count == 0) return;
+
+        // 現役筆頭の装備を 1 段階強化（デフレ物価 BaseUpgradeCost=2 が SoT 経由で適用される）。
+        _chronicleGlobal.ExecuteUpgradeEquipment(units[0].Id);
     }
 
     // ─── 描画（SoT をその場で読み直して Push バインド） ─────────────────────
