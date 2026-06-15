@@ -48,6 +48,35 @@ godot --headless --path . --quit-after 30
 
 ---
 
+## ゲーム画面を「見る」には（VNC / ポート経由）
+
+> **重要な前提**: Godot のデスクトップゲームは Web サーバーではありません。画面は OS のディスプレイへ
+> ネイティブのウィンドウとして描かれます。コンテナ（Linux）には物理ディスプレイが無いため、
+> `--headless` でも通常起動でも、そのままでは「ウィンドウ」は出ません（ポート転送だけでは映りません）。
+
+そこで本コンテナは **仮想ディスプレイ + VNC** を同梱し、その画面を**ポート経由でブラウザに映す**経路を
+用意しています（`desktop-lite` feature）。Godot は Mesa のソフトウェア GL（llvmpipe）でレンダリングします。
+
+**手順:**
+
+1. コンテナを **Rebuild**（`F1` → `Dev Containers: Rebuild Container`）して VNC 同梱版にする。
+2. VS Code の「ポート」タブで **6080**（noVNC web）を開く（自動転送される）。
+   ブラウザで `http://localhost:6080` を開く（パスワード既定: `vscode`）。
+3. 表示された Linux デスクトップで端末を開き、ゲームをウィンドウ起動する:
+
+   ```sh
+   cd /workspaces/strategy_game_v_s/generated_csharp
+   godot --path . --rendering-driver opengl3
+   ```
+
+4. ブラウザの中に Chronicle Knights のタイトル画面が立ち上がります。
+
+> ソフトウェア GL のため描画は軽快ではありません。**実際に快適に遊ぶなら、画面のあるホスト
+> （Mac/Windows デスクトップ）に .NET版 Godot を入れて `godot --path .` を直接叩く**のが最善です。
+> コンテナはあくまで「ビルド・テスト・CI 検証 + 動作確認用の覗き窓」です。
+
+---
+
 ## このコンテナが提供するもの
 
 | 要素 | 内容 |

@@ -10,6 +10,14 @@
       "GODOT_RELEASE": "stable"
     }
   },
+  "features": {
+    "ghcr.io/devcontainers/features/desktop-lite:1": {}
+  },
+  "forwardPorts": [6080, 5901],
+  "portsAttributes": {
+    "6080": { "label": "Godot Desktop (noVNC web)" },
+    "5901": { "label": "Godot Desktop (VNC)" }
+  },
   "customizations": {
     "vscode": {
       "extensions": [

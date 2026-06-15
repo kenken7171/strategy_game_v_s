@@ -41,6 +41,8 @@ RUN apt-get update \
         libxi6 \
         libgl1 \
         libegl1 \
+        libgl1-mesa-dri \
+        libxkbcommon0 \
         libasound2 \
         libpulse0 \
     && rm -rf /var/lib/apt/lists/*
