@@ -1,287 +1,243 @@
-# Visual & Juice Roadmap
+# 見栄え・Juice 強化ロードマップ
 
-> Status: **design blueprint only** (no code changes implied by this document).
-> Target: the running Godot 4 / .NET 8 C# build at `generated_csharp/`.
-> Goal: raise the game's *look* (Juice) and *tactical feedback* to a commercial
-> bar by **adding** assets and presentation on top of the existing logic, without
-> touching the 630 green xUnit tests, the delta-wedge drag & drop, the Japanese
-> text layer, or the marriage gender-separation guard.
+> ステータス: **設計図のみ**（本書はコード変更を伴いません）。
+> 対象: `generated_csharp/` で実稼働する Godot 4 / .NET 8 の C# ビルド。
+> 目的: 既存ロジックを壊さず、**アセットと演出を「追加」する**ことで、ゲームの見栄え（Juice）と
+> 戦術フィードバックを商業レベルへ引き上げる。630件の緑の xUnit、▲ウェッジのドラッグ＆ドロップ、
+> 日本語テキスト層、婚姻の性別分離ガードには 1ビットも触れない。
 
-This file is intentionally written in English/ASCII so it can be localized later;
-the *concepts* are named precisely so a future implementer (or localizer) can map
-them 1:1 onto the codebase.
+> ※ 本書は人間向けの解説書のため日本語で記述します。ただし**クラス名・メソッド名・アセットパス・
+> 識別子は ASCII のまま**引用します（開発憲法①: ロジック側は ASCII 限定。実装時もこれを死守）。
 
 ---
 
-## 0. Guardrails (read first)
+## 0. 不可侵の前提（最初に読むこと）
 
-Every item below is an **add-on**. Honor the existing architecture so nothing
-regresses:
+以下はすべて**追加（add-on）**であり、既存アーキテクチャを尊重して何も退行させない。
 
-- **Single SoT.** Game state lives only in the `ChronicleGlobal` autoload
-  (`/root/ChronicleGlobal`). Views never cache state; they read it fresh and
-  re-render on signals (`StateInitialized`, `EconomyChanged`, `TimelineChanged`,
-  `RosterChanged`, `BattleChanged`, `FormationChanged`, `PhaseChanged`).
-- **Stateless UI.** Presentation nodes hold only transient interaction latches,
-  never game data.
-- **Leak-free lifecycle.** Dynamically created nodes go into a per-view *ledger*
-  (e.g. `_battleNodes`, `_treeNodes`) and are `QueueFree`'d at the start of each
-  re-render and in `_ExitTree`. Tweens are **node-bound** (created via
-  `node.CreateTween()` or `JuiceDirector.*`) so they auto-expire when the node is
-  freed; every tween callback is guarded with `IsInstanceValid`.
-- **Constitution I (ASCII).** Identifiers, node names, `data_testid` metas, asset
-  paths, and core internal logs stay ASCII. Player-facing display strings may be
-  Japanese (the localization exception already granted to the UI layer).
-- **WarningsAsErrors.** 13 CS codes are promoted to errors
-  (CS1998;CS4014;CS8618;CS8602;CS8603;CS8604;CS8509;CS8524;CS0162;CS0169;CS0414;
-  CS0649;CS0067). New code must keep the static count at zero.
-- **net8.0 + RollForward.** Build with `dotnet build ChronicleKnights.csproj`;
-  test with `dotnet test Tests/ChronicleKnights.Tests.csproj` (RollForward is
-  baked, no env var needed).
-- **Pure logic stays pure.** Anything that can be a Godot-independent pure
-  function (layout math, color selection, asset path building) should live in
-  `Core/` so it can be unit-tested and the test total can grow.
+- **単一 SoT。** ゲーム状態は autoload `ChronicleGlobal`（`/root/ChronicleGlobal`）だけが持つ。
+  ビューは状態をキャッシュせず、シグナル（`StateInitialized` / `EconomyChanged` / `TimelineChanged` /
+  `RosterChanged` / `BattleChanged` / `FormationChanged` / `PhaseChanged`）で読み直して再描画する。
+- **無状態 UI。** 提示ノードは一過性の操作ラッチのみを持ち、ゲームデータは決して持たない。
+- **リークフリーなライフサイクル。** 動的生成ノードはビュー毎の台帳（例 `_battleNodes` / `_treeNodes`）へ
+  入れ、再描画の冒頭と `_ExitTree` で `QueueFree` する。Tween は**ノード束縛**（`node.CreateTween()` か
+  `JuiceDirector.*` 経由）でノード解放と同時に失効させ、コールバックは `IsInstanceValid` で必ずガードする。
+- **開発憲法①（ASCII）。** 識別子・ノード名・`data_testid`・アセットパス・コア内部ログは ASCII。
+  プレイヤー向け表示文字列のみ日本語可（UI 層に既に与えた言語特例）。
+- **WarningsAsErrors。** 13 の CS コードがエラー昇格済み
+  （CS1998;CS4014;CS8618;CS8602;CS8603;CS8604;CS8509;CS8524;CS0162;CS0169;CS0414;CS0649;CS0067）。
+  新規コードも静的件数ゼロを維持する。
+- **net8.0 + RollForward。** `dotnet build ChronicleKnights.csproj` でビルド、
+  `dotnet test Tests/ChronicleKnights.Tests.csproj` でテスト（RollForward 焼き込み済み・環境変数不要）。
+- **純粋ロジックは純粋なまま。** レイアウト計算・色選択・パスの組み立て等、Godot 非依存にできるものは
+  `Core/` へ置いて単体テスト可能にし、テスト総数を増やす。
 
-Asset note: `JobTextureLibrary.TryLoad` already proves the safe-load pattern --
-`ResourceLoader.Exists` first, then an `Image.LoadFromFile` raw-disk fallback via
-`ProjectSettings.GlobalizePath` -- so illustrations appear even before Godot has
-generated `.import` files. **Every new texture loader below must reuse this exact
-two-stage pattern.**
+アセット注記: `JobTextureLibrary.TryLoad` が安全ロードの型を実証済み ──
+「① `ResourceLoader.Exists` → ② `ProjectSettings.GlobalizePath` + `Image.LoadFromFile` の生ディスク復号
+フォールバック」の2段。Godot が `.import` を生成する前のソース起動でも画像が出る。
+**以下の新規ローダはこの2段パターンを必ず踏襲すること。**
 
 ---
 
-## 1. Battlefield Backgrounds & Enemy Art -- asset logistics
+## 1. 戦場背景と敵デザイン ── アセット兵站
 
-### 1.1 What exists today
-- Asset root is consolidated under `res://Assets/Textures/` (Jobs already live at
-  `res://Assets/Textures/Jobs/{slug}/{male|female}.png`).
-- Enemies are data only: `Core/Battle/EnemyState.cs` carries
-  `EnemyState.Archetype` of type `EnemyArchetype`
-  (`TrialGuardian`, `DawnWarden`, `UpheavalConqueror`, `DeclineTyrant`,
-  `EternalSovereign`).
-- Stage identity is data only: `Core/Chronicle/ChronicleTimelineConfig.cs` defines
-  `EpochId` (`Dawn`, `Upheaval`, `Decline`, `Twilight`) and `Epochs` with
-  `RegularArchetype` / `BossArchetype` per era. Chapter-boss years are 25/50/75/100.
+### 1.1 現状
+- アセット根は `res://Assets/Textures/` に集約済み（ジョブは
+  `res://Assets/Textures/Jobs/{slug}/{male|female}.png`）。
+- 敵はデータのみ: `Core/Battle/EnemyState.cs` が `EnemyState.Archetype`（型 `EnemyArchetype`:
+  `TrialGuardian` / `DawnWarden` / `UpheavalConqueror` / `DeclineTyrant` / `EternalSovereign`）を持つ。
+- ステージもデータのみ: `Core/Chronicle/ChronicleTimelineConfig.cs` が `EpochId`
+  （`Dawn` / `Upheaval` / `Decline` / `Twilight`）と各時代の `RegularArchetype` / `BossArchetype` を持つ。
+  章ボスの出現年は 25/50/75/100。
 
-### 1.2 New territory (directories)
+### 1.2 次なる領土（ディレクトリ）
 ```
 res://Assets/Textures/
-  Jobs/{slug}/{male|female}.png        (exists)
-  Backgrounds/{epoch_slug}.png         (new -- one per EpochId)
-  Enemies/{archetype_slug}.png         (new -- one per EnemyArchetype)
+  Jobs/{slug}/{male|female}.png        (既存)
+  Backgrounds/{epoch_slug}.png         (新規 -- EpochId ごとに1枚)
+  Enemies/{archetype_slug}.png         (新規 -- EnemyArchetype ごとに1枚)
 ```
-Slugs are ASCII snake_case derived from the enum names, e.g.
-`EpochId.Dawn -> "dawn"`, `EnemyArchetype.UpheavalConqueror -> "upheaval_conqueror"`.
+slug は enum 名由来の ASCII snake_case（例 `EpochId.Dawn -> "dawn"`、
+`EnemyArchetype.UpheavalConqueror -> "upheaval_conqueror"`）。
 
-### 1.3 New loader classes (mirror JobTextureLibrary)
+### 1.3 新規ローダ（JobTextureLibrary をミラー）
 - `UserInterface/BackgroundTextureLibrary.cs`
-  - `static Texture2D? TryLoad(EpochId epoch)` -> `res://Assets/Textures/Backgrounds/{slug}.png`.
+  - `static Texture2D? TryLoad(EpochId epoch)` -> `res://Assets/Textures/Backgrounds/{slug}.png`。
 - `UserInterface/EnemyTextureLibrary.cs`
-  - `static Texture2D? TryLoad(EnemyArchetype archetype)` -> `res://Assets/Textures/Enemies/{slug}.png`.
-- Both reuse the `ResourceLoader` -> `Image.LoadFromFile` two-stage resolution and
-  return `null` on a missing asset (caller renders empty -- never crash).
-- The enum->slug map is a pure `switch` expression (exhaustive, no CS8509). Put the
-  slug maps in a tiny pure helper (e.g. `Core/Assets/AssetSlugs.cs`) so they are
-  **unit-testable** (assert every enum value maps to a non-empty ASCII slug).
+  - `static Texture2D? TryLoad(EnemyArchetype archetype)` -> `res://Assets/Textures/Enemies/{slug}.png`。
+- いずれも `ResourceLoader` -> `Image.LoadFromFile` の2段解決を踏襲し、欠落時は `null` を返す
+  （呼び出し側は空表示・絶対に落とさない）。
+- enum->slug 変換は純粋な `switch` 式（網羅・CS8509 を出さない）。slug マップは小さな純粋ヘルパ
+  （例 `Core/Assets/AssetSlugs.cs`）へ置き、**単体テスト**する（全 enum 値が非空 ASCII slug へ写ることを保証）。
 
-### 1.4 Wiring (where to add nodes)
-- **Background**: in `UI/BattleUI.cs` add a full-rect `TextureRect` as the FIRST
-  child of the screen (behind `_rootShakeTarget` and `_popupLayer`),
-  `StretchMode = KeepAspectCovered`, `MouseFilter = Ignore`. Choose the epoch from
-  the current year via the existing timeline config. Re-pick on `BattleChanged`.
-  The `TimelineUI` / Chronicle screen can show the same background for cohesion.
-- **Enemy art**: in `UI/BattleUI.cs` the enemy card (`_enemyCard`) currently shows
-  name + HP bar; add a `TextureRect` fed by
-  `EnemyTextureLibrary.TryLoad(CurrentBattle.Enemy.Archetype)`.
-- Both nodes go into the existing `_battleNodes` ledger so they are freed on
-  re-render / `_ExitTree` (leak-free).
+### 1.4 結線（どこにノードを足すか）
+- **背景**: `UI/BattleUI.cs` に全画面 `TextureRect` を画面の**最背面**（`_rootShakeTarget` や
+  `_popupLayer` より下）へ追加。`StretchMode = KeepAspectCovered`、`MouseFilter = Ignore`。
+  現在年からタイムライン設定で epoch を選び、`BattleChanged` で選び直す。`TimelineUI`（年代記画面）にも
+  同じ背景を出すと統一感が増す。
+- **敵グラフィック**: `UI/BattleUI.cs` の敵カード（`_enemyCard`）は現在 名前 + HP バーのみ。ここへ
+  `EnemyTextureLibrary.TryLoad(CurrentBattle.Enemy.Archetype)` を流す `TextureRect` を追加。
+- どちらも既存 `_battleNodes` 台帳へ載せ、再描画 / `_ExitTree` で解放（リークフリー）。
 
-### 1.5 Do-not-break
-Backgrounds/enemy art are pure presentation. No change to `EnemyScaler`,
-`EnemyState`, `ChronicleTimelineConfig`, or battle resolution. Golden balance
-untouched.
+### 1.5 不破の保証
+背景・敵グラは純粋な提示。`EnemyScaler` / `EnemyState` / `ChronicleTimelineConfig` / 戦闘解決は不変。
+黄金均衡に影響なし。
 
 ---
 
-## 2. Juice -- camera shake & particle hit effects
+## 2. Juice ── カメラシェイクとヒットエフェクト
 
-### 2.1 What exists today (reuse, do not rebuild)
-- `UI/JuiceDirector.cs` is the stateless animation toolbox:
-  `Flash`, `Shake`, `SlideTo`, `Punch`, `FadeToDeath`, `DrainBar`, `CountUp`,
-  `Typewriter`, `GrowLine`, `RisingPopup`. All return node-bound `Tween`s.
-- `UI/BattleUI.cs` already wires **camera shake**: `_rootShakeTarget` (the board
-  VBox), `ShakeCamera()` / `KillCameraShake()`, constants
-  `CameraShakeAmplitude = 14`, `CameraShakeStepSeconds = 0.05`. It also flashes the
-  targeted row (`FlashRow`) and the enemy card on `AllyOffenseEvent`.
-- Battle drives presentation off the pure event stream from
-  `Core/Battle/BattleEvent.cs`: `AllyOffenseEvent`, `EnemyOffenseEvent`,
-  `UnitDamagedEvent`, `UnitDefeatedEvent`, `UnitHealedEvent`,
-  `LastHitResolvedEvent`, `BattleConcludedEvent`, `RotationPerformedEvent`.
+### 2.1 現状（再利用せよ・作り直すな）
+- `UI/JuiceDirector.cs` が無状態の演出ツール箱:
+  `Flash` / `Shake` / `SlideTo` / `Punch` / `FadeToDeath` / `DrainBar` / `CountUp` /
+  `Typewriter` / `GrowLine` / `RisingPopup`。すべてノード束縛 `Tween` を返す。
+- `UI/BattleUI.cs` は既に**カメラシェイク**を結線済み: `_rootShakeTarget`（盤面 VBox）、
+  `ShakeCamera()` / `KillCameraShake()`、定数 `CameraShakeAmplitude = 14` /
+  `CameraShakeStepSeconds = 0.05`。対象行のフラッシュ（`FlashRow`）と `AllyOffenseEvent` での
+  敵カード明滅も実装済み。
+- 演出は純粋イベント列（`Core/Battle/BattleEvent.cs`）から駆動: `AllyOffenseEvent` /
+  `EnemyOffenseEvent` / `UnitDamagedEvent` / `UnitDefeatedEvent` / `UnitHealedEvent` /
+  `LastHitResolvedEvent` / `BattleConcludedEvent` / `RotationPerformedEvent`。
 
-### 2.2 Add-on: tie shake intensity to event magnitude
-- Today shake is a fixed amplitude. Add a pure helper
-  `Core/Juice/ShakeProfile.cs` -> `float AmplitudeFor(int damage, bool isCrit, bool isFrontGuard)`
-  so the *feel* is data-driven and **unit-tested** (small hit = gentle, big hit /
-  iron-wall block = strong). `BattleUI.ShakeCamera` reads it from the event being
-  rendered. Logic-free, additive.
-- Trigger an extra shake on the front-guard mitigation moment (when a
-  `BattalionDefense` / `SquadDefense` reduction is meaningful) so "the shield held"
-  has weight.
+### 2.2 追加: シェイク強度をイベント量に連動
+- 現状は固定振幅。純粋ヘルパ `Core/Juice/ShakeProfile.cs` ->
+  `float AmplitudeFor(int damage, bool isCrit, bool isFrontGuard)` を新設し、手応えをデータ駆動化して
+  **単体テスト**（小ダメージ=控えめ / 会心・鉄壁ガード=強め）。`BattleUI.ShakeCamera` が描画中イベントから
+  読む。ロジック非干渉・純加点。
+- 前衛の盾軽減（`BattalionDefense` / `SquadDefense` の有意な軽減）が決まった瞬間にも一発揺らし、
+  「盾が耐えた」に重みを与える。
 
-### 2.3 Add-on: particle hit effects (Particle2D layer)
-- New layer: in `UI/BattleUI.cs` add `_effectLayer` (a full-rect `Control`,
-  `MouseFilter = Ignore`) placed **above** the board but **below** `_popupLayer`
-  so numbers always read on top. Ledger it in `_battleNodes`.
-- New helper `UI/HitEffectDirector.cs` (stateless, mirrors `JuiceDirector`):
-  - `static void Slash(Control layer, Vector2 globalPos)` -> a short-lived
-    `GpuParticles2D` (or `CpuParticles2D` for zero-import safety) tuned white/steel,
-    `OneShot = true`, `Emitting = true`, auto-`QueueFree` via a node-bound timer/tween.
-  - `static void Heal(Control layer, Vector2 globalPos)` -> green sparkle.
-  - `static void Defeat(Control layer, Vector2 globalPos)` -> dark burst.
-- Spawn position = the live grid cell of the affected unit (BattleUI already maps
-  `unitId -> cell` for `FlashRow`; reuse that index). Emit on `UnitDamagedEvent`
-  (slash), `UnitHealedEvent` (heal), `UnitDefeatedEvent` (defeat), `AllyOffenseEvent`
-  (slash on the enemy card).
-- **Pixel-art crispness**: set `TextureFilter = Nearest` on particle textures if
-  they use sprite atlases. Prefer `CpuParticles2D` so the effect works run-from-
-  source without an import step (consistent with the asset fallback philosophy).
+### 2.3 追加: パーティクルのヒットエフェクト（Particle2D 層）
+- 新レイヤ: `UI/BattleUI.cs` に `_effectLayer`（全画面 `Control`、`MouseFilter = Ignore`）を、盤面より
+  **上**・`_popupLayer` より**下**へ置く（数値は常に最前面で読めるように）。`_battleNodes` へ台帳化。
+- 新ヘルパ `UI/HitEffectDirector.cs`（無状態・`JuiceDirector` をミラー）:
+  - `static void Slash(Control layer, Vector2 globalPos)` -> 白/鋼の短命 `CpuParticles2D`
+    （`OneShot = true` / `Emitting = true`、ノード束縛タイマか Tween で自動 `QueueFree`）。
+  - `static void Heal(Control layer, Vector2 globalPos)` -> 緑の輝き。
+  - `static void Defeat(Control layer, Vector2 globalPos)` -> 暗色の爆ぜ。
+- 発生位置 = 対象ユニットのライブ盤面セル（`FlashRow` 用に `unitId -> cell` の索引が既にある・再利用）。
+  `UnitDamagedEvent`（斬撃）/ `UnitHealedEvent`（回復）/ `UnitDefeatedEvent`（撃破）/
+  `AllyOffenseEvent`（敵カードへ斬撃）で発火。
+- **ドット絵のシャープさ**: スプライトアトラスを使うなら `TextureFilter = Nearest`。インポート不要で
+  ソース起動でも動くよう `CpuParticles2D` を優先（アセットの安全ロード思想と一致）。
 
-### 2.4 Do-not-break
-The event stream is already produced by pure `Core/Battle`. Particles/shake only
-*read* events; they never feed back into resolution. Keep all tweens/particles
-node-bound and ledgered.
+### 2.4 不破の保証
+イベント列は純粋 `Core/Battle` が生成済み。パーティクル/シェイクはイベントを**読むだけ**で、解決へは
+還流しない。Tween/パーティクルはすべてノード束縛・台帳化を厳守。
 
 ---
 
-## 3. UI feedback -- formation snap & damage popups
+## 3. UI フィードバック ── 配置のスナップとダメージポップアップ
 
-### 3.1 Formation "snap & bounce" on placement
-- Today: `UI/FormationUI.cs` renders the wedge from `ChronicleGlobal.CurrentFormation`
-  and uses `UserInterface/Hub/FormationSlotControl` (drop target / drag source) +
-  `RosterDragCard` (drag source) + `FormationDragPayload` (ASCII codec). Placement
-  calls `ChronicleGlobal.PlaceUnitOnFormation` / `SwapFormationSlots`; the board
-  re-renders on `FormationChanged`. **There is no placement animation yet.**
-- Add-on (presentation only): after a successful drop, play a satisfying snap:
-  - On the just-filled slot's inner node, call `JuiceDirector.Punch(node, 1.18f, 0.18)`
-    (scale overshoot -> settle) so the card "ka-chunk" seats.
-  - Optionally `JuiceDirector.SlideTo` the dropped card from the cursor's release
-    point to the slot center for a magnet effect.
-- Where to hook: `FormationUI` re-renders the whole board on `FormationChanged`, so
-  pass the "last placed coordinate" (a transient UI latch, not state) into
-  `RenderBoard` and Punch only that slot. Reset the latch after consuming it.
-- Keep the drag & drop semantics (`PlaceRequested` / `SwapRequested` delegates)
-  exactly as they are; the animation is layered on the render, not the data path.
+### 3.1 ▲配置成立時の「スナップ＆バウンド」
+- 現状: `UI/FormationUI.cs` が `ChronicleGlobal.CurrentFormation` からウェッジを描き、
+  `UserInterface/Hub/FormationSlotControl`（ドロップ先/ドラッグ元）+ `RosterDragCard`（ドラッグ元）+
+  `FormationDragPayload`（ASCII コーデック）で D&D を行う。配置は
+  `ChronicleGlobal.PlaceUnitOnFormation` / `SwapFormationSlots` を呼び、`FormationChanged` で再描画。
+  **配置アニメはまだ無い。**
+- 追加（提示のみ）: ドロップ成功後、心地よいスナップを再生:
+  - 埋まったスロットの内側ノードへ `JuiceDirector.Punch(node, 1.18f, 0.18)`（スケールのオーバーシュート
+    → 収束）で「ガシャン」と吸着。
+  - 任意で `JuiceDirector.SlideTo` を使い、放した位置からスロット中心へ磁石のように寄せる。
+- 結線箇所: `FormationUI` は `FormationChanged` で盤面を丸ごと再描画するので、「直近に配置した座標」
+  （状態ではなく一過性の UI ラッチ）を `RenderBoard` へ渡し、そのスロットだけ Punch。消費後にラッチを破棄。
+- D&D の意味論（`PlaceRequested` / `SwapRequested` デリゲート）は不変。演出は描画に重ねるだけで
+  データ経路には触れない。
 
-### 3.2 Damage / heal / crit popups
-- Today: `UI/BattleUI.cs` already owns `_popupLayer`
-  (`battle-damage-popup-layer`, full-rect, `MouseFilter = Ignore`) and color
-  constants `DamagePopupColor` (red), `HealPopupColor` (green), `LastHitPopupColor`
-  (gold), plus `JuiceDirector.RisingPopup`. Damage/heal numbers already rise.
-- Add-on: make crits/heals *pop* harder:
-  - Pure helper `Core/Juice/PopupStyle.cs` ->
-    `(Color color, float fontScale, string prefix) For(BattleEvent e)`:
-    big red + larger font for high-damage / last-hit; green for `UnitHealedEvent`;
-    gold star for `LastHitResolvedEvent`. **Unit-test** the mapping (crit -> bigger
-    scale than normal; heal -> green; defeat mark present).
-  - `RisingPopup` gains/honors a `fontScale` so the number's size encodes weight.
-    Drive it from `PopupStyle.For(event)`.
-- This keeps the *numbers* authoritative (computed by the 630-tested core) and only
-  styles how they fly out.
+### 3.2 ダメージ / 回復 / 会心ポップアップ
+- 現状: `UI/BattleUI.cs` は既に `_popupLayer`（`battle-damage-popup-layer`・全画面・`MouseFilter = Ignore`）
+  と色定数 `DamagePopupColor`（赤）/ `HealPopupColor`（緑）/ `LastHitPopupColor`（金）、および
+  `JuiceDirector.RisingPopup` を所有。ダメージ/回復の数値は既に飛び出す。
+- 追加: 会心・回復をもっと「映え」させる:
+  - 純粋ヘルパ `Core/Juice/PopupStyle.cs` -> `(Color color, float fontScale, string prefix) For(BattleEvent e)`:
+    高ダメージ/とどめは 大きい赤・大フォント、`UnitHealedEvent` は緑、`LastHitResolvedEvent` は金の星。
+    マッピングを**単体テスト**（会心 > 通常のスケール / 回復は緑 / 撃破マークの有無）。
+  - `RisingPopup` に `fontScale` を持たせ（数値サイズで重みを表現）、`PopupStyle.For(event)` から駆動。
+- **数値そのもの**（630件でテスト済みのコアが算出）は権威のまま。飛び出し方だけを様式化する。
 
-### 3.3 Do-not-break
-`FormationBoard`, `DeploymentGate`, drag-drop payloads, and the battle event stream
-are untouched. Snap/popup are render-time only.
+### 3.3 不破の保証
+`FormationBoard` / `DeploymentGate` / D&D ペイロード / 戦闘イベント列は不変。スナップ/ポップアップは
+描画時のみ。
 
 ---
 
-## 4. Lineage Tree visualization (100-year bloodline)
+## 4. 100年の血統「家系図」の視覚化
 
-### 4.1 What exists today (build on it -- do not rewrite)
-- `Core/Pedigree/PedigreeGraph.cs` (pure, immutable): `PedigreeNode` (with
-  `Generation` in [-2, +2]), `PedigreeEdge`, and a `PedigreeGraph` that resolves
-  grandparents (-2), parents (-1), self/spouse/siblings (0), children (+1),
-  grandchildren (+2). Already unit-tested.
-- `UI/PedigreeOverlay.cs` already draws cards per generation band and connects
-  parent->child with `Godot.Line2D` grown via `JuiceDirector.GrowLine`. It ledgers
-  cards + connectors (`_treeNodes`) and grow tweens (`_growTweens`), and is mounted
-  front-most by `GameDirector` with the standard `CloseRequested` / `_ExitTree`
-  self-collapse pattern (same as the Job Manual / Prophecy overlays).
+### 4.1 現状（土台にせよ・作り直すな）
+- `Core/Pedigree/PedigreeGraph.cs`（純粋・不変）: `PedigreeNode`（`Generation` は [-2, +2]）、
+  `PedigreeEdge`、そして祖父母(-2) / 父母(-1) / 本人・配偶者・兄弟(0) / 子(+1) / 孫(+2) を解決する
+  `PedigreeGraph`。既に単体テスト済み。
+- `UI/PedigreeOverlay.cs` は既に世代帯ごとにカードを描き、親→子を `Godot.Line2D` で繋ぎ
+  `JuiceDirector.GrowLine` で伸長させる。カード+コネクタ（`_treeNodes`）と伸長 Tween（`_growTweens`）を
+  台帳化し、`GameDirector` が最前面へマウント（`CloseRequested` / `_ExitTree` の自己崩壊型・ジョブ図鑑や
+  予言オーバーレイと同型）。
 
-### 4.2 Add-on visual polish (presentation only)
-- **Portraits**: replace text-only nodes with the unit's job illustration via
-  `JobTextureLibrary.TryLoad(job, gender)` inside each pedigree card (gender read is
-  already preserved across the codebase).
-- **Generation bands**: tint each band (-2..+2) with a distinct color and a
-  Japanese band label ("祖父母 / 父母 / 本人世代 / 子 / 孫") for instant legibility.
-- **Marriage link**: draw the self<->spouse horizontal `Line2D` in a warm hue
-  (heart link), distinct from the vertical parent->child connectors.
-- **Stagger + camera**: keep the `GrowLine` stagger (`ConnectorGrowStaggerSeconds`)
-  so lines draw on in sequence; add a gentle `JuiceDirector.Punch` on each card as
-  its incoming connector completes (chain reveal).
-- **Entry points**: the overlay is already reachable from marriage; also surface a
-  "blood" button on a roster/unit-detail card to open the tree rooted at that unit
-  (inject `TargetUnitId` before `AddChild`, exactly like the existing mount).
+### 4.2 追加の視覚磨き（提示のみ）
+- **顔グラ**: テキストのみのノードを、`JobTextureLibrary.TryLoad(job, gender)` のジョブイラストに置換
+  （性別読み分けは全コードベースで既に維持）。
+- **世代帯**: -2..+2 の各帯を別色で塗り、日本語の帯ラベル（「祖父母 / 父母 / 本人世代 / 子 / 孫」）を付けて
+  一目で読めるように。
+- **婚姻リンク**: 本人↔配偶者の水平 `Line2D` を縦の親子コネクタとは別の暖色（ハートの線）で描く。
+- **段差 + 演出**: `GrowLine` の段差（`ConnectorGrowStaggerSeconds`）を活かして線を順に開通させ、
+  入線が完了したカードへ `JuiceDirector.Punch` を軽く当てる（連鎖リビール）。
+- **入口**: オーバーレイは既に婚姻画面から到達可能。加えてロスター/ユニット詳細カードに「血」ボタンを置き、
+  そのユニットを根とする家系図を開く（既存マウントと同様、`AddChild` 前に `TargetUnitId` を注入）。
 
-### 4.3 Optional pure extension (testable)
-If a wider tree is wanted, add a pure `Core/Pedigree/PedigreeLayout.cs` that, given
-a `PedigreeGraph`, returns normalized (x, y) slots per node (column = sibling index,
-row = generation). Unit-test the layout (deterministic positions, no overlap,
-self+spouse adjacent). The overlay then just maps slots to pixels -- keeping all
-math in the tested core.
+### 4.3 任意の純粋拡張（テスト可能）
+より広い樹形が欲しければ、純粋 `Core/Pedigree/PedigreeLayout.cs` を追加し、`PedigreeGraph` を入力に
+ノード毎の正規化座標 (x, y)（列=兄弟インデックス / 行=世代）を返す。レイアウトを**単体テスト**
+（決定論的位置・重なり無し・本人と配偶者が隣接）。オーバーレイは座標をピクセルへ写すだけになり、
+計算はテスト済みコアに留まる。
 
-### 4.4 Do-not-break
-`PedigreeGraph` and `MarriageService` (incl. the opposite-gender guard) stay
-exactly as they are. The tree is a read-only view of `ChronicleGlobal` bloodline
-data.
+### 4.4 不破の保証
+`PedigreeGraph` と `MarriageService`（性別ガード含む）は不変。家系図は `ChronicleGlobal` の血統データの
+読み取り専用ビュー。
 
 ---
 
-## 5. Suggested sequencing
+## 5. 推奨実装順
 
-1. **Asset logistics (Section 1)** -- create the directories + two loader classes +
-   the pure slug map and its test. Lowest risk, unblocks everything visual.
-2. **Popups & formation snap (Section 3)** -- highest feel-per-line; reuses
-   `RisingPopup` / `Punch` that already exist. Add the two pure style helpers + tests.
-3. **Particles & magnitude shake (Section 2)** -- new `_effectLayer` +
-   `HitEffectDirector`; add `ShakeProfile` + test.
-4. **Lineage polish (Section 4)** -- portraits, band colors, optional
-   `PedigreeLayout` + test.
+1. **アセット兵站（第1章）** ── ディレクトリ + 2ローダ + 純粋 slug マップとそのテスト。最小リスクで
+   以降の視覚要素を解放する。
+2. **ポップアップ＆配置スナップ（第3章）** ── 1行あたりの手応えが最大。既存 `RisingPopup` / `Punch` を
+   再利用。2つの純粋様式ヘルパ + テストを追加。
+3. **パーティクル＆連動シェイク（第2章）** ── `_effectLayer` + `HitEffectDirector` を新設、
+   `ShakeProfile` + テストを追加。
+4. **家系図の磨き（第4章）** ── 顔グラ・帯配色・任意の `PedigreeLayout` + テスト。
 
-Each step is a self-contained commit: build 0/0, all xUnit green (and growing),
-then push.
+各ステップは独立コミット: build 0/0、xUnit 全緑（かつ純増）、それから push。
 
 ---
 
-## 6. Net effect on tests
+## 6. テストへの影響
 
-Every pure helper proposed here (`AssetSlugs`, `ShakeProfile`, `PopupStyle`,
-`PedigreeLayout`) is Godot-independent and **adds** xUnit coverage, so the test
-total only grows from 630. The Godot view wiring (TextureRects, particles, tweens)
-is validated by running the build and the game, never by mutating core logic.
+本書が提案する純粋ヘルパ（`AssetSlugs` / `ShakeProfile` / `PopupStyle` / `PedigreeLayout`）は
+すべて Godot 非依存で xUnit を**純増**させる。630件から減ることはない。Godot のビュー結線
+（TextureRect / パーティクル / Tween）はビルドと実機起動で検証し、コアロジックは決して書き換えない。
 
 ---
 
-## 7. File map (new vs touched)
+## 7. ファイル一覧（新規 vs 改修）
 
-New (additive):
+新規（追加）:
 ```
-res://Assets/Textures/Backgrounds/{epoch}.png      (art)
-res://Assets/Textures/Enemies/{archetype}.png      (art)
-Core/Assets/AssetSlugs.cs                           (+ test)
-Core/Juice/ShakeProfile.cs                          (+ test)
-Core/Juice/PopupStyle.cs                            (+ test)
-Core/Pedigree/PedigreeLayout.cs                     (optional, + test)
+res://Assets/Textures/Backgrounds/{epoch}.png      (アート)
+res://Assets/Textures/Enemies/{archetype}.png      (アート)
+Core/Assets/AssetSlugs.cs                           (+ テスト)
+Core/Juice/ShakeProfile.cs                          (+ テスト)
+Core/Juice/PopupStyle.cs                            (+ テスト)
+Core/Pedigree/PedigreeLayout.cs                     (任意・+ テスト)
 UserInterface/BackgroundTextureLibrary.cs
 UserInterface/EnemyTextureLibrary.cs
 UI/HitEffectDirector.cs
 ```
-Touched (render-only, no logic change):
+改修（描画のみ・ロジック不変）:
 ```
-UI/BattleUI.cs            (background TextureRect, enemy art, _effectLayer, popup style)
-UI/FormationUI.cs         (snap Punch on last-placed slot)
-UI/PedigreeOverlay.cs     (portraits, band colors, marriage link)
-UI/JuiceDirector.cs       (RisingPopup honors fontScale -- backward compatible)
+UI/BattleUI.cs            (背景 TextureRect・敵グラ・_effectLayer・ポップアップ様式)
+UI/FormationUI.cs         (直近配置スロットへの Punch スナップ)
+UI/PedigreeOverlay.cs     (顔グラ・帯配色・婚姻リンク)
+UI/JuiceDirector.cs       (RisingPopup が fontScale を受ける -- 後方互換)
 ```
 
-Nothing in `Core/Battle` resolution, `FormationBoard`, `DeploymentGate`,
-`MarriageService`, the Japanese text layer, or the drag-drop payloads changes.
+`Core/Battle` の解決、`FormationBoard`、`DeploymentGate`、`MarriageService`、日本語テキスト層、
+D&D ペイロードは何も変わらない。
