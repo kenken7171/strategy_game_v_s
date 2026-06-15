@@ -1,5 +1,6 @@
 {
   "name": "Chronicle Knights (.NET 8 + Godot 4.3 mono)",
+  "workspaceFolder": "/workspaces/strategy_game_v_s/generated_csharp",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
@@ -17,7 +18,7 @@
         "geequlim.godot-tools"
       ],
       "settings": {
-        "dotnet.defaultSolution": "generated_csharp/ChronicleKnights.csproj",
+        "dotnet.defaultSolution": "ChronicleKnights.sln",
         "godotTools.editorPath.godot4": "/usr/local/bin/godot"
       }
     }
@@ -26,6 +27,6 @@
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
     "DOTNET_NOLOGO": "1"
   },
-  "postCreateCommand": "dotnet restore generated_csharp/ChronicleKnights.csproj && dotnet restore generated_csharp/Tests/ChronicleKnights.Tests.csproj",
+  "postCreateCommand": "dotnet build ChronicleKnights.csproj --configuration Debug",
   "remoteUser": "root"
 }
