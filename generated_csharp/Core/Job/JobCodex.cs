@@ -1,21 +1,15 @@
 // =============================================================================
 //  ChronicleKnights — JobCodex.cs
 // -----------------------------------------------------------------------------
-//  Faithful C# trace of the TypeScript (web) job manual content
-//  (packages/core/src/data/jobs.ts JOB_ABILITY / JOB_FORMATION_GUIDE and
-//   packages/frontend/src/utils/job.ts explainJobPassives).
+//  Single source of truth for the Job Manual / Job Description *display text*.
+//  Faithful trace of the TS web data (packages/core/src/data/jobs.ts JOB_ABILITY
+//  / JOB_FORMATION_GUIDE and packages/frontend/src/utils/job.ts).
 //
-//  This is the SINGLE SOURCE OF TRUTH for the *display text* of the Job Manual
-//  and the per-unit Job Description section. It holds ONLY English text
-//  (Constitution I: ASCII only; Japanese localization is deferred to a future
-//  localization layer). All NUMERIC values (BDF/SDF/AB/HL) and the structured
-//  formation guide (recommended rows / effect range / effect kind) are read from
-//  JobMaster at call time, so numbers stay single-sourced and never drift.
-//
-//  Mirrors the TS structure exactly:
-//    - JobCodexText : role / ability summary / usage / flavor / headline / range note
-//    - JobPassiveLine : the "structured passive" rows (bdf/sdf/ab/hl/special-*)
-//                       with label, value, scope and description (English).
+//  ★ Language exception (this command only): UI display strings are Japanese
+//    (UTF-8) literals. Identifiers / comments stay ASCII (Constitution I for
+//    logic is preserved). Numeric passive values (BDF/SDF/AB/HL) and the special
+//    passive (sniper) are read from JobMaster at call time, so numbers stay
+//    single-sourced and never drift.
 // =============================================================================
 
 using System.Collections.Generic;
@@ -23,35 +17,18 @@ using System.Collections.Immutable;
 
 namespace ChronicleKnights.Core.Job;
 
-/// <summary>
-/// The prose block for one job: role, ability summary, tactical usage, flavor,
-/// and the formation headline / effect-range note. English only (Constitution I).
-/// </summary>
+/// <summary>Prose block for one job (role / ability / usage / flavor + formation text).</summary>
 public sealed record JobCodexText
 {
-    /// <summary>One-line role summary (the player's first impression).</summary>
     public required string Role { get; init; }
-
-    /// <summary>Mechanical summary of the signature ability (numeric spec).</summary>
     public required string AbilitySummary { get; init; }
-
-    /// <summary>Tactical usage / recommended placement.</summary>
     public required string Usage { get; init; }
-
-    /// <summary>World-flavor text.</summary>
     public required string Flavor { get; init; }
-
-    /// <summary>Formation-guide headline (e.g. "Recommended: front line").</summary>
     public required string FormationHeadline { get; init; }
-
-    /// <summary>Supplementary note on the effect range.</summary>
     public required string EffectRangeNote { get; init; }
 }
 
-/// <summary>
-/// One structured passive row. Mirrors the TS PassiveExplanation:
-/// key is stable for testids ("bdf"|"sdf"|"ab"|"hl"|"special-double-strike").
-/// </summary>
+/// <summary>One structured passive row (key is stable for testids).</summary>
 public sealed record JobPassiveLine
 {
     public required string Key { get; init; }
@@ -61,123 +38,116 @@ public sealed record JobPassiveLine
     public required string Description { get; init; }
 }
 
-/// <summary>
-/// Pure, Godot-independent catalog of job manual text + a passive explainer that
-/// derives the structured passive list from JobMaster numeric stats.
-/// </summary>
+/// <summary>Pure, Godot-independent catalog of job manual text + passive explainer.</summary>
 public static class JobCodex
 {
-    // ─── English display names (ASCII; JP deferred to localization) ──────────
+    // ─── Japanese display names ───────────────────────────────────────────────
 
     private static readonly IReadOnlyDictionary<JobId, string> DisplayNames =
         new Dictionary<JobId, string>
         {
-            [JobId.IronWallKnight] = "Iron Wall Knight",
-            [JobId.HeavyInfantry]  = "Heavy Infantry",
-            [JobId.StandardBearer] = "Standard Bearer",
-            [JobId.Tactician]      = "Tactician",
-            [JobId.Medic]          = "Medic",
-            [JobId.Sniper]         = "Sniper",
-            [JobId.Sorcerer]       = "Sorcerer",
-            [JobId.Scout]          = "Scout",
+            [JobId.IronWallKnight] = "鉄壁騎士",
+            [JobId.HeavyInfantry]  = "重装歩兵",
+            [JobId.StandardBearer] = "旗手",
+            [JobId.Tactician]      = "戦術官",
+            [JobId.Medic]          = "衛生兵",
+            [JobId.Sniper]         = "狙撃兵",
+            [JobId.Sorcerer]       = "呪術師",
+            [JobId.Scout]          = "斥候",
         };
 
-    /// <summary>Human-readable English job name. Falls back to the enum name.</summary>
+    /// <summary>Japanese job name. Falls back to the ASCII enum name.</summary>
     public static string DisplayName(JobId id)
         => DisplayNames.TryGetValue(id, out var name) ? name : id.ToString();
 
-    // ─── Manual prose (faithful English trace of TS JOB_ABILITY + guide text) ─
+    // ─── Manual prose (Japanese trace of the TS JOB_ABILITY + guide text) ─────
 
     private static readonly IReadOnlyDictionary<JobId, JobCodexText> Texts =
         new Dictionary<JobId, JobCodexText>
         {
             [JobId.IronWallKnight] = new JobCodexText
             {
-                Role           = "Front-line shield. A heavy knight who guards the whole battalion.",
-                AbilitySummary = "Battalion Guard (in FRONT, every ally takes -10 damage) + Squad Guard (own squad takes -15 damage). Stacks when you field several.",
-                Usage          = "Place at the front center to minimize harm to your rear attackers. Fielding several doubles your sturdiness.",
-                Flavor         = "Bearer of an ancient oath. I make a shield of my body so those behind me may live.",
-                FormationHeadline = "Recommended: front line (Battalion Guard activation)",
-                EffectRangeNote   = "Battalion Guard reaches the whole battalion only when in FRONT / Squad Guard is own squad only.",
+                Role           = "前衛の盾。大隊を守護する重装騎士。",
+                AbilitySummary = "大隊総守護力（前衛配置時、大隊全員の被ダメージ -10）＋ 分隊守護力（自分隊の被ダメージ -15）。複数編成で加算される。",
+                Usage          = "前衛中央に置き、後衛アタッカーへの被害を最小化する。複数編成で堅さが倍増する。",
+                Flavor         = "古き誓いを纏う者。我が身を盾とし、後ろの者たちを生かす。",
+                FormationHeadline = "推奨：最前線（大隊総守護力の発動条件）",
+                EffectRangeNote   = "大隊総守護力は前衛配置時のみ大隊全体へ届く。分隊守護力は所属分隊のみ。",
             },
             [JobId.HeavyInfantry] = new JobCodexText
             {
-                Role           = "Self-sufficient front-line attacker.",
-                AbilitySummary = "Highest HP of all jobs (300) + high front attack (FA=70) + Squad Guard (SDF=10).",
-                Usage          = "Place beside the Iron Wall Knight as an unbreakable shield that also deals damage. Strong in long battles.",
-                Flavor         = "Unbreaking armor, unyielding will. Holds the line until the last man stands.",
-                FormationHeadline = "Recommended: front line (the unbreaking shield)",
-                EffectRangeNote   = "Squad Guard=10 mitigates own squad / high HP + high FA holds the front.",
+                Role           = "単騎で完結する前衛アタッカー。",
+                AbilitySummary = "全ジョブ最高の体力 300 ＋ 高い前衛攻撃力 70 ＋ 分隊守護力 10。",
+                Usage          = "鉄壁騎士の隣に置き、削れぬ盾として攻撃も担う。長期戦に強い。",
+                Flavor         = "壊れぬ鎧、屈せぬ意志。最後の一人になるまで戦線を支える。",
+                FormationHeadline = "推奨：最前線（壊れぬ盾）",
+                EffectRangeNote   = "分隊守護力 10 で自分隊を軽減。高い体力と前衛攻撃で前線を支える。",
             },
             [JobId.StandardBearer] = new JobCodexText
             {
-                Role           = "Spiritual pillar that raises the whole battalion's firepower.",
-                AbilitySummary = "Rally Order=40 (at turn start, grants every other ally SPD+40 / ATK+40). Stackable.",
-                Usage          = "Works in front or rear. Field several to make the entire battalion monstrous.",
-                Flavor         = "The waving banner rekindles morale. One who lights a fire in every heart.",
-                FormationHeadline = "Recommended: anywhere (empowers the whole battalion)",
-                EffectRangeNote   = "Rally Order=40 grants SPD+40 / ATK+40 to every other ally in the battalion.",
+                Role           = "大隊全員の火力を底上げする精神的支柱。",
+                AbilitySummary = "突撃号令 40（ターン開始時、自分以外の全員に 俊敏+40 / 攻撃+40）。重ね掛け可能。",
+                Usage          = "前衛・後衛どちらでも機能する。複数編成で大隊全員が化け物になる。",
+                Flavor         = "翻る軍旗が士気を呼び覚ます。皆の心に火を灯す者。",
+                FormationHeadline = "推奨：どこでも可（大隊全員を強化）",
+                EffectRangeNote   = "突撃号令 40 で自分以外の大隊全員に 俊敏+40 / 攻撃+40 を撒く。",
             },
             [JobId.Tactician] = new JobCodexText
             {
-                Role           = "Speed-leaning lightweight buffer.",
-                AbilitySummary = "Rally Order=20 (SPD+20 / ATK+20) + a moderate own Speed (SPD=35).",
-                Usage          = "More modest than the Standard Bearer, but carries a speed value, so combined use boosts initiative.",
-                Flavor         = "A cold intellect that reads the pieces on the board. One command can turn the tide.",
-                FormationHeadline = "Recommended: anywhere (lightweight buffer)",
-                EffectRangeNote   = "Rally Order=20 grants SPD+20 / ATK+20 to every other ally in the battalion.",
+                Role           = "速度寄りの軽量バフ役。",
+                AbilitySummary = "突撃号令 20（俊敏+20 / 攻撃+20）＋ 自身も中速 俊敏 35。",
+                Usage          = "旗手より控えめだが速度値も持つため、複合運用で先制力を高められる。",
+                Flavor         = "盤上の駒を読む冷徹な頭脳。号令一つで戦況を変える。",
+                FormationHeadline = "推奨：どこでも可（軽量バフ役）",
+                EffectRangeNote   = "突撃号令 20 で自分以外の大隊全員に 俊敏+20 / 攻撃+20 を撒く。",
             },
             [JobId.Medic] = new JobCodexText
             {
-                Role           = "The only sustained healer.",
-                AbilitySummary = "Squad Heal=30 (at turn end, heals every living member of own squad +30 HP). Up to max HP.",
-                Usage          = "Always place in a fragile rear squad; a necessity even up front. The lifeline of long battles.",
-                Flavor         = "The angel of the battlefield, or the last hope. Beyond the healing lies a new future.",
-                FormationHeadline = "Recommended: fragile rear (sustained squad healing)",
-                EffectRangeNote   = "Squad Heal=30 is own squad only. Heals every survivor in the placed squad.",
+                Role           = "唯一の継続回復役。",
+                AbilitySummary = "ターン末分隊治癒 30（ターン終了時、自分隊の生存者全員を +30 回復）。最大体力まで。",
+                Usage          = "脆い後衛分隊に必ず配置。前衛にも必需品。長期戦の生命線。",
+                Flavor         = "戦場の天使、あるいは最後の希望。手当ての先に新たな未来を見る。",
+                FormationHeadline = "推奨：脆い後衛（自分隊を継続回復）",
+                EffectRangeNote   = "ターン末分隊治癒 30 は所属分隊のみ。配置した分隊の生存者全員を回復する。",
             },
             [JobId.Sniper] = new JobCodexText
             {
-                Role           = "Rear super-firepower and a double-shot artillery piece.",
-                AbilitySummary = "RA=90 (rear attack 90). If first in initiative and fastest in the squad, fires a Second Arrow (double strike).",
-                Usage          = "Must be placed in REAR-L / REAR-R. Raise the double-shot chance with Tactician / Standard Bearer speed buffs.",
-                Flavor         = "Listens to the wind, holds the breath. A single arrow that changes the battle.",
-                FormationHeadline = "Recommended: rear (the double-shot artillery)",
-                EffectRangeNote   = "RA=90 gives full power only in the rear / Second Arrow (1st initiative, front slot) explodes when it lands.",
+                Role           = "後衛の超火力。二の矢を放つ砲台。",
+                AbilitySummary = "後衛攻撃力 90。行動順1番手かつ分隊最速なら 二の矢（2連撃）が発動する。",
+                Usage          = "後衛-左／後衛-右へ配置必須。戦術官・旗手の俊敏バフで二の矢の確率を高める。",
+                Flavor         = "風の音を聴き、息を止める。一矢で戦況を変える狙撃の達人。",
+                FormationHeadline = "推奨：後衛（二の矢の砲台）",
+                EffectRangeNote   = "後衛攻撃力 90 は後衛時のみフル火力。二の矢が決まれば爆発的。",
             },
             [JobId.Sorcerer] = new JobCodexText
             {
-                Role           = "The strongest firepower of all jobs, yet the most fragile artillery.",
-                AbilitySummary = "RA=120 (rear attack 120, strongest of all). HP=40, weakest of all jobs.",
-                Usage          = "Must be placed in the rear. A high-risk high-reward card to settle the fight before the front collapses.",
-                Flavor         = "A wielder of ancient forbidden spells. Pours life into a single magic bullet, or has life taken in return.",
-                FormationHeadline = "Recommended: rear (high risk, high reward)",
-                EffectRangeNote   = "RA=120 is the strongest artillery of all / HP=40 makes the front line impossible.",
+                Role           = "全ジョブ最強の火力、しかし最も脆い砲台。",
+                AbilitySummary = "後衛攻撃力 120（全職最強）。体力 40 で全ジョブ最弱。",
+                Usage          = "後衛配置必須。前衛が崩れる前に決着をつける高リスク高リターンの札。",
+                Flavor         = "古き禁呪を扱う者。一発の魔弾に命を込める。あるいは命を奪われる。",
+                FormationHeadline = "推奨：後衛（高リスク高リターン）",
+                EffectRangeNote   = "後衛攻撃力 120 で全職最強の砲台。体力 40 ゆえ前衛は不可。",
             },
             [JobId.Scout] = new JobCodexText
             {
-                Role           = "The fastest pre-emptive chipper.",
-                AbilitySummary = "SPD=60 (fastest of all jobs) + even front/rear FA=RA=40 for high placement freedom.",
-                Usage          = "Place in the rear to seize initiative and blunt the enemy's opening. Its top speed can also support the Tactician.",
-                Flavor         = "Moves faster than anyone, sees the enemy before anyone. Races across the field like the wind.",
-                FormationHeadline = "Recommended: anywhere (the fastest pre-emptive chipper)",
-                EffectRangeNote   = "FA=RA=40 means free placement / SPD=60 always seizes initiative.",
+                Role           = "速度最強の先制削り役。",
+                AbilitySummary = "俊敏 60（全ジョブ最速）＋ 前後均等 攻撃 40 で配置自由度が高い。",
+                Usage          = "後衛配置で先制を取り、敵の出鼻を挫く。最速の利で戦術官の補佐も可能。",
+                Flavor         = "誰よりも早く動き、誰よりも先に敵を見る。風のように戦場を駆ける。",
+                FormationHeadline = "推奨：どこでも可（最速の先制削り役）",
+                EffectRangeNote   = "前後均等 攻撃 40 で配置自由。俊敏 60 で常時先制を取る。",
             },
         };
 
-    /// <summary>Manual prose for a job (never null for the 8 defined jobs).</summary>
+    /// <summary>Manual prose for a job (null for null/unknown jobs).</summary>
     public static JobCodexText? TextFor(JobId? id)
         => id is { } jid && Texts.TryGetValue(jid, out var t) ? t : null;
 
-    // ─── Structured passive explainer (numbers sourced from JobMaster) ───────
-    //
-    //  Mirrors the TS explainJobPassives: emit a row only for non-zero numeric
-    //  passives (BDF/SDF/AB/HL), then append the special passive (sniper's
-    //  Second Arrow) if the job declares it.
+    // ─── Structured passive explainer (numbers sourced from JobMaster) ────────
 
     /// <summary>
     /// Build the structured passive list for a job, reading numeric values from
-    /// JobMaster (single SoT for numbers) and English labels/scope/desc from here.
+    /// JobMaster (single SoT for numbers) and Japanese labels/scope/desc here.
     /// Returns an empty list for null/unknown jobs.
     /// </summary>
     public static ImmutableArray<JobPassiveLine> Passives(JobId? id)
@@ -193,10 +163,10 @@ public static class JobCodex
             builder.Add(new JobPassiveLine
             {
                 Key         = "bdf",
-                Label       = "Battalion Guard",
+                Label       = "大隊総守護力",
                 Value       = stats.BattalionDefense,
-                Scope       = "Activates only when in FRONT / effect reaches the whole battalion",
-                Description = "Reduces damage taken by every ally (reaches other squads too).",
+                Scope       = "前衛配置時のみ発動／効果は大隊全体",
+                Description = "大隊全員の被ダメージを軽減（他分隊にも届く）。",
             });
         }
         if (stats.SquadDefense > 0)
@@ -204,10 +174,10 @@ public static class JobCodex
             builder.Add(new JobPassiveLine
             {
                 Key         = "sdf",
-                Label       = "Squad Guard",
+                Label       = "分隊守護力",
                 Value       = stats.SquadDefense,
-                Scope       = "Always active / effect is own squad only",
-                Description = "Reduces damage taken by the squad you belong to.",
+                Scope       = "常時発動／効果は所属分隊のみ",
+                Description = "自分が所属する分隊の被ダメージを軽減。",
             });
         }
         if (stats.InitiativeBuff > 0)
@@ -215,10 +185,10 @@ public static class JobCodex
             builder.Add(new JobPassiveLine
             {
                 Key         = "ab",
-                Label       = "Rally Order",
+                Label       = "突撃号令",
                 Value       = stats.InitiativeBuff,
-                Scope       = "Every turn start / every other ally in the battalion",
-                Description = "Spreads a turn-start speed and attack buff (stackable).",
+                Scope       = "毎ターン開始時／自分以外の大隊全員",
+                Description = "ターン開始時に俊敏・攻撃バフを撒く（重ね掛け可）。",
             });
         }
         if (stats.TurnEndSquadHeal > 0)
@@ -226,10 +196,10 @@ public static class JobCodex
             builder.Add(new JobPassiveLine
             {
                 Key         = "hl",
-                Label       = "Squad Heal",
+                Label       = "ターン末分隊治癒",
                 Value       = stats.TurnEndSquadHeal,
-                Scope       = "Every turn end / every survivor of own squad",
-                Description = "Heals the squad's HP at turn end (capped at max HP).",
+                Scope       = "毎ターン終了時／所属分隊の生存者全員",
+                Description = "ターン終了時に分隊の体力を回復（最大体力で頭打ち）。",
             });
         }
 
@@ -238,10 +208,10 @@ public static class JobCodex
             builder.Add(new JobPassiveLine
             {
                 Key         = "special-double-strike",
-                Label       = "Second Arrow (double strike)",
+                Label       = "二の矢（2連撃）",
                 Value       = null,
-                Scope       = "Only when 1st in initiative AND in the squad's front slot",
-                Description = "The normal attack is performed twice (a follow-up within one turn).",
+                Scope       = "行動順1番手 かつ 分隊先頭スロット時のみ",
+                Description = "通常攻撃が2回行われる（1ターン中の追撃）。",
             });
         }
 

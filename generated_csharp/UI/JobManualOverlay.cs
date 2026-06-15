@@ -59,12 +59,12 @@ public partial class JobManualOverlay : Godot.Control
         header.SetMeta(TestIdMetaKey, "job-manual-header");
         panel.AddChild(header);
 
-        var title = new Label { Text = "JOB MANUAL -- All Jobs" };
+        var title = new Label { Text = "ジョブ図鑑 ― 全8職" };
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         title.SetMeta(TestIdMetaKey, "job-manual-title");
         header.AddChild(title);
 
-        var closeButton = new Button { Text = "CLOSE" };
+        var closeButton = new Button { Text = "閉じる" };
         closeButton.SetMeta(TestIdMetaKey, "job-manual-close-button");
         closeButton.Pressed += () => CloseRequested?.Invoke();
         header.AddChild(closeButton);
@@ -89,7 +89,7 @@ public partial class JobManualOverlay : Godot.Control
             card.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             card.SetMeta(TestIdMetaKey, $"job-manual-card-{id}");
 
-            var block = JobDescriptionView.Build(id, "job-manual");
+            var block = JobDescriptionView.Build(id, null, "job-manual");
             if (block is not null)
             {
                 card.AddChild(block);

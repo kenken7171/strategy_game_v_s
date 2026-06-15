@@ -1,40 +1,42 @@
 // =============================================================================
 //  ChronicleKnights — UnitDetailOverlay.cs
 // -----------------------------------------------------------------------------
-//  Faithful C# trace of the TS UnitDetailModal (packages/frontend/src/
-//  components/UnitDetailModal.tsx): a modal that appears when a roster unit is
-//  selected, showing the full profile (stats, gender, lineage, current
-//  formation slot) plus the shared job description block.
+//  Modal shown when a roster unit is inspected: a gendered job illustration plus
+//  the full profile (stats / gender / lineage / current formation slot) and the
+//  shared job description block. Faithful trace of the TS UnitDetailModal.
 //
-//  Stateless, self-collapsing modal (same lifecycle as the other overlays):
-//  TargetUnitId is injected before AddChild; CLOSE raises CloseRequested and the
-//  GameDirector frees it. All data is read fresh from ChronicleGlobal on _Ready;
-//  numeric stats come from JobMaster + BattleManager (single SoT).
+//  Stateless, self-collapsing modal: TargetUnitId is injected before AddChild;
+//  CLOSE raises CloseRequested and the GameDirector frees it. All data is read
+//  fresh from ChronicleGlobal on _Ready; numbers come from JobMaster + BattleManager.
 //
-//  Constitution I: ASCII only. Job / item / display names go through
-//  ChronicleGlobal resolvers; English chrome text is literal here.
+//  ★ Language exception (this command only): UI display text is Japanese (UTF-8).
+//    Identifiers / comments stay ASCII. Emphasis is BBCode (bold / gold numbers).
 // =============================================================================
 
 using System;
+using System.Text;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Units;
+using ChronicleKnights.UserInterface; // JobTextureLibrary
 using Godot;
 
 namespace ChronicleKnights.UI;
 
-/// <summary>Front-most modal showing one unit's full profile + job description.</summary>
+/// <summary>Front-most modal: one unit's full profile (Japanese / BBCode + art).</summary>
 public partial class UnitDetailOverlay : Godot.Control
 {
     private const string TestIdMetaKey = "data_testid";
+    private const string HeaderColor = "#7fd0ff";
+    private const string GoldColor   = "#ffd24a";
 
     /// <summary>Unit to profile. Injected before AddChild (the modal is stateless).</summary>
     public Guid TargetUnitId { get; set; }
 
-    /// <summary>Raised when the player presses CLOSE (GameDirector frees the modal).</summary>
+    /// <summary>Raised when the player presses the close button.</summary>
     public event Action? CloseRequested;
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -49,159 +51,214 @@ public partial class UnitDetailOverlay : Godot.Control
 
     private void BuildUI()
     {
-        // Dim backdrop (inert behind).
         var backdrop = new ColorRect { Color = new Color(0f, 0f, 0f, 0.85f) };
         backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         backdrop.SetMeta(TestIdMetaKey, "unit-detail-overlay-backdrop");
         AddChild(backdrop);
 
-        // Centered modal panel.
         var center = new CenterContainer();
         center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(center);
 
         var panel = new PanelContainer();
-        panel.CustomMinimumSize = new Vector2(560, 0);
+        panel.CustomMinimumSize = new Vector2(620, 0);
         panel.SetMeta(TestIdMetaKey, "unit-detail-modal-root");
         center.AddChild(panel);
 
-        // The panel content scrolls in case the job description is tall.
         var scroll = new ScrollContainer();
         scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        scroll.CustomMinimumSize = new Vector2(560, 560);
+        scroll.CustomMinimumSize = new Vector2(620, 600);
         scroll.SetMeta(TestIdMetaKey, "unit-detail-scroll");
         panel.AddChild(scroll);
 
         var body = new VBoxContainer();
-        body.AddThemeConstantOverride("separation", 8);
+        body.AddThemeConstantOverride("separation", 10);
         body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.AddChild(body);
+
+        BuildHeader(body);
 
         var unit = _chronicleGlobal?.FindUnit(TargetUnitId);
         if (_chronicleGlobal is null || unit is null)
         {
-            BuildHeader(body, "UNIT DETAIL");
-            var missing = new Label { Text = "Unit not found." };
+            var missing = new Label { Text = "ユニットが見つかりません。" };
             missing.SetMeta(TestIdMetaKey, "unit-detail-missing");
             body.AddChild(missing);
             return;
         }
 
-        BuildHeader(body, "UNIT DETAIL");
+        // ── Identity row: illustration + name/job/gender/origin/age ──────────
+        var idRow = new HBoxContainer();
+        idRow.AddThemeConstantOverride("separation", 14);
+        idRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        body.AddChild(idRow);
 
-        // ── Identity ─────────────────────────────────────────────────────────
-        var name = new Label { Text = _chronicleGlobal.ResolveDisplayName(unit) };
-        name.SetMeta(TestIdMetaKey, "unit-detail-name");
-        body.AddChild(name);
+        var texture = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (texture is not null)
+        {
+            var art = new TextureRect
+            {
+                Texture = texture,
+                CustomMinimumSize = new Vector2(128, 128),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                SizeFlagsVertical = SizeFlags.ShrinkBegin,
+            };
+            art.SetMeta(TestIdMetaKey, "unit-detail-art");
+            idRow.AddChild(art);
+        }
 
-        var jobBadge = new Label { Text = $"[{_chronicleGlobal.ResolveJobName(unit.Job)}]  ({unit.Job})" };
-        jobBadge.SetMeta(TestIdMetaKey, "unit-detail-job-badge");
-        body.AddChild(jobBadge);
-
-        var genderText = unit.Gender == Gender.Male ? "Male (M)" : "Female (F)";
-        var bio = new Label { Text = $"Gender: {genderText}   Origin: {unit.Origin}   Age: {unit.Age}   Lv{unit.Level}" };
-        bio.SetMeta(TestIdMetaKey, "unit-detail-bio");
-        body.AddChild(bio);
+        var identity = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        identity.SetMeta(TestIdMetaKey, "unit-detail-identity");
+        identity.Text = BuildIdentityBbcode(unit);
+        idRow.AddChild(identity);
 
         // ── Current formation slot ───────────────────────────────────────────
         var coord = _chronicleGlobal.CurrentFormation.CoordinateOf(TargetUnitId);
         var slotText = coord is { } c
-            ? $"Formation slot: {c.Row} slot {c.Column + 1}"
-            : "Formation slot: (on the bench)";
+            ? $"配置スロット: {RowLabel(c.Row)} {c.Column + 1}番"
+            : "配置スロット: （控え・未配置）";
         var slot = new Label { Text = slotText };
+        slot.AddThemeColorOverride("font_color", Colors.LightSkyBlue);
         slot.SetMeta(TestIdMetaKey, "unit-detail-formation-slot");
         body.AddChild(slot);
 
-        // ── Stats (from JobMaster + equipment bonuses) ───────────────────────
-        var statsHeader = new Label { Text = "-- Stats --" };
-        statsHeader.SetMeta(TestIdMetaKey, "unit-detail-stats-title");
-        body.AddChild(statsHeader);
-
-        var def = JobMaster.Find(unit.Job);
-        if (def is not null)
+        // ── Stats + lineage (BBCode) ─────────────────────────────────────────
+        var stats = new RichTextLabel
         {
-            var s = def.Stats;
-            var effective = s.FrontAttack >= s.RearAttack ? s.FrontAttack : s.RearAttack;
-
-            AddStat(body, "unit-detail-stat-hp", $"HP: {s.MaxHp}");
-            AddStat(body, "unit-detail-stat-attack",
-                $"ATK (FA / RA): {s.FrontAttack} / {s.RearAttack}  (effective {effective})");
-            AddStat(body, "unit-detail-stat-speed", $"SPD: {s.Speed}");
-        }
-
-        var equip = unit.MainEquipment;
-        var equipText = equip is null ? "Equipment: --" : $"Equipment: {ItemName(equip.ItemId)} Lv{equip.Level}";
-        AddStat(body, "unit-detail-equipment", equipText);
-
-        var atkBonus = BattleManager.EquipmentAttackBonus(unit);
-        var defBonus = BattleManager.EquipmentDefenseBonus(unit);
-        var spdBonus = BattleManager.EquipmentSpeedBonus(unit);
-        AddStat(body, "unit-detail-equip-bonus",
-            $"Equip bonus: ATK +{atkBonus}  DEF +{defBonus}  SPD +{spdBonus}");
-
-        // ── Lineage (gender / marriage / parentage) ──────────────────────────
-        var lineageHeader = new Label { Text = "-- Lineage --" };
-        lineageHeader.SetMeta(TestIdMetaKey, "unit-detail-lineage-title");
-        body.AddChild(lineageHeader);
-
-        if (unit.IsMarried && unit.SpouseId is { } spouseId)
-        {
-            var spouse = _chronicleGlobal.FindUnit(spouseId);
-            var spouseName = spouse is null ? "(lost)" : _chronicleGlobal.ResolveDisplayName(spouse);
-            AddStat(body, "unit-detail-married", $"Married to: {spouseName}");
-        }
-
-        if (unit.HasParentage && unit.Parentage is { } parentage)
-        {
-            var father = _chronicleGlobal.FindUnit(parentage.FatherId);
-            var mother = _chronicleGlobal.FindUnit(parentage.MotherId);
-            var fatherName = father is null ? "(lost)" : _chronicleGlobal.ResolveDisplayName(father);
-            var motherName = mother is null ? "(lost)" : _chronicleGlobal.ResolveDisplayName(mother);
-            AddStat(body, "unit-detail-heir", $"Heir of: {fatherName} & {motherName}");
-        }
-
-        if (!unit.IsMarried && !unit.HasParentage)
-        {
-            AddStat(body, "unit-detail-no-lineage", "-- No lineage records (founding member) --");
-        }
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        stats.SetMeta(TestIdMetaKey, "unit-detail-stats-section");
+        stats.Text = BuildStatsBbcode(unit);
+        body.AddChild(stats);
 
         // ── Job description (shared with the Job Manual) ─────────────────────
-        var jobDescHeader = new Label { Text = "-- Job Description --" };
+        var jobDescHeader = new Label { Text = "― ジョブ説明 ―" };
         jobDescHeader.SetMeta(TestIdMetaKey, "unit-detail-job-description-header");
         body.AddChild(jobDescHeader);
 
-        var jobBlock = JobDescriptionView.Build(unit.Job, "unit-detail-job");
+        var jobBlock = JobDescriptionView.Build(unit.Job, unit.Gender, "unit-detail-job");
         if (jobBlock is not null)
         {
             body.AddChild(jobBlock);
         }
     }
 
-    private void BuildHeader(VBoxContainer body, string title)
+    private void BuildHeader(VBoxContainer body)
     {
         var header = new HBoxContainer();
         header.AddThemeConstantOverride("separation", 16);
         header.SetMeta(TestIdMetaKey, "unit-detail-header");
         body.AddChild(header);
 
-        var titleLabel = new Label { Text = title };
-        titleLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        titleLabel.SetMeta(TestIdMetaKey, "unit-detail-title");
-        header.AddChild(titleLabel);
+        var title = new Label { Text = "ユニット詳細" };
+        title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        title.SetMeta(TestIdMetaKey, "unit-detail-title");
+        header.AddChild(title);
 
-        var closeButton = new Button { Text = "CLOSE" };
+        var closeButton = new Button { Text = "閉じる" };
         closeButton.SetMeta(TestIdMetaKey, "unit-detail-modal-close-button");
         closeButton.Pressed += () => CloseRequested?.Invoke();
         header.AddChild(closeButton);
     }
 
-    private static void AddStat(VBoxContainer parent, string testId, string text)
+    private string BuildIdentityBbcode(Unit unit)
     {
-        var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        label.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        label.SetMeta(TestIdMetaKey, testId);
-        parent.AddChild(label);
+        var name = _chronicleGlobal?.ResolveDisplayName(unit) ?? unit.Id.ToString();
+        var jobName = _chronicleGlobal?.ResolveJobName(unit.Job) ?? unit.Job.ToString();
+        var gender = unit.Gender == Gender.Male ? "男" : "女";
+
+        var sb = new StringBuilder();
+        sb.Append("[b][font_size=24]").Append(name).Append("[/font_size][/b]\n");
+        sb.Append(Field("職")).Append("[b]").Append(jobName).Append("[/b]　");
+        sb.Append(Field("性別")).Append(gender).Append("　");
+        sb.Append(Field("出自")).Append(OriginLabel(unit.Origin)).Append('\n');
+        sb.Append(Field("年齢")).Append(unit.Age).Append(" 歳　");
+        sb.Append(Field("階級")).Append("Lv").Append(unit.Level);
+        return sb.ToString();
     }
+
+    private string BuildStatsBbcode(Unit unit)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append("[color=").Append(HeaderColor).Append("][b]■ ステータス[/b][/color]\n");
+        var def = JobMaster.Find(unit.Job);
+        if (def is not null)
+        {
+            var s = def.Stats;
+            var eff = s.FrontAttack >= s.RearAttack ? s.FrontAttack : s.RearAttack;
+            sb.Append("体力(HP): [b]").Append(s.MaxHp).Append("[/b]\n");
+            sb.Append("攻撃力: 前衛 [b]").Append(s.FrontAttack).Append("[/b] / 後衛 [b]").Append(s.RearAttack)
+              .Append("[/b]　(実効 ").Append(eff).Append(")\n");
+            sb.Append("俊敏(SPD): [b]").Append(s.Speed).Append("[/b]\n");
+        }
+
+        var equip = unit.MainEquipment;
+        var equipText = equip is null ? "なし" : $"{ItemName(equip.ItemId)} Lv{equip.Level}";
+        sb.Append("兵装: ").Append(equipText).Append('\n');
+
+        var atk = BattleManager.EquipmentAttackBonus(unit);
+        var dfn = BattleManager.EquipmentDefenseBonus(unit);
+        var spd = BattleManager.EquipmentSpeedBonus(unit);
+        sb.Append("装備補正: 攻撃 [color=").Append(GoldColor).Append("][b]+").Append(atk).Append("[/b][/color]")
+          .Append("  防御 [color=").Append(GoldColor).Append("][b]+").Append(dfn).Append("[/b][/color]")
+          .Append("  俊敏 [color=").Append(GoldColor).Append("][b]+").Append(spd).Append("[/b][/color]\n\n");
+
+        // Lineage.
+        sb.Append("[color=").Append(HeaderColor).Append("][b]■ 血統[/b][/color]\n");
+        var hasLine = false;
+        if (unit.IsMarried && unit.SpouseId is { } spouseId)
+        {
+            var spouse = _chronicleGlobal?.FindUnit(spouseId);
+            var spouseName = spouse is null ? "（失われた）" : _chronicleGlobal!.ResolveDisplayName(spouse);
+            sb.Append("配偶者: [b]").Append(spouseName).Append("[/b]\n");
+            hasLine = true;
+        }
+        if (unit.HasParentage && unit.Parentage is { } parentage)
+        {
+            var father = _chronicleGlobal?.FindUnit(parentage.FatherId);
+            var mother = _chronicleGlobal?.FindUnit(parentage.MotherId);
+            var fatherName = father is null ? "（失われた）" : _chronicleGlobal!.ResolveDisplayName(father);
+            var motherName = mother is null ? "（失われた）" : _chronicleGlobal!.ResolveDisplayName(mother);
+            sb.Append("両親: [b]").Append(fatherName).Append("[/b] ／ [b]").Append(motherName).Append("[/b]\n");
+            hasLine = true;
+        }
+        if (!hasLine)
+        {
+            sb.Append("[color=#999999]血統情報なし（創設メンバー）[/color]");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Field(string label)
+        => $"[color={HeaderColor}]{label}:[/color] ";
+
+    private static string RowLabel(SquadRow row) => row switch
+    {
+        SquadRow.Front     => "前衛",
+        SquadRow.RearLeft  => "後衛-左",
+        SquadRow.RearRight => "後衛-右",
+        _ => row.ToString(),
+    };
+
+    private static string OriginLabel(Origin origin) => origin switch
+    {
+        Origin.Japanese  => "和風",
+        Origin.European  => "欧州",
+        Origin.Classical => "古典",
+        _ => origin.ToString(),
+    };
 
     private string ItemName(ItemId item)
         => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();

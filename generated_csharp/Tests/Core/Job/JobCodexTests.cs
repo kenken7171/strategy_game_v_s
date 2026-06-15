@@ -26,9 +26,10 @@ public class JobCodexTests
             Assert.False(string.IsNullOrWhiteSpace(text.Usage));
             Assert.False(string.IsNullOrWhiteSpace(text.Flavor));
 
+            // Display names are Japanese UI strings (language exception for the
+            // localization command); only assert they are present and non-empty.
             var name = JobCodex.DisplayName(id);
             Assert.False(string.IsNullOrWhiteSpace(name));
-            Assert.All(name, ch => Assert.True(ch < 128)); // ASCII only (Constitution I)
         }
     }
 

@@ -107,7 +107,7 @@ public partial class FormationUI : Godot.Control
         root.SetMeta(TestIdMetaKey, "formation-root");
         scroll.AddChild(root);
 
-        var titleLabel = new Label { Text = "BATTALION FORMATION (Wedge / Delta)" };
+        var titleLabel = new Label { Text = "大隊編成（▲ウェッジ陣形）" };
         titleLabel.SetMeta(TestIdMetaKey, "formation-title");
         root.AddChild(titleLabel);
 
@@ -117,8 +117,8 @@ public partial class FormationUI : Godot.Control
 
         var hintLabel = new Label
         {
-            Text = "Drag a roster unit onto a slot to deploy. Drag slot to slot to swap. "
-                   + "Press [x] on a slot to remove. Click a roster card for details.",
+            Text = "控えのユニットを枠へドラッグして配置。枠から枠へドラッグで入れ替え。"
+                   + "枠の［× 解除］で外す。控えカードの［詳細］でユニット詳細を表示。",
         };
         hintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         hintLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -131,18 +131,18 @@ public partial class FormationUI : Godot.Control
         rotationRow.SetMeta(TestIdMetaKey, "formation-rotation-row");
         root.AddChild(rotationRow);
 
-        var rotateCcw = new Button { Text = "Rotate CCW" };
+        var rotateCcw = new Button { Text = "反時計回り" };
         rotateCcw.SetMeta(TestIdMetaKey, "formation-rotate-counter-clockwise");
         rotateCcw.Pressed += () => OnRotatePressed(RotationDirection.CounterClockwise);
         rotationRow.AddChild(rotateCcw);
 
-        var rotateCw = new Button { Text = "Rotate CW" };
+        var rotateCw = new Button { Text = "時計回り" };
         rotateCw.SetMeta(TestIdMetaKey, "formation-rotate-clockwise");
         rotateCw.Pressed += () => OnRotatePressed(RotationDirection.Clockwise);
         rotationRow.AddChild(rotateCw);
 
         // Wedge board (FormationChanged rebuilds the 9 slots).
-        var boardSectionLabel = new Label { Text = "-- Deployment (Wedge) --" };
+        var boardSectionLabel = new Label { Text = "― 配置盤面（▲ウェッジ）―" };
         boardSectionLabel.SetMeta(TestIdMetaKey, "formation-board-section-label");
         root.AddChild(boardSectionLabel);
 
@@ -153,7 +153,7 @@ public partial class FormationUI : Godot.Control
         root.AddChild(_boardContainer);
 
         // Bench (unplaced living members; RosterChanged rebuilds).
-        var benchSectionLabel = new Label { Text = "-- Bench (unplaced members) --" };
+        var benchSectionLabel = new Label { Text = "― 控え（未配置の旅団員）―" };
         benchSectionLabel.SetMeta(TestIdMetaKey, "formation-bench-section-label");
         root.AddChild(benchSectionLabel);
 
@@ -167,13 +167,13 @@ public partial class FormationUI : Godot.Control
         equipSection.SetMeta(TestIdMetaKey, "roster-equip-section");
         root.AddChild(equipSection);
 
-        var equipTitle = new Label { Text = "-- Equipment dock (free swap) --" };
+        var equipTitle = new Label { Text = "― 兵装スロット（無償脱着）―" };
         equipTitle.SetMeta(TestIdMetaKey, "roster-equip-title");
         equipSection.AddChild(equipTitle);
 
         var equipHint = new Label
         {
-            Text = "Press a slot to equip/unequip (green numbers are the equipped ATK/DEF/SPD bonus).",
+            Text = "スロットを押して兵装を着脱（緑の数値が装備中の 攻撃/防御/俊敏 補正）。",
         };
         equipHint.SetMeta(TestIdMetaKey, "roster-equip-hint");
         equipSection.AddChild(equipHint);
@@ -228,7 +228,7 @@ public partial class FormationUI : Godot.Control
     {
         if (_chronicleGlobal is null || _summaryLabel is null) return;
         var board = _chronicleGlobal.CurrentFormation;
-        _summaryLabel.Text = $"Deployed {board.OccupiedCount} / {FormationBoard.SlotCount} slots";
+        _summaryLabel.Text = $"配置済み {board.OccupiedCount} / {FormationBoard.SlotCount} 枠";
     }
 
     // ── Wedge board: FRONT centered on top, REAR-L / REAR-R below ──────────────
@@ -322,7 +322,7 @@ public partial class FormationUI : Godot.Control
             jobLabel.SetMeta(TestIdMetaKey, $"formation-slot-job-{coordinate.Row}-{coordinate.Column}");
             inner.AddChild(jobLabel);
 
-            var removeButton = new Button { Text = "x remove" };
+            var removeButton = new Button { Text = "× 解除" };
             removeButton.SetMeta(TestIdMetaKey, $"formation-slot-remove-{coordinate.Row}-{coordinate.Column}");
             var capturedCoord = coordinate;
             removeButton.Pressed += () => OnClearSlotPressed(capturedCoord);
@@ -332,7 +332,7 @@ public partial class FormationUI : Godot.Control
         {
             var empty = new Label
             {
-                Text = "(drop here)",
+                Text = "（ここへ配置）",
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             empty.SetMeta(TestIdMetaKey, $"formation-slot-empty-{coordinate.Row}-{coordinate.Column}");
@@ -359,7 +359,7 @@ public partial class FormationUI : Godot.Control
             if (board.Contains(unit.Id)) continue;
 
             var capturedId = unit.Id;
-            var eligibility = unit.Age >= BattleEligibleAge ? "ready" : "minor";
+            var eligibility = unit.Age >= BattleEligibleAge ? "出陣可" : "未成年";
 
             var card = new RosterDragCard { UnitId = capturedId };
             card.SetMeta(TestIdMetaKey, $"formation-bench-card-{capturedId}");
@@ -378,8 +378,8 @@ public partial class FormationUI : Godot.Control
             info.SetMeta(TestIdMetaKey, $"formation-bench-info-{capturedId}");
             rowBox.AddChild(info);
 
-            // Click "Details" to request the unit detail modal (Stage C).
-            var detailButton = new Button { Text = "Details" };
+            // Click "Details" to request the unit detail modal.
+            var detailButton = new Button { Text = "詳細" };
             detailButton.SetMeta(TestIdMetaKey, $"formation-bench-detail-{capturedId}");
             detailButton.Pressed += () => UnitInspectRequested?.Invoke(capturedId);
             rowBox.AddChild(detailButton);
@@ -399,7 +399,7 @@ public partial class FormationUI : Godot.Control
         var alive = _chronicleGlobal.GetAliveUnits();
         if (alive.Count == 0)
         {
-            var empty = new Label { Text = "(no active members to equip)" };
+            var empty = new Label { Text = "（兵装を着脱できる現役がいません）" };
             empty.SetMeta(TestIdMetaKey, "roster-equip-empty");
             _equipListContainer.AddChild(empty);
             return;
@@ -425,8 +425,8 @@ public partial class FormationUI : Godot.Control
             var slotButton = new Button
             {
                 Text = equip is null
-                    ? "Equip slot: --"
-                    : $"Equip slot: {ItemName(equip.ItemId)} Lv{equip.Level}",
+                    ? "兵装: なし"
+                    : $"兵装: {ItemName(equip.ItemId)} Lv{equip.Level}",
             };
             slotButton.SetMeta(TestIdMetaKey, $"roster-equip-slot-{capturedId}");
             slotButton.Pressed += () => OnEquipSlotPressed(capturedId);
@@ -435,7 +435,7 @@ public partial class FormationUI : Godot.Control
             var atkBonus = BattleManager.EquipmentAttackBonus(unit);
             var defBonus = BattleManager.EquipmentDefenseBonus(unit);
             var spdBonus = BattleManager.EquipmentSpeedBonus(unit);
-            var preview = new Label { Text = $"ATK +{atkBonus}  DEF +{defBonus}  SPD +{spdBonus}" };
+            var preview = new Label { Text = $"攻撃 +{atkBonus}  防御 +{defBonus}  俊敏 +{spdBonus}" };
             preview.SetMeta(TestIdMetaKey, $"roster-equip-stats-{capturedId}");
             if (equip is not null)
             {
@@ -454,12 +454,12 @@ public partial class FormationUI : Godot.Control
                     row.AddChild(pickButton);
                 }
 
-                var unequipButton = new Button { Text = "Unequip" };
+                var unequipButton = new Button { Text = "外す" };
                 unequipButton.SetMeta(TestIdMetaKey, $"roster-unequip-btn-{capturedId}");
                 unequipButton.Pressed += () => OnUnequipPressed(capturedId);
                 row.AddChild(unequipButton);
 
-                var cancelButton = new Button { Text = "Cancel" };
+                var cancelButton = new Button { Text = "やめる" };
                 cancelButton.SetMeta(TestIdMetaKey, $"roster-equip-cancel-{capturedId}");
                 cancelButton.Pressed += OnEquipCancelPressed;
                 row.AddChild(cancelButton);
@@ -534,9 +534,9 @@ public partial class FormationUI : Godot.Control
     /// <summary>ASCII squad row label for the wedge headers.</summary>
     private static string RowLabel(SquadRow row) => row switch
     {
-        SquadRow.Front     => "FRONT (Vanguard)",
-        SquadRow.RearLeft  => "REAR-L",
-        SquadRow.RearRight => "REAR-R",
+        SquadRow.Front     => "前衛（先鋒）",
+        SquadRow.RearLeft  => "後衛-左",
+        SquadRow.RearRight => "後衛-右",
         _ => row.ToString(),
     };
 
