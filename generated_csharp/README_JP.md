@@ -122,8 +122,22 @@ godot --path .
 ```
 
 > **重要 — Godot は .NET（mono）版が必須**。標準版（`GodotSharp` 非同梱）では C# が動きません。
-> `godot --version` が `4.3.stable.mono.official` を返すこと、`which godot` が .NET 版を指すことを確認してください。
-> 例: `ln -sf /Applications/Godot_mono.app/Contents/MacOS/Godot /usr/local/bin/godot`
+> `godot --version` が `4.3.stable.mono.official` を返すことを確認してください。
+>
+> **さらに重要 — `godot` を「シンボリックリンク」で通してはいけない**。Godot は `GodotSharp/` を
+> 起動した実バイナリの位置から探すため、`/usr/local/bin/godot` をバンドルへの symlink にすると
+> `/usr/local/bin/GodotSharp/...` を見に行って `unable to find .NET assemblies directory` で失敗します。
+> PATH へ通すなら symlink ではなく、実バイナリを `exec` する**ラッパースクリプト**にしてください:
+>
+> ```sh
+> cat > /usr/local/bin/godot <<'WRAP'
+> #!/bin/bash
+> exec "/Applications/Godot_mono.app/Contents/MacOS/Godot" "$@"
+> WRAP
+> chmod +x /usr/local/bin/godot
+> ```
+>
+> （付属の `./play.command` は最初からバンドル内の実バイナリを直接起動するため、この問題は起きません。）
 
 `Main.tscn` が立ち上がり、無状態のシーンルータ（`UserInterfaceRoot`）が Title 画面から起動します。
 

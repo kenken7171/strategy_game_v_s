@@ -19,15 +19,20 @@ set -e
 # Resolve to this script's own directory (the Godot project root).
 cd "$(cd "$(dirname "$0")" && pwd)"
 
-GODOT_BIN="$(command -v godot || true)"
-if [ -z "${GODOT_BIN}" ]; then
-  GODOT_BIN="/Applications/Godot_mono.app/Contents/MacOS/Godot"
+# IMPORTANT: Godot resolves its GodotSharp/ folder relative to the REAL executable
+# path. Launching a /usr/local/bin symlink makes Godot look for GodotSharp next to the
+# symlink and fail ("unable to find .NET assemblies directory"). So we launch the actual
+# binary inside the .app bundle, and follow a symlink to its real target if needed.
+GODOT_BIN="/Applications/Godot_mono.app/Contents/MacOS/Godot"
+if [ ! -x "${GODOT_BIN}" ]; then
+  CAND="$(command -v godot || true)"
+  if [ -L "${CAND}" ]; then CAND="$(readlink "${CAND}")"; fi
+  GODOT_BIN="${CAND}"
 fi
 
-if [ ! -x "${GODOT_BIN}" ]; then
-  echo "ERROR: Godot (.NET/mono) not found."
-  echo "Install the .NET build of Godot 4.3 and link it as 'godot', e.g.:"
-  echo "  ln -sf /Applications/Godot_mono.app/Contents/MacOS/Godot /usr/local/bin/godot"
+if [ -z "${GODOT_BIN}" ] || [ ! -x "${GODOT_BIN}" ]; then
+  echo "ERROR: Godot (.NET/mono) not found at /Applications/Godot_mono.app."
+  echo "Install the .NET build of Godot 4.3 there (or adjust this launcher)."
   exit 1
 fi
 
