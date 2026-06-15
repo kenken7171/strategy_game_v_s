@@ -110,6 +110,19 @@ public partial class GameDirector : Godot.Control
     /// </summary>
     private JobManualOverlay? _jobManualOverlay;
 
+    /// <summary>
+    /// 編成画面（大隊編成）への参照。名簿カードの「Details」押下意思表示
+    /// （<see cref="FormationUI.UnitInspectRequested"/>）を購読し、本ディレクターが
+    /// ユニット詳細モーダルを最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
+    /// </summary>
+    private FormationUI? _formationScreen;
+
+    /// <summary>
+    /// 現在前面に展開中のユニット詳細モーダル。CLOSE 押下（CloseRequested）または退場時に
+    /// QueueFree する自己崩壊型ライフサイクル。未展開時は null。
+    /// </summary>
+    private UnitDetailOverlay? _unitDetailOverlay;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -151,6 +164,7 @@ public partial class GameDirector : Godot.Control
         DismissPedigreeOverlay();
         DismissProphecyOverlay();
         DismissJobManualOverlay();
+        DismissUnitDetailOverlay();
 
         // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
         if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
@@ -179,6 +193,20 @@ public partial class GameDirector : Godot.Control
             }
         }
         _battleScreen = null;
+
+        // 編成画面の「Details」意思表示の購読も解除（編成画面ノードの破棄に先んじて）。
+        if (_formationScreen is not null && GodotObject.IsInstanceValid(_formationScreen))
+        {
+            try
+            {
+                _formationScreen.UnitInspectRequested -= OnUnitInspectRequested;
+            }
+            catch
+            {
+                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
+            }
+        }
+        _formationScreen = null;
 
         UnsubscribeSignals();
     }
@@ -424,6 +452,49 @@ public partial class GameDirector : Godot.Control
         _jobManualOverlay = null;
     }
 
+    // ─── ユニット詳細モーダル（編成画面の「Details」から開く） ────────────────
+    //  編成画面の名簿カード「Details」押下を受け、対象ユニットの完全プロファイル
+    //  （ステータス/性別/血統/現在の陣形スロット番号 + ジョブ解説）を無状態モーダル
+    //  UnitDetailOverlay として最前面へ overlay する。他オーバーレイと同型の自己崩壊型ライフサイクル。
+
+    /// <summary>編成画面の「Details」意思表示ハンドラ。対象ユニットの詳細モーダルをマウントする。</summary>
+    private void OnUnitInspectRequested(Guid unitId) => MountUnitDetailOverlay(unitId);
+
+    /// <summary>ユニット詳細モーダルの「閉じる」意思表示ハンドラ。前面のモーダルを解放する。</summary>
+    private void OnUnitDetailCloseRequested() => DismissUnitDetailOverlay();
+
+    /// <summary>
+    /// 指定ユニットの詳細モーダルを最前面へ展開する。多重展開・取り残しを避けるため、生存中の
+    /// 旧モーダルがあれば先に確実に解放してから展開する。TargetUnitId は AddChild 前に注入する。
+    /// </summary>
+    private void MountUnitDetailOverlay(Guid unitId)
+    {
+        DismissUnitDetailOverlay();
+
+        var overlay = new UnitDetailOverlay { TargetUnitId = unitId };
+        overlay.CloseRequested += OnUnitDetailCloseRequested;
+        overlay.SetMeta(TestIdMetaKey, "game-director-unit-detail-overlay");
+        _unitDetailOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中のユニット詳細モーダルがあれば購読を解いて確実に解放する。閉じる意思表示
+    /// （OnUnitDetailCloseRequested）および退場時（_ExitTree）に呼び、ゾンビノード・購読二重接続を根絶する。
+    /// </summary>
+    private void DismissUnitDetailOverlay()
+    {
+        if (_unitDetailOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_unitDetailOverlay))
+        {
+            _unitDetailOverlay.CloseRequested -= OnUnitDetailCloseRequested;
+            _unitDetailOverlay.QueueFree();
+        }
+        _unitDetailOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -491,6 +562,14 @@ public partial class GameDirector : Godot.Control
             {
                 _battleScreen = battleScreen;
                 battleScreen.ProphecyRequested += OnProphecyRequested;
+            }
+
+            // 編成画面なら、名簿カードの「Details」押下意思表示を購読する。
+            // ユニット詳細モーダルの生死は本ディレクターが一手に握る（画面側は無状態）。
+            if (screen is FormationUI formationScreen)
+            {
+                _formationScreen = formationScreen;
+                formationScreen.UnitInspectRequested += OnUnitInspectRequested;
             }
 
             // スラッグを Node 名にして、後段で GetNodeOrNull により安全に引き当てる。
