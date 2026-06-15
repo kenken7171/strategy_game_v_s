@@ -286,6 +286,7 @@ public class SaveSerializerTests
         Assert.Equal(expected.FirstNameKey, actual.FirstNameKey);
         Assert.Equal(expected.LastNameKey, actual.LastNameKey);
         Assert.Equal(expected.Origin, actual.Origin);
+        Assert.Equal(expected.Gender, actual.Gender);
         Assert.Equal(expected.Level, actual.Level);
         Assert.Equal(expected.IsDead, actual.IsDead);
 

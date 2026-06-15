@@ -109,6 +109,8 @@ public static class SampleData
             FirstNameKey  = "name-sample-sniper",
             LastNameKey   = "name-family-sample",
             Origin        = Origin.European,
+            // 性別ラウンドトリップ検証のため非既定（Female）を明示し、保存→復元で保持を確認する。
+            Gender        = Gender.Female,
             Level         = 1,
             MainEquipment = null,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,

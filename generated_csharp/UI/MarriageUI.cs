@@ -46,6 +46,7 @@ using System.Collections.Generic;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Shop;
 using ChronicleKnights.Core.Units;
 using Godot;
@@ -420,10 +421,18 @@ public partial class MarriageUI : Godot.Control
             // 成人のみ婚姻可能
             if (unit.Age < AdultAge) continue;
             var display = FormatUnitDisplay(unit);
-            _fatherSelect.AddItem(display);
-            _motherSelect.AddItem(display);
-            _fatherSelectableIds.Add(unit.Id);
-            _motherSelectableIds.Add(unit.Id);
+            // 性別で振り分ける: 父ドロップダウンは男性のみ、母ドロップダウンは女性のみ。
+            // これにより同性ペア・性別逆転ペアを UI 段階で選択不能にする（婚姻=男女ペア）。
+            if (unit.Gender == Gender.Male)
+            {
+                _fatherSelect.AddItem(display);
+                _fatherSelectableIds.Add(unit.Id);
+            }
+            else
+            {
+                _motherSelect.AddItem(display);
+                _motherSelectableIds.Add(unit.Id);
+            }
         }
 
         // 選択を復元
@@ -457,6 +466,14 @@ public partial class MarriageUI : Godot.Control
         if (father is null || mother is null)
         {
             _quoteLabel.Text = "❌ 選択されたユニットが見つかりません";
+            _marriageExecuteButton.Disabled = true;
+            return;
+        }
+
+        // 念のための防御線: ドロップダウンは性別分離済みだが、婚姻は男女ペア限定であることを再確認。
+        if (!MarriageService.AreOppositeGenders(father, mother))
+        {
+            _quoteLabel.Text = "❌ 婚姻は男女ペア（父=男性・母=女性）でのみ成立します";
             _marriageExecuteButton.Disabled = true;
             return;
         }
@@ -1034,7 +1051,8 @@ public partial class MarriageUI : Godot.Control
         var equip = unit.MainEquipment is null
             ? "—"
             : $"{ItemName(unit.MainEquipment.ItemId)} Lv{unit.MainEquipment.Level}";
-        return $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) / 装備: {equip}";
+        var sex = unit.Gender == Gender.Male ? "♂" : "♀";
+        return $"{sex} {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) / 装備: {equip}";
     }
 
     // ─── ローカライゼーション ─────────────────────────────────────────────

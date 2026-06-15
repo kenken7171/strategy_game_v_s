@@ -89,8 +89,10 @@ public static class SaveSerializer
     /// v2: 旅団史（ChronicleLog）を追加（旧 v1 セーブは ChronicleLog 欠落 → 空配列で後方互換復元）。
     /// v3: 血統リンク（Unit.Parentage / Unit.SpouseId）を追加（旧 v1/v2 セーブは欠落 → null で
     ///     後方互換復元。生者同士の親子・婚姻の縦横軸を永続化し、家系図をロード後も再構築可能にする）。
+    /// v4: 性別（Unit.Gender）を追加（旧 v1〜v3 セーブは欠落 → 既定 Male で後方互換復元。
+    ///     婚姻の男女ペア制約をロード後も維持する）。
     /// </summary>
-    public const int CurrentSaveVersion = 3;
+    public const int CurrentSaveVersion = 4;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -209,6 +211,7 @@ public static class SaveSerializer
         FirstNameKey  = u.FirstNameKey,
         LastNameKey   = u.LastNameKey,
         Origin        = u.Origin,
+        Gender        = u.Gender,
         Level         = u.Level,
         MainEquipment = u.MainEquipment is null ? null : ToDto(u.MainEquipment),
         // Guid キーは JSON 互換性のため文字列キー辞書へ正規化
@@ -304,6 +307,7 @@ public static class SaveSerializer
             FirstNameKey   = d.FirstNameKey ?? string.Empty,
             LastNameKey    = d.LastNameKey ?? string.Empty,
             Origin         = d.Origin,
+            Gender         = d.Gender,
             Level          = d.Level,
             MainEquipment  = d.MainEquipment is null ? null : FromDto(d.MainEquipment),
             BattleAffinity = affinity,
@@ -403,6 +407,8 @@ public static class SaveSerializer
         public string LastNameKey { get; set; } = string.Empty;
         /// <summary>命名文化圏（血統属性）。旧セーブ互換のため既定 European。</summary>
         public Origin Origin { get; set; } = Origin.European;
+        /// <summary>性別（婚姻の男女ペア制約軸）。v4 で追加。旧セーブ欠落時は既定 Male。</summary>
+        public Gender Gender { get; set; } = Gender.Male;
         public int Level { get; set; }
         public EquipmentDto? MainEquipment { get; set; }
         /// <summary>Guid → ポイントの好感度。Guid は文字列キーへ正規化して保存。</summary>

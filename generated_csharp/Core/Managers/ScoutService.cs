@@ -175,6 +175,7 @@ public static class ScoutService
             FirstNameKey   = name.FirstNameKey,
             LastNameKey    = name.LastNameKey,
             Origin         = name.Origin,
+            Gender         = name.Gender,
             Level          = Unit.InitialLevel,
             MainEquipment  = null,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,

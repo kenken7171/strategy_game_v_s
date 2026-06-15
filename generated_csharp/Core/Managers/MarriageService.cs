@@ -147,6 +147,19 @@ public static class MarriageService
         return aToB >= NaturalMarriageThreshold && bToA >= NaturalMarriageThreshold;
     }
 
+    /// <summary>
+    /// 2 ユニットが婚姻可能な男女ペア（異性）かを判定する純粋関数。
+    /// 婚姻は父 = Male / 母 = Female の男女ペアでのみ成立する（子を生す V&amp;B 規範）。
+    /// UI のドロップダウン分離（父＝男性のみ／母＝女性のみ）の根拠であり、
+    /// <see cref="ExecuteManualMarriage"/> のハードガードでもある。
+    /// </summary>
+    public static bool AreOppositeGenders(Unit a, Unit b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        return a.Gender != b.Gender;
+    }
+
     // ─── 結婚コスト算出 ───────────────────────────────────────────────────
 
     /// <summary>
@@ -245,6 +258,12 @@ public static class MarriageService
         if (father.Id == mother.Id)
             throw new ArgumentException(
                 "Father and mother must be different units.", nameof(mother));
+        // 婚姻は男女ペア（父=Male / 母=Female）でのみ成立する。UI でドロップダウンを
+        // 性別分離して防いでいるが、SoT 直叩き等の経路に対するハードガードを置く。
+        if (father.Gender == mother.Gender)
+            throw new ArgumentException(
+                "Marriage requires opposite genders (a male father and a female mother).",
+                nameof(mother));
 
         // 1. 自然婚姻判定
         var isNatural = IsNaturalMarriagePair(father, mother);
@@ -278,6 +297,8 @@ public static class MarriageService
             FirstNameKey = newborn.FirstNameKey ?? generated.FirstNameKey,
             LastNameKey = newborn.LastNameKey ?? generated.LastNameKey,
             Origin = childOrigin,
+            // 子の性別は自動生成名と整合する generated.Gender を採用（名前と性別の一致を担保）。
+            Gender = generated.Gender,
             Level = Unit.InitialLevel,
             MainEquipment = newborn.InitialEquipment,
             BattleAffinity = ImmutableDictionary<Guid, int>.Empty,

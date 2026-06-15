@@ -131,6 +131,16 @@ public sealed record Unit
     public Origin Origin { get; init; } = Origin.European;
 
     /// <summary>
+    /// ユニットの性別。婚姻は男女ペア（父 = <see cref="Naming.Gender.Male"/> /
+    /// 母 = <see cref="Naming.Gender.Female"/>）でのみ成立するため、結婚相手選択・家系図表示の
+    /// 制約軸としてユニットへ永続保持する（セーブ対象）。名前生成（<see cref="NameGenerator"/>）が
+    /// 払い出した <c>GeneratedName.Gender</c> をそのまま格納する想定。
+    ///
+    /// 既定値は <see cref="Naming.Gender.Male"/>（手動構築・旧セーブ互換のための安全側デフォルト）。
+    /// </summary>
+    public Gender Gender { get; init; } = Gender.Male;
+
+    /// <summary>
     /// ユニットの現在レベル（1 〜 MaxUnitLevel=3）。
     /// 既定値は InitialLevel (=1)。WithLevelUp で +1 する。
     /// </summary>
