@@ -21,6 +21,17 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- ===========================================================================
+         ローカル実行の前方互換（RollForward）
+         ===========================================================================
+         本体は net8.0 をターゲットにビルドするが、ホストに net8 ランタイムが無く
+         より新しい .NET ランタイムしか入っていない場合（例: 旅団長 Mac は net10 のみ）
+         でも起動できるよう、フレームワーク解決を「最新メジャーへ前方巻き上げ」に固定する。
+         net8 ランタイムが在ればそれを最優先し、無ければ導入済みの最新メジャー（net9/net10…）へ
+         ロールフォワードする。これにより Godot エディタの実行ボタン・コマンドライン双方で、
+         環境変数や追加インストール無しに起動可能となる（既定の LatestMinor では net8 系内に
+         閉じてしまい net10 へ届かないため、明示的に LatestMajor へ昇格する）。 -->
+    <RollForward>LatestMajor</RollForward>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>

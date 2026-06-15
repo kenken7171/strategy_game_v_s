@@ -18,6 +18,10 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- ローカル実行の前方互換: 本体 csproj と同方針。net8 ランタイムが無いホスト
+         （旅団長 Mac は net10 のみ）でも `dotnet test` が環境変数 DOTNET_ROLL_FORWARD 無しに
+         走るよう、最新メジャーへの前方ロールフォワードをビルドへ恒久的に焼き込む。 -->
+    <RollForward>LatestMajor</RollForward>
     <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

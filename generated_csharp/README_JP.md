@@ -101,24 +101,34 @@ dotnet build ChronicleKnights.csproj --configuration Debug
 dotnet test Tests/ChronicleKnights.Tests.csproj
 ```
 
-`net8.0` のテストホストに対して 8.0 ランタイムが無く 10.x のみの環境では、roll-forward で実行します。
+本体・テストの両 csproj は `<RollForward>LatestMajor</RollForward>` をビルドへ焼き込んであります。
+そのため `net8.0` ターゲットでありながら、8.0 ランタイムが無く 10.x のみの Mac でも、環境変数や
+追加インストール無しでそのまま実行できます（古い手順の `DOTNET_ROLL_FORWARD=...` は不要になりました）。
+
+**Mac でローカル起動（最短）:**
+
+.NET（mono）版の Godot 4.3 を `godot` として通した上で、付属ランチャを叩くだけです。
 
 ```sh
-DOTNET_ROLL_FORWARD=LatestMajor dotnet test Tests/ChronicleKnights.Tests.csproj
+./play.command          # ゲームを起動（C# を自動ビルドしてから実機起動）
+./play.command -e       # Godot エディタを開く
 ```
 
-**Godot で実機起動:**
+Finder からダブルクリックしても起動します。手動で叩く場合は以下と等価です:
 
 ```sh
+dotnet build ChronicleKnights.csproj --configuration Debug
 godot --path .
 ```
 
-`Main.tscn` が立ち上がり、無状態のシーンルータ（`UserInterfaceRoot`）が Title 画面から起動します。
-ヘッドレス（CI / スモークチェック）の場合:
+> **重要 — Godot は .NET（mono）版が必須**。標準版（`GodotSharp` 非同梱）では C# が動きません。
+> `godot --version` が `4.3.stable.mono.official` を返すこと、`which godot` が .NET 版を指すことを確認してください。
+> 例: `ln -sf /Applications/Godot_mono.app/Contents/MacOS/Godot /usr/local/bin/godot`
 
-```sh
-godot --headless --path . --quit
-```
+`Main.tscn` が立ち上がり、無状態のシーンルータ（`UserInterfaceRoot`）が Title 画面から起動します。
+
+> macOS の `--headless` は Godot 4.3 の既知の不具合（`recursive_mutex lock failed`）でクラッシュします。
+> 画面確認は必ず通常（windowed）起動で行ってください。ヘッドレスは CI でも避けます。
 
 ---
 
@@ -156,6 +166,7 @@ godot --headless --path . --quit
 ## 実機検収の結果（この環境で確認済み）
 
 - `dotnet build ChronicleKnights.csproj --configuration Debug` → 0 警告 / 0 エラー。
-- `dotnet test`（net8.0 を 10.x へ roll-forward）→ 失敗 0 / 合格 614 / 警告 0。
+- `dotnet test Tests/ChronicleKnights.Tests.csproj`（環境変数なし、焼き込んだ roll-forward で net8.0→net10）→ 失敗 0 / 合格 617 / 警告 0。
+- 実機起動（Intel Mac / macOS 12.7.6 / Godot 4.3 .NET）→ Vulkan(Forward+) でウィンドウ描画、.NET 解決エラーなし。
 
 旅団長、大回廊は開き、聖典は据えられ、実機の光は放たれました。出陣の刻にございます。
