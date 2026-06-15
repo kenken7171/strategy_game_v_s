@@ -103,6 +103,13 @@ public partial class GameDirector : Godot.Control
     /// </summary>
     private ProphecyTimelineOverlay? _prophecyOverlay;
 
+    /// <summary>
+    /// 現在前面に展開中のジョブマニュアル（全ジョブ解説カタログ）オーバーレイ。CLOSE 押下
+    /// （CloseRequested）または退場時に QueueFree する自己崩壊型ライフサイクル。未展開時は null。
+    /// ジョブデータは静的なため SoT 購読は不要（オーバーレイ自身が JobCodex/JobMaster を読むだけ）。
+    /// </summary>
+    private JobManualOverlay? _jobManualOverlay;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -143,6 +150,7 @@ public partial class GameDirector : Godot.Control
         DismissTitleScreen();
         DismissPedigreeOverlay();
         DismissProphecyOverlay();
+        DismissJobManualOverlay();
 
         // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
         if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
@@ -373,6 +381,49 @@ public partial class GameDirector : Godot.Control
         _prophecyOverlay = null;
     }
 
+    // ─── ジョブマニュアル オーバーレイ（全ジョブ解説カタログ） ────────────────
+    //  ヘッダの常設「JOB MANUAL」押下を受け、全 8 ジョブの解説（JobCodex の英語テキスト +
+    //  JobMaster の構造化データ）を無状態オーバーレイ JobManualOverlay として最前面へ overlay する。
+    //  家系図・予言オーバーレイと同型の自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）。
+
+    /// <summary>ヘッダの「JOB MANUAL」押下ハンドラ。ジョブ解説カタログを最前面へマウントする。</summary>
+    private void OnJobManualPressed() => MountJobManualOverlay();
+
+    /// <summary>ジョブマニュアルの「閉じる」意思表示ハンドラ。前面のオーバーレイを解放する。</summary>
+    private void OnJobManualCloseRequested() => DismissJobManualOverlay();
+
+    /// <summary>
+    /// 全ジョブ解説カタログ（JobManualOverlay）を最前面へ展開する。多重展開・取り残しを避けるため、
+    /// 生存中の旧オーバーレイがあれば先に確実に解放してから展開する。
+    /// </summary>
+    private void MountJobManualOverlay()
+    {
+        DismissJobManualOverlay();
+
+        var overlay = new JobManualOverlay();
+        overlay.CloseRequested += OnJobManualCloseRequested;
+        overlay.SetMeta(TestIdMetaKey, "game-director-job-manual-overlay");
+        _jobManualOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中のジョブマニュアルがあれば購読を解いて確実に解放する。閉じる意思表示
+    /// （OnJobManualCloseRequested）および退場時（_ExitTree）に呼び、ゾンビノード・購読二重接続を根絶する。
+    /// </summary>
+    private void DismissJobManualOverlay()
+    {
+        if (_jobManualOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_jobManualOverlay))
+        {
+            _jobManualOverlay.CloseRequested -= OnJobManualCloseRequested;
+            _jobManualOverlay.QueueFree();
+        }
+        _jobManualOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -395,6 +446,13 @@ public partial class GameDirector : Godot.Control
         _phaseIndicatorLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _phaseIndicatorLabel.SetMeta(TestIdMetaKey, "game-director-phase-indicator");
         header.AddChild(_phaseIndicatorLabel);
+
+        // 常設「ジョブマニュアル」ボタン。全フェーズ共通でヘッダに在駐し、押下で全ジョブ解説
+        // カタログ（JobManualOverlay）を最前面へ overlay する（家系図・予言と同型の overlay 窓口）。
+        var jobManualButton = new Button { Name = "JobManualButton", Text = "JOB MANUAL" };
+        jobManualButton.Pressed += OnJobManualPressed;
+        jobManualButton.SetMeta(TestIdMetaKey, "game-director-job-manual-button");
+        header.AddChild(jobManualButton);
 
         _advanceButton = new Button { Name = "AdvancePhaseButton" };
         _advanceButton.Pressed += OnAdvancePressed;
