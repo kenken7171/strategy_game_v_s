@@ -988,6 +988,14 @@ public partial class ChronicleGlobal : Godot.Node
             var from = CurrentPhase;
             next = GamePhaseFlow.Next(from);
 
+            // 無人出撃の絶対封鎖: 編成 → 戦闘 の前進は、盤面に最低 1 名が配置されている時のみ許す。
+            // 1 体も配備していない場合は前進を拒絶し、編成フェーズに留め置く（純粋ガード DeploymentGate）。
+            if (from == GamePhase.Formation && next == GamePhase.Battle
+                && !DeploymentGate.CanMarch(CurrentFormation))
+            {
+                return CurrentPhase;
+            }
+
             // Battle → Chronicle はループ 1 周の幕引き。ここで世代交代（年送り）を行う。
             if (from == GamePhase.Battle && next == GamePhase.Chronicle)
             {

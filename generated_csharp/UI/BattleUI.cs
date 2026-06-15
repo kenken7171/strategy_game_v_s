@@ -1082,6 +1082,14 @@ public partial class BattleUI : Godot.Control
     {
         if (_chronicleGlobal is null) return;
 
+        // 無人出撃の防御線（多重防護）: 盤面に1名も配置されていなければ開戦しない。
+        // 通常はフェーズ前進ガードで編成→戦闘へ入れないが、ここでも最終拒絶する。
+        if (!DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
+        {
+            GD.Print("[BattleUI] start refused: no unit deployed on the formation board");
+            return;
+        }
+
         // デモ用固定敵（旧 ScaleTrialGuardian 仮置き）を排し、歴史の年数を貫いた時代スケール敵を生成。
         var enemy = _chronicleGlobal.CreateCurrentYearEnemy();
 

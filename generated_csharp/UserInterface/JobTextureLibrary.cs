@@ -26,7 +26,7 @@ namespace ChronicleKnights.UserInterface;
 /// <summary>Resolves a job + gender to its illustration Texture2D (or null if absent).</summary>
 public static class JobTextureLibrary
 {
-    private const string JobTextureRoot = "res://Assets/Jobs/";
+    private const string JobTextureRoot = "res://Assets/Textures/Jobs/";
 
     /// <summary>ASCII asset slug per job (matches the res://Assets/Jobs/{slug} folders).</summary>
     private static string Slug(JobId job) => job switch

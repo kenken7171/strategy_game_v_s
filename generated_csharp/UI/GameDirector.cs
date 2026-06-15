@@ -39,6 +39,7 @@
 using System;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Bootstrap;
+using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using Godot;
 
@@ -601,6 +602,8 @@ public partial class GameDirector : Godot.Control
         if (_chronicleGlobal is null) return;
         _chronicleGlobal.PhaseChanged     += OnPhaseChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
+        // 編成変化で「次へ（出撃）」ボタンの可否を即時に再評価する（無人出撃の提示層ガード）。
+        _chronicleGlobal.FormationChanged += OnFormationChanged;
     }
 
     private void UnsubscribeSignals()
@@ -610,6 +613,7 @@ public partial class GameDirector : Godot.Control
         {
             _chronicleGlobal.PhaseChanged     -= OnPhaseChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
+            _chronicleGlobal.FormationChanged -= OnFormationChanged;
         }
         catch
         {
@@ -620,6 +624,7 @@ public partial class GameDirector : Godot.Control
     // ─── シグナルハンドラ ─────────────────────────────────────────────────
 
     private void OnPhaseChanged() => RenderCurrentPhase();
+    private void OnFormationChanged() => RenderCurrentPhase();
 
     /// <summary>
     /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
@@ -662,6 +667,16 @@ public partial class GameDirector : Godot.Control
             var nextPhase = GamePhaseFlow.Next(current);
             _advanceButton.Text = $"▶ 次へ：{_chronicleGlobal.ResolvePhaseName(nextPhase)}";
             _advanceButton.Visible = current != GamePhase.Chronicle;
+
+            // 無人出撃の提示層ガード: 編成 → 戦闘 の前進は最低1名の配置を要求する。
+            // 0 名のときはボタンを無効化し、要件を文言で明示する（FormationChanged で随時再評価）。
+            var blockedByEmptyFormation =
+                current == GamePhase.Formation && !DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation);
+            _advanceButton.Disabled = blockedByEmptyFormation;
+            if (blockedByEmptyFormation)
+            {
+                _advanceButton.Text = "▶ 出撃不可：最低1名を配置せよ";
+            }
         }
     }
 
