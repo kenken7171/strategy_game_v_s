@@ -310,12 +310,23 @@ public partial class BattleUI : Godot.Control
 
     private void BuildUI()
     {
-        var root = new VBoxContainer();
-        root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        root.AddThemeConstantOverride("separation", 16);
-        AddChild(root);
+        // 全画面スクロール: ルート VBox を画面いっぱいの縦 ScrollContainer で包む。
+        // 画面(this)は非コンテナ Control。FullRect の ScrollContainer がその高さに束縛され、
+        // 内容が画面高を超えると縦スクロールが効く。横スクロールは無効化し子幅を画面幅へ伸張する。
+        // ※ カメラシェイク（root.Position の一過性 Tween）は、ScrollContainer が子位置を
+        //   再ソート時のみ書き戻す性質上、被弾シェイク中（数フレーム）には干渉しない。
+        var scroll = new ScrollContainer();
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SetMeta(TestIdMetaKey, "battle-scroll");
+        AddChild(scroll);
 
-        // カメラシェイクの対象（盤面ルート）。親は本 Control（非コンテナ）なので position を奪われない。
+        var root = new VBoxContainer();
+        root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        root.AddThemeConstantOverride("separation", 16);
+        scroll.AddChild(root);
+
+        // カメラシェイクの対象（盤面ルート）。シェイクは root.Position の一過性 Tween。
         _rootShakeTarget = root;
 
         root.AddChild(new Label { Text = "⚔ 戦闘（V字3×3 / 1ターン解決）" });

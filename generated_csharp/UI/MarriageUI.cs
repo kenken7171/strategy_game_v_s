@@ -166,11 +166,20 @@ public partial class MarriageUI : Godot.Control
 
     private void BuildUI()
     {
+        // 全画面スクロール: ルート VBox を画面いっぱいの縦 ScrollContainer で包む。
+        // 画面(this)は非コンテナ Control。FullRect の ScrollContainer がその高さに束縛され、
+        // 内容が画面高を超えると縦スクロールが効く。横スクロールは無効化し子幅を画面幅へ伸張する。
+        var scroll = new ScrollContainer();
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SetMeta(TestIdMetaKey, "marriage-scroll");
+        AddChild(scroll);
+
         var root = new VBoxContainer();
-        root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         root.AddThemeConstantOverride("separation", 20);
         root.SetMeta(TestIdMetaKey, "marriage-root");
-        AddChild(root);
+        scroll.AddChild(root);
 
         // ─ ヘッダー ─────────────────────────────────────────────
         var header = new HBoxContainer();
