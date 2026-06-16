@@ -492,6 +492,8 @@ public partial class BattleUI : Godot.Control
         if (_chronicleGlobal is null) return;
         _chronicleGlobal.BattleChanged     += OnBattleChanged;
         _chronicleGlobal.StateInitialized  += OnStateInitialized;
+        // 編成→戦闘で入場した瞬間に大隊を盤面へ即時反映するため、フェーズ遷移を購読する。
+        _chronicleGlobal.PhaseChanged      += OnPhaseChanged;
     }
 
     private void UnsubscribeSignals()
@@ -501,6 +503,7 @@ public partial class BattleUI : Godot.Control
         {
             _chronicleGlobal.BattleChanged     -= OnBattleChanged;
             _chronicleGlobal.StateInitialized  -= OnStateInitialized;
+            _chronicleGlobal.PhaseChanged      -= OnPhaseChanged;
         }
         catch
         {
@@ -512,6 +515,22 @@ public partial class BattleUI : Godot.Control
 
     private void OnBattleChanged()    => RenderAll();
     private void OnStateInitialized() => RenderAll();
+
+    /// <summary>
+    /// フェーズ遷移ハンドラ。編成→戦闘で「戦闘」フェーズへ入場し、かつ編成済み（最低1名）で
+    /// まだ戦闘が起きていない瞬間に、自動開戦して大隊を即座に盤面へ反映する。
+    /// これにより「戦闘フェーズへ進むと大隊が空白」を解消する（編成データは CurrentFormation
+    /// として確実に引き継がれており、BeginBattle がそれを読んで CurrentBattle を起こす）。
+    /// 0名は三重結界の DeploymentGate が弾くため、ここで空盤面のまま開戦することはない。
+    /// </summary>
+    private void OnPhaseChanged()
+    {
+        if (_chronicleGlobal is null) return;
+        if (_chronicleGlobal.CurrentPhase == GamePhase.Battle && _chronicleGlobal.CurrentBattle is null)
+        {
+            BeginBattle();
+        }
+    }
 
     // ─── 描画（すべて SoT を読み直して再構築。UI はキャッシュしない） ─────
 
@@ -1078,9 +1097,19 @@ public partial class BattleUI : Godot.Control
     /// 100 年史の難易度曲線（章の難易度・環境補正＋個体差ジッタ）を纏って戦場へ立つ。
     /// 戦闘の真実差し替え・再描画は BattleChanged 経由で自動的に行われる（単方向フロー・無状態）。
     /// </summary>
-    private void OnStartPressed()
+    private void OnStartPressed() => BeginBattle();
+
+    /// <summary>
+    /// 開戦の単一窓口。編成済み（最低1名）でなければ開戦しない（無人出撃の最終防御線）。
+    /// 進行中の戦闘がある場合は再開戦しない（自動開戦と手動「戦闘開始」の二重起動・敵リロール防止）。
+    /// 大隊は CurrentFormation から StartBattle が読み出すため、編成データは漏れなく戦闘へ引き継がれる。
+    /// </summary>
+    private void BeginBattle()
     {
         if (_chronicleGlobal is null) return;
+
+        // 進行中の戦闘は維持（二重起動・敵リロールを防ぐ。決着済み・未開戦のときだけ開戦する）。
+        if (_chronicleGlobal.CurrentBattle is { Outcome: BattleOutcome.Ongoing }) return;
 
         // 無人出撃の防御線（多重防護）: 盤面に1名も配置されていなければ開戦しない。
         // 通常はフェーズ前進ガードで編成→戦闘へ入れないが、ここでも最終拒絶する。
