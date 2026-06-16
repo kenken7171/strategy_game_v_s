@@ -682,13 +682,24 @@ public partial class GameDirector : Godot.Control
                 // 戦闘中：フェーズは飛ばさず戦闘を 1 ターン進める（スキップ根治）。
                 _advanceButton.Text = "▶ 1ターン進める";
             }
-            else if (current == GamePhase.Formation
-                     && !DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
+            else if (current == GamePhase.Formation)
             {
-                // 無人出撃の提示層ガード: 編成 → 戦闘 の前進は最低1名の配置を要求する
-                // （FormationChanged で随時再評価）。
-                _advanceButton.Text = "▶ 出撃不可：最低1名を配置せよ";
-                _advanceButton.Disabled = true;
+                // 編成の「次へ」は選択行動で行き先が変わる（選択した行動とフェーズが矛盾しない）。
+                //   休息：戦闘を回避し安全に年を送る → 配置は不要（無人出撃ガードは発火しない）。
+                //   出撃：最低1名の配置を要求（無人出撃の提示層ガード）。
+                if (_chronicleGlobal.CurrentAction == PlannedAction.Rest)
+                {
+                    _advanceButton.Text = "▶ 次へ：休息（戦闘を回避）";
+                }
+                else if (!DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
+                {
+                    _advanceButton.Text = "▶ 出撃不可：最低1名を配置せよ";
+                    _advanceButton.Disabled = true;
+                }
+                else
+                {
+                    _advanceButton.Text = "▶ 次へ：出撃（戦闘開始）";
+                }
             }
             else
             {

@@ -23,6 +23,7 @@
 using System;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
+using ChronicleKnights.Core.GameFlow;        // PlannedAction (march / rest action choice)
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;          // Gender (job art read)
@@ -60,6 +61,7 @@ public partial class FormationUI : Godot.Control
     // ─── UI nodes (created in _Ready) ─────────────────────────────────────────
 
     private Label? _summaryLabel;
+    private VBoxContainer? _actionContainer;
     private VBoxContainer? _boardContainer;
     private VBoxContainer? _benchContainer;
     private VBoxContainer? _equipListContainer;
@@ -135,6 +137,18 @@ public partial class FormationUI : Godot.Control
         hintLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         hintLabel.SetMeta(TestIdMetaKey, "formation-hint");
         root.AddChild(hintLabel);
+
+        // 今年の行動（出撃／休息）の選択。「次へ」を押す前にここで意思表示する。
+        // 出撃=戦闘フェーズへ／休息=戦闘を回避し安全に年を送る（FormationChanged で再描画）。
+        var actionSectionLabel = new Label { Text = "― 今年の行動 ―" };
+        actionSectionLabel.SetMeta(TestIdMetaKey, "formation-action-section-label");
+        root.AddChild(actionSectionLabel);
+
+        _actionContainer = new VBoxContainer();
+        _actionContainer.AddThemeConstantOverride("separation", 4);
+        _actionContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _actionContainer.SetMeta(TestIdMetaKey, "formation-action");
+        root.AddChild(_actionContainer);
 
         // Squad rotation controls.
         var rotationRow = new HBoxContainer();
@@ -231,9 +245,65 @@ public partial class FormationUI : Godot.Control
         if (_chronicleGlobal is null) return;
         ValidateSelection();
         RenderSummary();
+        RenderActionChoice();
         RenderBoard();
         RenderBench();
         RenderEquipmentSlots();
+    }
+
+    /// <summary>
+    /// Render the year's action toggle (出撃 March / 休息 Rest). The current choice
+    /// is re-read from ChronicleGlobal.CurrentAction (single SoT) and highlighted in
+    /// gold; pressing a button only CALLs SetPlannedAction, which emits
+    /// FormationChanged and bounces this screen back through RenderAll. This is what
+    /// the GameDirector "次へ" button consults: March routes to Battle, Rest skips it.
+    /// </summary>
+    private void RenderActionChoice()
+    {
+        if (_chronicleGlobal is null || _actionContainer is null) return;
+
+        ClearChildren(_actionContainer);
+        var current = _chronicleGlobal.CurrentAction;
+
+        var caption = new Label
+        {
+            Text = current == PlannedAction.March
+                ? "選択中：⚔ 出撃 ▶「次へ」で戦闘フェーズへ進む（敵と交戦）"
+                : "選択中：☾ 休息 ▶「次へ」で戦闘を回避し、安全に年を送る（年代記へ）",
+        };
+        caption.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        caption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        caption.SetMeta(TestIdMetaKey, "formation-action-caption");
+        _actionContainer.AddChild(caption);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        row.SetMeta(TestIdMetaKey, "formation-action-row");
+        _actionContainer.AddChild(row);
+
+        var marchButton = new Button
+        {
+            Text = current == PlannedAction.March ? "⚔ 出撃【選択中】" : "⚔ 出撃",
+        };
+        if (current == PlannedAction.March)
+        {
+            marchButton.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        marchButton.SetMeta(TestIdMetaKey, "formation-action-march");
+        marchButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.March);
+        row.AddChild(marchButton);
+
+        var restButton = new Button
+        {
+            Text = current == PlannedAction.Rest ? "☾ 休息【選択中】" : "☾ 休息",
+        };
+        if (current == PlannedAction.Rest)
+        {
+            restButton.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        restButton.SetMeta(TestIdMetaKey, "formation-action-rest");
+        restButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.Rest);
+        row.AddChild(restButton);
     }
 
     /// <summary>
