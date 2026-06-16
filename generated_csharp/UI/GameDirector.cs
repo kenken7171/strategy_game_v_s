@@ -38,6 +38,7 @@
 
 using System;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Bootstrap;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
@@ -604,6 +605,8 @@ public partial class GameDirector : Godot.Control
         _chronicleGlobal.StateInitialized += OnStateInitialized;
         // 編成変化で「次へ（出撃）」ボタンの可否を即時に再評価する（無人出撃の提示層ガード）。
         _chronicleGlobal.FormationChanged += OnFormationChanged;
+        // 戦闘の進行/決着でヘッダ「次へ」のラベル（1ターン進める ⇄ 次へ）を即時に切り替える。
+        _chronicleGlobal.BattleChanged    += OnBattleChanged;
     }
 
     private void UnsubscribeSignals()
@@ -614,6 +617,7 @@ public partial class GameDirector : Godot.Control
             _chronicleGlobal.PhaseChanged     -= OnPhaseChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
+            _chronicleGlobal.BattleChanged    -= OnBattleChanged;
         }
         catch
         {
@@ -625,6 +629,7 @@ public partial class GameDirector : Godot.Control
 
     private void OnPhaseChanged() => RenderCurrentPhase();
     private void OnFormationChanged() => RenderCurrentPhase();
+    private void OnBattleChanged() => RenderCurrentPhase();
 
     /// <summary>
     /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
@@ -665,17 +670,26 @@ public partial class GameDirector : Godot.Control
         if (_advanceButton is not null)
         {
             var nextPhase = GamePhaseFlow.Next(current);
-            _advanceButton.Text = $"▶ 次へ：{_chronicleGlobal.ResolvePhaseName(nextPhase)}";
             _advanceButton.Visible = current != GamePhase.Chronicle;
+            _advanceButton.Disabled = false;
 
-            // 無人出撃の提示層ガード: 編成 → 戦闘 の前進は最低1名の配置を要求する。
-            // 0 名のときはボタンを無効化し、要件を文言で明示する（FormationChanged で随時再評価）。
-            var blockedByEmptyFormation =
-                current == GamePhase.Formation && !DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation);
-            _advanceButton.Disabled = blockedByEmptyFormation;
-            if (blockedByEmptyFormation)
+            if (current == GamePhase.Battle
+                && _chronicleGlobal.CurrentBattle is { Outcome: BattleOutcome.Ongoing })
             {
+                // 戦闘中：フェーズは飛ばさず戦闘を 1 ターン進める（スキップ根治）。
+                _advanceButton.Text = "▶ 1ターン進める";
+            }
+            else if (current == GamePhase.Formation
+                     && !DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
+            {
+                // 無人出撃の提示層ガード: 編成 → 戦闘 の前進は最低1名の配置を要求する
+                // （FormationChanged で随時再評価）。
                 _advanceButton.Text = "▶ 出撃不可：最低1名を配置せよ";
+                _advanceButton.Disabled = true;
+            }
+            else
+            {
+                _advanceButton.Text = $"▶ 次へ：{_chronicleGlobal.ResolvePhaseName(nextPhase)}";
             }
         }
     }
@@ -684,8 +698,21 @@ public partial class GameDirector : Godot.Control
 
     private void OnAdvancePressed()
     {
-        // 前進の可否・順序は ChronicleGlobal（内部で GamePhaseFlow）に委ねる。
+        if (_chronicleGlobal is null) return;
+
+        // ★ 戦闘スキップの根治: 戦闘フェーズで戦闘が進行中なら、「次へ」はフェーズを前進させず
+        //   戦闘を 1 ターン進める（無作戦＝回転なし）へ再配線する。AdvancePhase へは委ねない。
+        //   決着済み／非戦闘時のみ通常のフェーズ前進へ委ねる（前進可否は AdvancePhase 側の
+        //   BattleProgressGate が最終判定し、未決着の Battle→Chronicle を構造的に拒絶する）。
+        if (_chronicleGlobal.CurrentPhase == GamePhase.Battle
+            && _chronicleGlobal.CurrentBattle is { Outcome: BattleOutcome.Ongoing })
+        {
+            _chronicleGlobal.ResolveBattleTurn(null);
+            return;
+        }
+
+        // 前進の可否・順序は ChronicleGlobal（内部で GamePhaseFlow / BattleProgressGate）に委ねる。
         // 戻り値の再描画は PhaseChanged シグナル経由で自動的に行われる。
-        _chronicleGlobal?.AdvancePhase();
+        _chronicleGlobal.AdvancePhase();
     }
 }

@@ -996,6 +996,14 @@ public partial class ChronicleGlobal : Godot.Node
                 return CurrentPhase;
             }
 
+            // 戦闘スキップの絶対封鎖: 戦闘が進行中（未決着）のあいだは 戦闘 → 年代記 へ前進しない。
+            // 「次へ」でフェーズごと飛ばして戦闘を無効化する事故を構造的に断つ（純粋ガード BattleProgressGate）。
+            if (from == GamePhase.Battle && next == GamePhase.Chronicle
+                && !BattleProgressGate.CanLeaveBattlePhase(CurrentBattle))
+            {
+                return CurrentPhase;
+            }
+
             // Battle → Chronicle はループ 1 周の幕引き。ここで世代交代（年送り）を行う。
             if (from == GamePhase.Battle && next == GamePhase.Chronicle)
             {
