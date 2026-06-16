@@ -273,23 +273,22 @@ public partial class FormationUI : Godot.Control
         ClearChildren(_boardContainer);
         var board = _chronicleGlobal.CurrentFormation;
 
-        // Top apex: the FRONT squad, horizontally centered.
-        var topCenter = new CenterContainer();
-        topCenter.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        topCenter.SetMeta(TestIdMetaKey, "formation-wedge-top");
-        topCenter.AddChild(BuildSquadBlock(board, SquadRow.Front));
-        _boardContainer.AddChild(topCenter);
+        // 大隊を横一列に展開する：3 分隊（前衛 / 後衛-左 / 後衛-右）を左から右へ並べ、各分隊は
+        // 「分隊名 + 横並びの戦闘員カード」。多数カードでも崩れぬよう横スクロールで包む。
+        var scroll = new ScrollContainer();
+        scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        scroll.SetMeta(TestIdMetaKey, "formation-board-scroll");
+        _boardContainer.AddChild(scroll);
 
-        // Base: the two REAR squads side by side, centered as a pair.
-        var bottomCenter = new CenterContainer();
-        bottomCenter.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        bottomCenter.SetMeta(TestIdMetaKey, "formation-wedge-bottom");
-        var bottomRow = new HBoxContainer();
-        bottomRow.AddThemeConstantOverride("separation", 28);
-        bottomRow.AddChild(BuildSquadBlock(board, SquadRow.RearLeft));
-        bottomRow.AddChild(BuildSquadBlock(board, SquadRow.RearRight));
-        bottomCenter.AddChild(bottomRow);
-        _boardContainer.AddChild(bottomCenter);
+        var line = new HBoxContainer();
+        line.AddThemeConstantOverride("separation", 20);
+        scroll.AddChild(line);
+
+        foreach (var row in RowOrder)
+        {
+            line.AddChild(BuildSquadBlock(board, row));
+        }
     }
 
     /// <summary>Build one squad column: header label + 3 drag-drop slots.</summary>
