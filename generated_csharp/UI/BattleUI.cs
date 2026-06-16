@@ -58,7 +58,9 @@ using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;          // Gender (job art read)
 using ChronicleKnights.Core.Units;
+using ChronicleKnights.UserInterface;         // JobTextureLibrary
 using Godot;
 
 namespace ChronicleKnights.UI;
@@ -182,6 +184,12 @@ public partial class BattleUI : Godot.Control
     /// 持たない（無状態の徹底。N ターン先予言の手繰りと描画はオーバーレイ自身が担う）。
     /// </summary>
     public event Action? ProphecyRequested;
+
+    /// <summary>
+    /// Raised when a combatant card's [詳細] button is pressed. The GameDirector
+    /// mounts the shared unit detail modal (same wiring as the formation screen).
+    /// </summary>
+    public event Action<Guid>? UnitInspectRequested;
 
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
@@ -783,24 +791,41 @@ public partial class BattleUI : Godot.Control
         // （Node.CreateTween はノードが SceneTree 内にある必要があるため、生成は parenting 後。）
         var targetedPanels = new List<PanelContainer>();
 
+        // 大隊を横一列に展開する：3 分隊（前衛 / 後衛-左 / 後衛-右）を左から右へ並べ、各分隊は
+        // 「分隊名 + 3 枚の戦闘員カード」の縦組み。多数カードでも横並びを保つよう横スクロールで包む。
+        var boardScroll = new ScrollContainer();
+        boardScroll.VerticalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        boardScroll.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        boardScroll.SetMeta(TestIdMetaKey, "battle-board-scroll");
+        _boardContainer.AddChild(boardScroll);
+
+        var line = new HBoxContainer();
+        line.AddThemeConstantOverride("separation", 16);
+        boardScroll.AddChild(line);
+
         foreach (var row in FormationBoard.RowOrder)
         {
-            var rowGroup = new HBoxContainer();
-            rowGroup.AddThemeConstantOverride("separation", 8);
+            var group = new VBoxContainer();
+            group.AddThemeConstantOverride("separation", 4);
+            group.SetMeta(TestIdMetaKey, $"battle-squad-{row}");
 
-            rowGroup.AddChild(new Label
+            var groupLabel = new Label
             {
-                Text = $"[{row}]",
-                CustomMinimumSize = new Vector2(96, 0),
-            });
+                Text = SquadLabel(row),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            groupLabel.SetMeta(TestIdMetaKey, $"battle-squad-label-{row}");
+            group.AddChild(groupLabel);
+
+            var cardRow = new HBoxContainer();
+            cardRow.AddThemeConstantOverride("separation", 6);
 
             var panelsInRow = new List<PanelContainer>();
-
             for (int column = 0; column < FormationBoard.ColumnsPerRow; column++)
             {
                 var coordinate = new SlotCoordinate(row, column);
                 var slot = BuildSlotPanel(battle, board, coordinate);
-                rowGroup.AddChild(slot);
+                cardRow.AddChild(slot);
                 panelsInRow.Add(slot);
 
                 // ユニット占有マスは Id → Panel を索引し、被弾/回復ポップアップの着地点にする。
@@ -815,8 +840,9 @@ public partial class BattleUI : Godot.Control
                 }
             }
 
+            group.AddChild(cardRow);
+            line.AddChild(group);
             _rowPanels[row] = panelsInRow;
-            _boardContainer.AddChild(rowGroup);
         }
 
         // 盤面が tree へ入った後で脈動 Tween を起動する（更地化済みの台帳へ積み直す）。
@@ -833,32 +859,57 @@ public partial class BattleUI : Godot.Control
     /// </summary>
     private PanelContainer BuildSlotPanel(BattleSnapshot? battle, FormationBoard board, SlotCoordinate coordinate)
     {
-        var label = new Label
-        {
-            CustomMinimumSize = new Vector2(180, 56),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        // 既存 E2E 互換: 基底のマス testid は従来どおり中身の Label に載せる。
-        label.SetMeta(TestIdMetaKey, SlotTestId(coordinate));
+        var panel = new PanelContainer();
+        panel.CustomMinimumSize = new Vector2(150, 200);
+
+        var inner = new VBoxContainer();
+        inner.AddThemeConstantOverride("separation", 2);
+        inner.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        panel.AddChild(inner);
 
         var occupant = board.OccupantAt(coordinate);
+        var unit = occupant is { } occId
+            ? (battle?.CombatantOf(occId) ?? _chronicleGlobal?.FindUnit(occId))
+            : null;
+
+        // ① ジョブ画像（男女別）。MouseFilter=Ignore で下のパネル操作を妨げない。
+        var art = BuildJobArt(unit, 88);
+        if (art is not null)
+        {
+            art.SetMeta(TestIdMetaKey, $"battle-slot-art-{coordinate.Row}-{coordinate.Column}");
+            inner.AddChild(art);
+        }
+
+        // ②③ 氏名 + [ジョブ名] + HP（占有時）。基底のマス testid は従来どおりこの Label に載せる（E2E 互換）。
+        var label = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(140, 0),
+        };
+        label.SetMeta(TestIdMetaKey, SlotTestId(coordinate));
         if (occupant is { } unitId && battle is not null)
         {
             label.Text = DescribeCombatant(battle, unitId);
         }
         else if (occupant is { } emptyBattleId)
         {
-            // 戦闘外でも盤面占有者は見せる（HP は戦闘文脈にしか無いので名前だけ）。
             label.Text = DescribeRosterUnit(emptyBattleId);
         }
         else
         {
             label.Text = "（空）";
         }
+        inner.AddChild(label);
 
-        var panel = new PanelContainer();
-        panel.AddChild(label);
+        // ④ 詳細ボタン（占有時のみ）→ ユニット詳細モーダルを浮上させる。
+        if (occupant is { } detailId)
+        {
+            var detailButton = new Button { Text = "詳細" };
+            detailButton.SetMeta(TestIdMetaKey, $"battle-slot-detail-{coordinate.Row}-{coordinate.Column}");
+            detailButton.Pressed += () => UnitInspectRequested?.Invoke(detailId);
+            inner.AddChild(detailButton);
+        }
 
         // 予告対象行のマスだけ赤枠 + 定型 ASCII testid を被せる（脈動は parenting 後）。
         if (IsSlotTargeted(battle, coordinate.Row))
@@ -868,6 +919,36 @@ public partial class BattleUI : Godot.Control
         }
 
         return panel;
+    }
+
+    /// <summary>ASCII -> 日本語の分隊名（戦闘盤面の分隊見出し）。</summary>
+    private static string SquadLabel(SquadRow row) => row switch
+    {
+        SquadRow.Front     => "前衛",
+        SquadRow.RearLeft  => "後衛-左",
+        SquadRow.RearRight => "後衛-右",
+        _ => row.ToString(),
+    };
+
+    /// <summary>
+    /// Gendered job-illustration TextureRect, or null when art is absent. MouseFilter
+    /// = Ignore so the card panel keeps ownership of pointer events.
+    /// </summary>
+    private static TextureRect? BuildJobArt(Unit? unit, int size)
+    {
+        if (unit is null) return null;
+        var texture = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (texture is null) return null;
+
+        return new TextureRect
+        {
+            Texture = texture,
+            CustomMinimumSize = new Vector2(size, size),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
     }
 
     /// <summary>

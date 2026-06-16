@@ -188,6 +188,7 @@ public partial class GameDirector : Godot.Control
             try
             {
                 _battleScreen.ProphecyRequested -= OnProphecyRequested;
+                _battleScreen.UnitInspectRequested -= OnUnitInspectRequested;
             }
             catch
             {
@@ -564,6 +565,8 @@ public partial class GameDirector : Godot.Control
             {
                 _battleScreen = battleScreen;
                 battleScreen.ProphecyRequested += OnProphecyRequested;
+                // 戦闘の戦闘員カード［詳細］→ ユニット詳細モーダル（編成画面と同じ窓口を共有）。
+                battleScreen.UnitInspectRequested += OnUnitInspectRequested;
             }
 
             // 編成画面なら、名簿カードの「Details」押下意思表示を購読する。
