@@ -152,6 +152,13 @@ public partial class ChronicleGlobal : Godot.Node
     public GamePhase CurrentPhase { get; private set; } = GamePhaseFlow.InitialPhase;
 
     /// <summary>
+    /// この年の行動（戦闘＝March / 休息＝Rest）。編成フェーズの「次へ」がこの値で分岐する：
+    /// March は 編成 → 戦闘、Rest は 戦闘フェーズを丸ごと回避して 編成 → 年代記（安全な年送り）。
+    /// 既定は March。設定は <see cref="SetPlannedAction"/> 経由のみ。1 周の幕引き（年代記復帰）で既定へ戻る。
+    /// </summary>
+    public PlannedAction CurrentAction { get; private set; } = PlannedAction.March;
+
+    /// <summary>
     /// V字 3×3 編成盤面の現在状態。常にちょうど 9 スロットを内包する完全不変レコード。
     /// 盤面は Unit 実体を持たず OccupantId(Guid?) のみを保持する薄い参照レイヤであり、
     /// 正本は <see cref="BattalionRoster"/> 側にある（単一 SoT・設計憲法 ③）。
@@ -383,6 +390,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
+            CurrentAction = PlannedAction.March;        // 新規開始時の既定行動は出撃
             CurrentFormation = FormationBoard.Empty();  // 新規開始は空盤面から
             CurrentBattle = null;                       // 新規開始時は非戦闘状態
             _battleRng = new Random();                  // 戦闘乱数は StartBattle で再シード
@@ -424,6 +432,7 @@ public partial class ChronicleGlobal : Godot.Node
             BattalionRoster          = ImmutableList<Unit>.Empty;
             CurrentTimeline          = null;
             CurrentPhase             = GamePhaseFlow.InitialPhase;
+            CurrentAction            = PlannedAction.March;
             CurrentFormation         = FormationBoard.Empty();
             CurrentBattle            = null;
             _battleRng               = new Random();
@@ -962,6 +971,32 @@ public partial class ChronicleGlobal : Godot.Node
     //  後退・飛び越し（例 Chronicle → Battle）はすべて拒否される（false 返却）。
 
     /// <summary>
+    /// 今年の行動（出撃 March / 休息 Rest）を選択する。編成フェーズで「次へ」を押す前に
+    /// 確定させる意思表示で、<see cref="AdvancePhase"/> の編成離脱分岐（ActionPhaseRouter）の
+    /// 入力になる。同値なら何もしない。変更時は FormationChanged を発火し、UI のボタン表示
+    /// （出撃／休息）と整合させる。未初期化時は何もしない。
+    /// </summary>
+    public void SetPlannedAction(PlannedAction action)
+    {
+        bool changed = false;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return;
+
+            if (CurrentAction != action)
+            {
+                CurrentAction = action;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            SafeEmit(SignalFormationChanged);
+        }
+    }
+
+    /// <summary>
     /// 現在フェーズを循環順序で 1 つ進める（Chronicle→Guild→Formation→Battle→Chronicle）。
     /// 常に合法（構造上、各フェーズの次はただ 1 つ）。遷移後 PhaseChanged を発火する。
     ///
@@ -980,16 +1015,22 @@ public partial class ChronicleGlobal : Godot.Node
         GamePhase next;
         bool generationAdvanced = false;
         bool formationChanged = false;
+        bool battleConcluded = false;
 
         lock (_stateLock)
         {
             if (!IsInitialized) return CurrentPhase;
 
             var from = CurrentPhase;
-            next = GamePhaseFlow.Next(from);
 
-            // 無人出撃の絶対封鎖: 編成 → 戦闘 の前進は、盤面に最低 1 名が配置されている時のみ許す。
-            // 1 体も配備していない場合は前進を拒絶し、編成フェーズに留め置く（純粋ガード DeploymentGate）。
+            // ★ 行動分岐: 編成からの離脱は選択行動で行き先が変わる（純粋ルータ ActionPhaseRouter）。
+            //   March → 戦闘 / Rest → 年代記（戦闘フェーズを完全バイパス）。それ以外は通常の循環。
+            next = from == GamePhase.Formation
+                ? ActionPhaseRouter.PhaseAfterFormation(CurrentAction)
+                : GamePhaseFlow.Next(from);
+
+            // 無人出撃の絶対封鎖: 編成 → 戦闘（March）の前進は、盤面に最低 1 名が配置されている時のみ許す。
+            // （Rest は next==Chronicle ゆえ本ガードは発火しない＝休息に配置は不要）。
             if (from == GamePhase.Formation && next == GamePhase.Battle
                 && !DeploymentGate.CanMarch(CurrentFormation))
             {
@@ -1004,11 +1045,21 @@ public partial class ChronicleGlobal : Godot.Node
                 return CurrentPhase;
             }
 
-            // Battle → Chronicle はループ 1 周の幕引き。ここで世代交代（年送り）を行う。
-            if (from == GamePhase.Battle && next == GamePhase.Chronicle)
+            // ループ 1 周の幕引き（年代記へ復帰）で世代交代（年送り）を行う。
+            //   - Battle → Chronicle  : 出撃の幕引き（戦果還流あり）。
+            //   - Formation → Chronicle: 休息（戦闘を回避した安全な年。戦果還流なし）。
+            if (next == GamePhase.Chronicle
+                && (from == GamePhase.Battle || from == GamePhase.Formation))
             {
                 formationChanged = AdvanceGenerationLocked();
                 generationAdvanced = true;
+                battleConcluded = from == GamePhase.Battle; // 戦果還流は出撃の幕引き時のみ
+            }
+
+            // 年代記へ復帰したら選択行動を既定（戦闘）へ戻す（次の周回は明示選択があるまで March）。
+            if (next == GamePhase.Chronicle)
+            {
+                CurrentAction = PlannedAction.March;
             }
 
             CurrentPhase = next;
@@ -1021,7 +1072,7 @@ public partial class ChronicleGlobal : Godot.Node
         //   獲得 0 で安全に据え置かれ、画面切り替え（PhaseChanged）より前に経済が決算される。
         //   戦果と世代交代は 1 : 1 対応のため二重加算は起こらない（LastBattleSpoils は
         //   次戦闘の FinalizeBattleSpoils まで上書きされない）。
-        if (generationAdvanced)
+        if (battleConcluded)
         {
             ApplyBattleSpoils(LastBattleSpoils);
         }
@@ -1889,6 +1940,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
+            CurrentAction   = PlannedAction.March;         // ロード再開時の既定行動は出撃
             CurrentFormation = FormationBoard.Empty();     // 盤面は永続化せずロードは空盤面から
             CurrentBattle   = null;              // 戦闘は永続化しない（ロード再開は非戦闘状態）
             _battleRng      = new Random();       // 戦闘乱数は次の StartBattle で再シード
