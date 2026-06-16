@@ -190,6 +190,14 @@ public partial class ChronicleGlobal : Godot.Node
     public BattleSpoils LastBattleSpoils { get; private set; } = BattleSpoils.Empty;
 
     /// <summary>
+    /// 直近の「休息」年の決算スナップショット（休息で大隊を立て直したときの成果）。
+    /// <see cref="ExecuteRest"/> が純粋層 <see cref="RestService"/> で確定して公開し、
+    /// 休息報酬通知 UI（無状態オーバーレイ）がこれを読み取るだけ。戦闘を経由しない年は
+    /// <see cref="LastBattleSpoils"/> ではなく本値が「この年の成果」を表す。
+    /// </summary>
+    public RestOutcome LastRestOutcome { get; private set; } = RestOutcome.None;
+
+    /// <summary>
     /// 旅団史（年代記ナレーション）の累積ログ。世代交代（<see cref="AdvanceGenerationLocked"/>）の
     /// たびに、その世代の損失（引退 / 戦死）と成長（昇級）を不変イベントとして追記していく。
     /// 完全不変（ImmutableArray）ゆえ参照読み取りはアトミックで安全。書き込みは
@@ -398,6 +406,7 @@ public partial class ChronicleGlobal : Godot.Node
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty; // 戦果基準点も更地
             _lastBattleOutcome = BattleOutcome.Ongoing; // 退避中の決着状態も更地
             LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
+            LastRestOutcome  = RestOutcome.None;        // 新規開始時は休息成果なし
             _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史も白紙から
             _ancestralArchive = ImmutableDictionary<Guid, Unit>.Empty; // 英霊アーカイブも更地から
             IsInitialized = true;
@@ -440,6 +449,7 @@ public partial class ChronicleGlobal : Godot.Node
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty;
             _lastBattleOutcome       = BattleOutcome.Ongoing;
             LastBattleSpoils         = BattleSpoils.Empty;
+            LastRestOutcome          = RestOutcome.None;
             _chronicleLog            = ImmutableArray<ChronicleLogEntry>.Empty;
             _ancestralArchive        = ImmutableDictionary<Guid, Unit>.Empty;
             IsInitialized            = false; // ★ 未初期化へ回帰（前世の完全消滅）
@@ -1556,6 +1566,40 @@ public partial class ChronicleGlobal : Godot.Node
 
         if (applied) SafeEmit(SignalEconomyChanged);
         return applied ? earned : 0;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  休息（戦闘回避）の決算
+    // ════════════════════════════════════════════════════════════════════════
+    //  編成で「休息」を選んで前進したとき、戦闘フェーズを完全にバイパスする代わりに
+    //  ここで「大隊を立て直す」決算を 1 度だけ確定する。ExecuteScout / ApplyBattleSpoils と
+    //  同じく、純粋層（RestService）が算術を担い、本メソッドは「状態の差し替えとシグナル
+    //  発火」だけに専念する（責務分離）。年送り（加齢・年次収入・予言再生成）は本メソッドでは
+    //  行わない——休息報酬通知 UI の「確認」後に GameDirector が AdvancePhase を駆動して初めて
+    //  起きる（提示が消滅副作用に先行する。BattleSpoilsScreen と同じ案A）。
+
+    /// <summary>
+    /// 「休息」年の決算を確定する。純粋層 <see cref="RestService.Resolve"/> で次経済と
+    /// 成果サマリ（休息頭数・報酬ポイント・適用後残高）を算出し、経済 SoT を原子的に差し替え、
+    /// <see cref="LastRestOutcome"/> を公開する。ロック解放後に EconomyChanged を発火する。
+    /// 未初期化なら状態を変えず <see cref="RestOutcome.None"/> を返す（no-op 契約）。
+    /// </summary>
+    /// <returns>確定した休息成果サマリ（休息報酬通知 UI がこれを読むだけ）。</returns>
+    public RestOutcome ExecuteRest()
+    {
+        RestOutcome outcome;
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return RestOutcome.None;
+
+            var resolution = RestService.Resolve(BattalionRoster, CurrentEconomy);
+            CurrentEconomy  = resolution.NextEconomy;
+            LastRestOutcome = resolution.Outcome;
+            outcome = resolution.Outcome;
+        }
+
+        SafeEmit(SignalEconomyChanged);
+        return outcome;
     }
 
     // ════════════════════════════════════════════════════════════════════════
