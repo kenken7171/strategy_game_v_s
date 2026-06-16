@@ -125,6 +125,13 @@ public partial class GameDirector : Godot.Control
     /// </summary>
     private UnitDetailOverlay? _unitDetailOverlay;
 
+    /// <summary>
+    /// 現在前面に展開中の休息報酬通知オーバーレイ。編成で「休息」を選んで前進したときに、
+    /// 戦闘フェーズを完全にバイパスして即マウントする。「確認（次代へ）」押下（Confirmed）で
+    /// 初めて AdvancePhase（年送り）を駆動し、自身を QueueFree する。未展開時は null。
+    /// </summary>
+    private RestResultOverlay? _restResultOverlay;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -167,6 +174,7 @@ public partial class GameDirector : Godot.Control
         DismissProphecyOverlay();
         DismissJobManualOverlay();
         DismissUnitDetailOverlay();
+        DismissRestResultOverlay();
 
         // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
         if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
@@ -498,6 +506,56 @@ public partial class GameDirector : Godot.Control
         _unitDetailOverlay = null;
     }
 
+    // ─── 休息報酬通知オーバーレイ（戦闘を回避した年の成果提示） ────────────────
+    //  編成で「休息」を選んで「次へ」を押したとき、編成画面・戦闘画面を一切経由せず、
+    //  その場で ExecuteRest() の成果を提示する自己崩壊型オーバーレイ。家系図・予言・
+    //  決算スクリーンと同型のライフサイクル（Confirmed / _ExitTree で QueueFree）。年送りは
+    //  「確認（次代へ）」押下まで遅延し、提示が消滅副作用（加齢・予言再生成）に先行する（案A）。
+
+    /// <summary>
+    /// 休息報酬通知の「確認（次代へ）」意思表示ハンドラ。前面のオーバーレイを解放した後、
+    /// 初めて AdvancePhase（編成 → 年代記の年送り）を駆動する。これにより休息成果の提示が
+    /// 年送りの消滅副作用に確実に先行する。
+    /// </summary>
+    private void OnRestConfirmed()
+    {
+        DismissRestResultOverlay();
+        _chronicleGlobal?.AdvancePhase();
+    }
+
+    /// <summary>
+    /// 休息報酬通知オーバーレイを最前面へ展開する。多重展開・取り残しを避けるため、生存中の
+    /// 旧オーバーレイがあれば先に確実に解放してから展開する。成果データはオーバーレイ自身が
+    /// _Ready で ChronicleGlobal.LastRestOutcome を読むため、ここでは注入しない（無状態の徹底）。
+    /// </summary>
+    private void MountRestResultOverlay()
+    {
+        DismissRestResultOverlay();
+
+        var overlay = new RestResultOverlay();
+        overlay.Confirmed += OnRestConfirmed;
+        overlay.SetMeta(TestIdMetaKey, "game-director-rest-result-overlay");
+        _restResultOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中の休息報酬通知オーバーレイがあれば購読を解いて確実に解放する。確認意思表示
+    /// （OnRestConfirmed）および退場時（_ExitTree）に呼び、ゾンビノード・購読二重接続を根絶する。
+    /// </summary>
+    private void DismissRestResultOverlay()
+    {
+        if (_restResultOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_restResultOverlay))
+        {
+            _restResultOverlay.Confirmed -= OnRestConfirmed;
+            _restResultOverlay.QueueFree();
+        }
+        _restResultOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -653,13 +711,16 @@ public partial class GameDirector : Godot.Control
 
         var current = _chronicleGlobal.CurrentPhase;
 
-        // 1. 画面切り替え：スラッグをキーに各画面の Visible を設定する。
+        // 1. 画面切り替え：スラッグをキーに各画面の Visible を設定する。可視判定は純粋層
+        //    ScreenVisibility.IsVisible に一元化（テストと同一定義を共有し、行動分岐＝可視画面の
+        //    連動を結合テストで検証可能にする）。休息は Formation→Chronicle ゆえ Battle 画面は
+        //    決して可視にならない（戦闘フェーズの完全バイパス）。
         foreach (var phase in GamePhaseFlow.Cycle)
         {
             var screen = _screenContainer.GetNodeOrNull<Godot.Control>(phase.Slug());
             if (screen is not null)
             {
-                screen.Visible = phase == current;
+                screen.Visible = ScreenVisibility.IsVisible(phase, current);
             }
         }
 
@@ -722,6 +783,19 @@ public partial class GameDirector : Godot.Control
             && _chronicleGlobal.CurrentBattle is { Outcome: BattleOutcome.Ongoing })
         {
             _chronicleGlobal.ResolveBattleTurn(null);
+            return;
+        }
+
+        // ★ 休息の根治: 編成で「休息」を選んで前進する場合、戦闘フェーズを完全にバイパスする。
+        //   AdvancePhase（年送り）へ即委ねず、まず ExecuteRest() で休息成果を確定・公開し、
+        //   その成果を提示する RestResultOverlay を最前面へ展開する。年送りはオーバーレイの
+        //   「確認（次代へ）」押下（OnRestConfirmed）まで遅延する。これにより編成画面・戦闘画面を
+        //   一切経由せず、その場で休息成果を提示してから安全に年代記へ遷移できる。
+        if (_chronicleGlobal.CurrentPhase == GamePhase.Formation
+            && _chronicleGlobal.CurrentAction == PlannedAction.Rest)
+        {
+            _chronicleGlobal.ExecuteRest();
+            MountRestResultOverlay();
             return;
         }
 

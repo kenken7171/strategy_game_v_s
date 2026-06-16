@@ -54,6 +54,9 @@ public partial class FormationUI : Godot.Control
     private static readonly SquadRow[] RowOrder =
         { SquadRow.Front, SquadRow.RearLeft, SquadRow.RearRight };
 
+    /// <summary>Bench (unplaced roster) grid width: rich cards laid out 4 across.</summary>
+    private const int BenchColumns = 4;
+
     // ─── Autoload ───────────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -343,22 +346,30 @@ public partial class FormationUI : Godot.Control
         ClearChildren(_boardContainer);
         var board = _chronicleGlobal.CurrentFormation;
 
-        // 大隊を横一列に展開する：3 分隊（前衛 / 後衛-左 / 後衛-右）を左から右へ並べ、各分隊は
-        // 「分隊名 + 横並びの戦闘員カード」。多数カードでも崩れぬよう横スクロールで包む。
-        var scroll = new ScrollContainer();
-        scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        scroll.SetMeta(TestIdMetaKey, "formation-board-scroll");
-        _boardContainer.AddChild(scroll);
+        // ▲ウェッジ陣形（逆三角形）: FRONT（先鋒）を中央上にせり出させ、REAR-L / REAR-R を
+        // 下段の左右へ広げる。各分隊ブロック（分隊名 + 横並び3スロット）は共通の BuildSquadBlock
+        // が払い出す。配置の真実は CurrentFormation を毎回読み直す（無状態・単一SoT）。
+        var wedge = new VBoxContainer();
+        wedge.AddThemeConstantOverride("separation", 12);
+        wedge.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        wedge.SetMeta(TestIdMetaKey, "formation-wedge");
+        _boardContainer.AddChild(wedge);
 
-        var line = new HBoxContainer();
-        line.AddThemeConstantOverride("separation", 20);
-        scroll.AddChild(line);
+        // 上段: FRONT を中央に。
+        var frontRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        frontRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        frontRow.SetMeta(TestIdMetaKey, "formation-wedge-front-row");
+        frontRow.AddChild(BuildSquadBlock(board, SquadRow.Front));
+        wedge.AddChild(frontRow);
 
-        foreach (var row in RowOrder)
-        {
-            line.AddChild(BuildSquadBlock(board, row));
-        }
+        // 下段: REAR-L / REAR-R を中央寄せで左右に広げる（逆三角形の底辺）。
+        var rearRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        rearRow.AddThemeConstantOverride("separation", 28);
+        rearRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        rearRow.SetMeta(TestIdMetaKey, "formation-wedge-rear-row");
+        rearRow.AddChild(BuildSquadBlock(board, SquadRow.RearLeft));
+        rearRow.AddChild(BuildSquadBlock(board, SquadRow.RearRight));
+        wedge.AddChild(rearRow);
     }
 
     /// <summary>Build one squad column: header label + 3 drag-drop slots.</summary>
@@ -529,61 +540,125 @@ public partial class FormationUI : Godot.Control
         var board = _chronicleGlobal.CurrentFormation;
         var roster = _chronicleGlobal.BattalionRoster;
 
+        // 未編成（控え）は「横4体」のリッチカード格子で見せる（縦スクロールで快適に閲覧・選択）。
+        // 各カードは ①男女別ジョブ画像 ②ユニット名 ③ジョブ名 ④詳細ボタン を縦に内包する。
+        var scroll = new ScrollContainer();
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        scroll.CustomMinimumSize = new Vector2(0, 280);
+        scroll.SetMeta(TestIdMetaKey, "formation-bench-scroll");
+        _benchContainer.AddChild(scroll);
+
+        var grid = new GridContainer { Columns = BenchColumns };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        grid.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        grid.SetMeta(TestIdMetaKey, "formation-bench-grid");
+        scroll.AddChild(grid);
+
+        int benchCount = 0;
         foreach (var unit in roster)
         {
             if (!unit.IsAlive) continue;
             if (board.Contains(unit.Id)) continue;
 
-            var capturedId = unit.Id;
-            var eligibility = unit.Age >= BattleEligibleAge ? "出陣可" : "未成年";
-
-            var isSelected = _selectedUnitId == capturedId;
-
-            var card = new RosterDragCard { UnitId = capturedId };
-            card.SetMeta(TestIdMetaKey, $"formation-bench-card-{capturedId}");
-            // Selected card glows so the player sees which unit is "in hand".
-            card.SelfModulate = isSelected ? new Color(1f, 0.92f, 0.55f) : Colors.White;
-
-            var rowBox = new HBoxContainer();
-            rowBox.AddThemeConstantOverride("separation", 8);
-            card.AddChild(rowBox);
-
-            // Job art thumbnail (gendered). MouseFilter=Ignore so the card keeps the drag.
-            var art = BuildJobArt(unit, 44);
-            if (art is not null)
-            {
-                art.SetMeta(TestIdMetaKey, $"formation-bench-art-{capturedId}");
-                rowBox.AddChild(art);
-            }
-
-            var info = new Label
-            {
-                Text =
-                    $"{_chronicleGlobal.ResolveDisplayName(unit)}  " +
-                    $"[{_chronicleGlobal.ResolveJobName(unit.Job)}]  " +
-                    $"Lv{unit.Level}  Age {unit.Age}  ({eligibility})",
-            };
-            info.SetMeta(TestIdMetaKey, $"formation-bench-info-{capturedId}");
-            rowBox.AddChild(info);
-
-            // Hybrid select (click / controller): pick this unit up to place by tapping a slot.
-            var selectButton = new Button { Text = isSelected ? "選択中" : "選択" };
-            if (isSelected)
-            {
-                selectButton.AddThemeColorOverride("font_color", Colors.Gold);
-            }
-            selectButton.SetMeta(TestIdMetaKey, $"formation-bench-select-{capturedId}");
-            selectButton.Pressed += () => OnBenchSelectPressed(capturedId);
-            rowBox.AddChild(selectButton);
-
-            // Click "Details" to request the unit detail modal.
-            var detailButton = new Button { Text = "詳細" };
-            detailButton.SetMeta(TestIdMetaKey, $"formation-bench-detail-{capturedId}");
-            detailButton.Pressed += () => UnitInspectRequested?.Invoke(capturedId);
-            rowBox.AddChild(detailButton);
-
-            _benchContainer.AddChild(card);
+            grid.AddChild(BuildBenchCard(unit));
+            benchCount++;
         }
+
+        if (benchCount == 0)
+        {
+            var empty = new Label { Text = "（控えの旅団員はいません。全員が配置済みです）" };
+            empty.SetMeta(TestIdMetaKey, "formation-bench-empty");
+            grid.AddChild(empty);
+        }
+    }
+
+    /// <summary>
+    /// Build one rich bench card (a drag source) laid out vertically: gendered job art,
+    /// unit name, job name, a Lv/age/eligibility line, and a [select]/[details] button row.
+    /// The card stays a RosterDragCard so drag-and-drop onto a slot is fully preserved;
+    /// the hybrid click/controller select and the detail modal are wired exactly as before.
+    /// </summary>
+    private Control BuildBenchCard(Unit unit)
+    {
+        var capturedId = unit.Id;
+        var eligibility = unit.Age >= BattleEligibleAge ? "出陣可" : "未成年";
+        var isSelected = _selectedUnitId == capturedId;
+
+        var card = new RosterDragCard { UnitId = capturedId };
+        card.CustomMinimumSize = new Vector2(150, 0);
+        card.SetMeta(TestIdMetaKey, $"formation-bench-card-{capturedId}");
+        // Selected card glows so the player sees which unit is "in hand".
+        card.SelfModulate = isSelected ? new Color(1f, 0.92f, 0.55f) : Colors.White;
+
+        var cardBox = new VBoxContainer();
+        cardBox.AddThemeConstantOverride("separation", 2);
+        cardBox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        card.AddChild(cardBox);
+
+        // ① 男女別ジョブ画像。MouseFilter=Ignore so the card keeps the drag.
+        var art = BuildJobArt(unit, 96);
+        if (art is not null)
+        {
+            art.SetMeta(TestIdMetaKey, $"formation-bench-art-{capturedId}");
+            cardBox.AddChild(art);
+        }
+
+        // ② ユニット名（選択中は金字）。
+        var nameLabel = new Label
+        {
+            Text = _chronicleGlobal!.ResolveDisplayName(unit),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        nameLabel.SetMeta(TestIdMetaKey, $"formation-bench-name-{capturedId}");
+        if (isSelected)
+        {
+            nameLabel.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        cardBox.AddChild(nameLabel);
+
+        // ③ ジョブ名。
+        var jobLabel = new Label
+        {
+            Text = $"[{_chronicleGlobal.ResolveJobName(unit.Job)}]",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        jobLabel.SetMeta(TestIdMetaKey, $"formation-bench-job-{capturedId}");
+        cardBox.AddChild(jobLabel);
+
+        // 補助情報（レベル / 年齢 / 出陣可否）。
+        var metaLabel = new Label
+        {
+            Text = $"Lv{unit.Level}  {unit.Age}歳  {eligibility}",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        metaLabel.SetMeta(TestIdMetaKey, $"formation-bench-info-{capturedId}");
+        cardBox.AddChild(metaLabel);
+
+        // ボタン行（選択 / ④詳細）。
+        var buttonRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        buttonRow.AddThemeConstantOverride("separation", 4);
+        cardBox.AddChild(buttonRow);
+
+        // Hybrid select (click / controller): pick this unit up to place by tapping a slot.
+        var selectButton = new Button { Text = isSelected ? "選択中" : "選択" };
+        if (isSelected)
+        {
+            selectButton.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        selectButton.SetMeta(TestIdMetaKey, $"formation-bench-select-{capturedId}");
+        selectButton.Pressed += () => OnBenchSelectPressed(capturedId);
+        buttonRow.AddChild(selectButton);
+
+        // ④ Click "Details" to request the unit detail modal.
+        var detailButton = new Button { Text = "詳細" };
+        detailButton.SetMeta(TestIdMetaKey, $"formation-bench-detail-{capturedId}");
+        detailButton.Pressed += () => UnitInspectRequested?.Invoke(capturedId);
+        buttonRow.AddChild(detailButton);
+
+        return card;
     }
 
     // ─── Equipment dock (free swap, stateless) ─────────────────────────────────
