@@ -25,8 +25,10 @@ using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;          // Gender (job art read)
 using ChronicleKnights.Core.Units;
-using ChronicleKnights.UserInterface.Hub; // FormationDragPayload / RosterDragCard / FormationSlotControl
+using ChronicleKnights.UserInterface;         // JobTextureLibrary
+using ChronicleKnights.UserInterface.Hub;     // FormationDragPayload / RosterDragCard / FormationSlotControl
 using Godot;
 
 namespace ChronicleKnights.UI;
@@ -75,6 +77,14 @@ public partial class FormationUI : Godot.Control
     /// </summary>
     private Guid? _pendingEquipId;
 
+    /// <summary>
+    /// Click/controller selection cursor (a transient operation cursor, not board
+    /// state): the unit "picked up" from the bench or a slot, awaiting a target
+    /// slot. null = nothing selected. This powers the consumer (PS5) hybrid:
+    /// select a unit, then click a slot to place it. Drag-and-drop is unaffected.
+    /// </summary>
+    private Guid? _selectedUnitId;
+
     // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     public override void _Ready()
@@ -117,8 +127,9 @@ public partial class FormationUI : Godot.Control
 
         var hintLabel = new Label
         {
-            Text = "控えのユニットを枠へドラッグして配置。枠から枠へドラッグで入れ替え。"
-                   + "枠の［× 解除］で外す。控えカードの［詳細］でユニット詳細を表示。",
+            Text = "操作①ドラッグ＆ドロップ：控え→枠で配置、枠→枠で入替。"
+                   + "操作②選択式（コントローラ可）：控えの［選択］→配置先の枠の［ここへ］で一撃配属。"
+                   + "枠の［× 解除］で外す。控えの［詳細］でユニット詳細。",
         };
         hintLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         hintLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -218,17 +229,39 @@ public partial class FormationUI : Godot.Control
     private void RenderAll()
     {
         if (_chronicleGlobal is null) return;
+        ValidateSelection();
         RenderSummary();
         RenderBoard();
         RenderBench();
         RenderEquipmentSlots();
     }
 
+    /// <summary>
+    /// Drop the selection cursor if the picked-up unit is no longer real/alive
+    /// (roster or board changed under us). Keeps the cursor self-consistent with SoT.
+    /// </summary>
+    private void ValidateSelection()
+    {
+        if (_chronicleGlobal is null || _selectedUnitId is not { } id) return;
+        var unit = _chronicleGlobal.FindUnit(id);
+        if (unit is null || !unit.IsAlive)
+        {
+            _selectedUnitId = null;
+        }
+    }
+
     private void RenderSummary()
     {
         if (_chronicleGlobal is null || _summaryLabel is null) return;
         var board = _chronicleGlobal.CurrentFormation;
-        _summaryLabel.Text = $"配置済み {board.OccupiedCount} / {FormationBoard.SlotCount} 枠";
+        var text = $"配置済み {board.OccupiedCount} / {FormationBoard.SlotCount} 枠";
+        if (_selectedUnitId is { } sel)
+        {
+            var u = _chronicleGlobal.FindUnit(sel);
+            var name = u is null ? sel.ToString() : _chronicleGlobal.ResolveDisplayName(u);
+            text += $"　／　選択中: {name} ▶ 配置先の枠を選んでください";
+        }
+        _summaryLabel.Text = text;
     }
 
     // ── Wedge board: FRONT centered on top, REAR-L / REAR-R below ──────────────
@@ -282,10 +315,16 @@ public partial class FormationUI : Godot.Control
         return block;
     }
 
-    /// <summary>Build a single wedge slot as a drag target / drag source.</summary>
+    /// <summary>
+    /// Build a single wedge slot: a rich card showing the occupant's job art
+    /// (gendered) + name + job, plus a focusable primary button (click / controller
+    /// hybrid) and a remove button. The slot remains a drag target / drag source so
+    /// drag-and-drop is fully preserved.
+    /// </summary>
     private Control BuildSlot(FormationBoard board, SlotCoordinate coordinate)
     {
         var occupant = board.OccupantAt(coordinate);
+        var capturedCoord = coordinate;
 
         var slot = new FormationSlotControl
         {
@@ -294,7 +333,7 @@ public partial class FormationUI : Godot.Control
             PlaceRequested = OnPlaceRequested,
             SwapRequested  = OnSwapRequested,
         };
-        slot.CustomMinimumSize = new Vector2(150, 74);
+        slot.CustomMinimumSize = new Vector2(132, 188);
         slot.SetMeta(TestIdMetaKey, SlotTestId(coordinate));
 
         var inner = new VBoxContainer();
@@ -306,12 +345,24 @@ public partial class FormationUI : Godot.Control
         {
             var unit = _chronicleGlobal.FindUnit(unitId);
 
+            var art = BuildJobArt(unit, 96);
+            if (art is not null)
+            {
+                art.SetMeta(TestIdMetaKey, $"formation-slot-art-{coordinate.Row}-{coordinate.Column}");
+                inner.AddChild(art);
+            }
+
             var nameLabel = new Label
             {
                 Text = unit is null ? unitId.ToString() : _chronicleGlobal.ResolveDisplayName(unit),
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             nameLabel.SetMeta(TestIdMetaKey, $"formation-slot-name-{coordinate.Row}-{coordinate.Column}");
+            // Picked-up (selected) occupant glows gold so the player sees what is moving.
+            if (_selectedUnitId == unitId)
+            {
+                nameLabel.AddThemeColorOverride("font_color", Colors.Gold);
+            }
             inner.AddChild(nameLabel);
 
             var jobLabel = new Label
@@ -322,9 +373,10 @@ public partial class FormationUI : Godot.Control
             jobLabel.SetMeta(TestIdMetaKey, $"formation-slot-job-{coordinate.Row}-{coordinate.Column}");
             inner.AddChild(jobLabel);
 
+            inner.AddChild(BuildSlotPrimaryButton(capturedCoord, occupied: true));
+
             var removeButton = new Button { Text = "× 解除" };
             removeButton.SetMeta(TestIdMetaKey, $"formation-slot-remove-{coordinate.Row}-{coordinate.Column}");
-            var capturedCoord = coordinate;
             removeButton.Pressed += () => OnClearSlotPressed(capturedCoord);
             inner.AddChild(removeButton);
         }
@@ -332,14 +384,69 @@ public partial class FormationUI : Godot.Control
         {
             var empty = new Label
             {
-                Text = "（ここへ配置）",
+                Text = "（空き）",
+                CustomMinimumSize = new Vector2(0, 96),
                 HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
             };
             empty.SetMeta(TestIdMetaKey, $"formation-slot-empty-{coordinate.Row}-{coordinate.Column}");
             inner.AddChild(empty);
+
+            inner.AddChild(BuildSlotPrimaryButton(capturedCoord, occupied: false));
         }
 
         return slot;
+    }
+
+    /// <summary>
+    /// Build the slot's focusable primary action button for the click/controller
+    /// hybrid: with a unit selected it places it here ("▶ ここへ"); with nothing
+    /// selected it picks up this slot's occupant to move ("選択"); an empty slot
+    /// with no selection is inert.
+    /// </summary>
+    private Button BuildSlotPrimaryButton(SlotCoordinate coordinate, bool occupied)
+    {
+        var button = new Button();
+        button.SetMeta(TestIdMetaKey, $"formation-slot-place-{coordinate.Row}-{coordinate.Column}");
+
+        if (_selectedUnitId is not null)
+        {
+            button.Text = occupied ? "▶ ここへ（置換）" : "▶ ここへ";
+        }
+        else if (occupied)
+        {
+            button.Text = "選択";
+        }
+        else
+        {
+            button.Text = "（空き）";
+            button.Disabled = true;
+        }
+
+        var capturedCoord = coordinate;
+        button.Pressed += () => OnSlotPrimaryPressed(capturedCoord);
+        return button;
+    }
+
+    /// <summary>
+    /// Build a gendered job-illustration TextureRect, or null when art is absent.
+    /// MouseFilter = Ignore so the parent slot/card keeps ownership of the drag.
+    /// </summary>
+    private static TextureRect? BuildJobArt(Unit? unit, int size)
+    {
+        if (unit is null) return null;
+        var texture = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (texture is null) return null;
+
+        return new TextureRect
+        {
+            Texture = texture,
+            CustomMinimumSize = new Vector2(size, size),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
     }
 
     // ── Bench: draggable roster cards (drag source) ───────────────────────────
@@ -361,12 +468,24 @@ public partial class FormationUI : Godot.Control
             var capturedId = unit.Id;
             var eligibility = unit.Age >= BattleEligibleAge ? "出陣可" : "未成年";
 
+            var isSelected = _selectedUnitId == capturedId;
+
             var card = new RosterDragCard { UnitId = capturedId };
             card.SetMeta(TestIdMetaKey, $"formation-bench-card-{capturedId}");
+            // Selected card glows so the player sees which unit is "in hand".
+            card.SelfModulate = isSelected ? new Color(1f, 0.92f, 0.55f) : Colors.White;
 
             var rowBox = new HBoxContainer();
             rowBox.AddThemeConstantOverride("separation", 8);
             card.AddChild(rowBox);
+
+            // Job art thumbnail (gendered). MouseFilter=Ignore so the card keeps the drag.
+            var art = BuildJobArt(unit, 44);
+            if (art is not null)
+            {
+                art.SetMeta(TestIdMetaKey, $"formation-bench-art-{capturedId}");
+                rowBox.AddChild(art);
+            }
 
             var info = new Label
             {
@@ -377,6 +496,16 @@ public partial class FormationUI : Godot.Control
             };
             info.SetMeta(TestIdMetaKey, $"formation-bench-info-{capturedId}");
             rowBox.AddChild(info);
+
+            // Hybrid select (click / controller): pick this unit up to place by tapping a slot.
+            var selectButton = new Button { Text = isSelected ? "選択中" : "選択" };
+            if (isSelected)
+            {
+                selectButton.AddThemeColorOverride("font_color", Colors.Gold);
+            }
+            selectButton.SetMeta(TestIdMetaKey, $"formation-bench-select-{capturedId}");
+            selectButton.Pressed += () => OnBenchSelectPressed(capturedId);
+            rowBox.AddChild(selectButton);
 
             // Click "Details" to request the unit detail modal.
             var detailButton = new Button { Text = "詳細" };
@@ -486,6 +615,41 @@ public partial class FormationUI : Godot.Control
     /// <summary>Rotation button: request a squad-wise rotation.</summary>
     private void OnRotatePressed(RotationDirection direction)
         => _chronicleGlobal?.RotateFormation(direction);
+
+    // ─── Hybrid select-to-place handlers (click / controller; D&D unaffected) ──
+
+    /// <summary>Bench "選択" pressed: toggle this unit as the picked-up selection.</summary>
+    private void OnBenchSelectPressed(Guid unitId)
+    {
+        _selectedUnitId = (_selectedUnitId == unitId) ? null : unitId;
+        RenderAll();
+    }
+
+    /// <summary>
+    /// Slot primary button (click / controller hybrid). With a unit selected, deploy
+    /// it here (Core auto-evicts duplicates and replaces any occupant). With nothing
+    /// selected, pick up this slot's occupant to move it. Always re-renders so the
+    /// selection highlight stays consistent even on a no-op placement.
+    /// </summary>
+    private void OnSlotPrimaryPressed(SlotCoordinate coordinate)
+    {
+        if (_chronicleGlobal is null) return;
+
+        if (_selectedUnitId is { } selected)
+        {
+            _chronicleGlobal.PlaceUnitOnFormation(coordinate, selected);
+            _selectedUnitId = null;
+            RenderAll();
+            return;
+        }
+
+        var occupant = _chronicleGlobal.CurrentFormation.OccupantAt(coordinate);
+        if (occupant is { } id)
+        {
+            _selectedUnitId = id;
+            RenderAll();
+        }
+    }
 
     // ─── Equipment dock handlers ───────────────────────────────────────────────
 
