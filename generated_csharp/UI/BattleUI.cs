@@ -297,6 +297,11 @@ public partial class BattleUI : Godot.Control
         BuildUI();
         SubscribeSignals();
         RenderAll();
+        // ★ 動的B型: 本画面は戦闘フェーズ入場時に GameDirector が new してマウントする。フェーズ遷移
+        //   信号（PhaseChanged）はマウントより前に飛んでいるため OnPhaseChanged では捕捉できない。
+        //   よって入場時の自動開戦（＝敵生成）は、マウント直後のこの _Ready で起こす。出撃以外では
+        //   そもそも本画面が生成されないうえ、BeginBattle 内の MayGenerateEnemy 結界が最終防御する。
+        TryAutoStartBattle();
     }
 
     public override void _ExitTree()
@@ -531,7 +536,13 @@ public partial class BattleUI : Godot.Control
     /// として確実に引き継がれており、BeginBattle がそれを読んで CurrentBattle を起こす）。
     /// 0名は三重結界の DeploymentGate が弾くため、ここで空盤面のまま開戦することはない。
     /// </summary>
-    private void OnPhaseChanged()
+    private void OnPhaseChanged() => TryAutoStartBattle();
+
+    /// <summary>
+    /// 戦闘フェーズに在り、まだ戦闘が起きていなければ自動開戦する。動的B型ではマウント直後の
+    /// _Ready から呼ばれるのが主経路（PhaseChanged 購読は belt-and-suspenders で残置）。
+    /// </summary>
+    private void TryAutoStartBattle()
     {
         if (_chronicleGlobal is null) return;
         if (_chronicleGlobal.CurrentPhase == GamePhase.Battle && _chronicleGlobal.CurrentBattle is null)

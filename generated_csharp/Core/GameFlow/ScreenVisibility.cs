@@ -1,17 +1,22 @@
 // =============================================================================
 //  ChronicleKnights — ScreenVisibility.cs
 // -----------------------------------------------------------------------------
-//  The single, Godot-independent definition of "which phase screen is visible".
+//  The single, Godot-independent definition of "which phase screen is ALIVE".
 //
-//  ★ Why this exists (脳と身体の分離 / brain-body split):
-//    GameDirector.RenderCurrentPhase shows exactly one of the four phase screens
-//    (Chronicle / Guild / Formation / Battle) — the one whose phase equals the
-//    current phase. That rule used to be an inline `phase == current` buried in a
-//    Godot loop, untestable without a running engine. Lifting it here lets xUnit
-//    bind the UI's visibility to the action routing WITHOUT the Godot runtime:
-//    given a PlannedAction, ActionPhaseRouter says which phase you enter, and this
-//    helper says which screen that makes visible. GameDirector calls IsVisible so
-//    the production path and the test share one definition (no drift).
+//  ★ Under the dynamic B-type lifecycle (no eager BuildScreens):
+//    GameDirector no longer keeps all four screens resident and toggles Visible.
+//    Instead, MountScreenForCurrentPhase NEWS exactly one screen — the current
+//    phase's — and FreeCurrentScreen QueueFrees the old one. So at any instant
+//    there is AT MOST ONE phase screen in the tree: the current phase's.
+//
+//    This pure predicate models that invariant: a phase's screen "exists / is the
+//    live screen" exactly when that phase is the current phase. ("Visible" in the
+//    old A-type sense now means "is the single mounted/alive screen".) It lets
+//    xUnit bind the UI lifecycle to the action routing WITHOUT a Godot runtime:
+//    given a PlannedAction, ActionPhaseRouter says which phase you ENTER, and this
+//    predicate says which screen is therefore alive (and which are never created).
+//    GameDirector upholds the same invariant by construction (it only ever news the
+//    current phase's screen); this is its formal, tested specification.
 //
 //  Constitution I: ASCII only for identifiers/logs.
 // =============================================================================
@@ -19,13 +24,15 @@
 namespace ChronicleKnights.Core.GameFlow;
 
 /// <summary>
-/// Pure rule for phase-screen visibility: a screen is visible exactly when its
-/// phase is the current phase (single-screen-at-a-time, the GameDirector contract).
+/// Pure rule for the live phase-screen: under the on-demand B-type lifecycle, the
+/// screen for a phase is the single mounted/alive one exactly when that phase is the
+/// current phase. Every other phase screen does not exist (never instantiated).
 /// </summary>
 public static class ScreenVisibility
 {
-    /// <summary>True when the screen for <paramref name="screenPhase"/> should be shown,
-    /// i.e. it is the current phase. Every other phase screen is hidden.</summary>
+    /// <summary>True when the screen for <paramref name="screenPhase"/> is the live
+    /// (mounted) screen — i.e. it is the current phase. Every other phase screen is
+    /// not instantiated at all (the dynamic B-type guarantee).</summary>
     public static bool IsVisible(GamePhase screenPhase, GamePhase currentPhase)
         => screenPhase == currentPhase;
 }

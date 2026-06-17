@@ -73,6 +73,15 @@ public partial class GameDirector : Godot.Control
     private Control? _screenContainer;
 
     /// <summary>
+    /// ★ 動的B型ライフサイクルの心臓: 「今そこに生きている」唯一のフェーズ画面ノード。
+    /// 起動時一斉生成（旧 BuildScreens）は廃止し、フェーズ遷移の瞬間に
+    /// <see cref="MountScreenForCurrentPhase"/> が現在フェーズの画面だけを new してマウントし、
+    /// <see cref="FreeCurrentScreen"/> が旧画面を QueueFree で完全消滅させる。常に最大 1 枚しか
+    /// 存在しないため、隠れた画面がグローバル信号を裏で購読して副作用を起こす余地が無い。未展開時 null。
+    /// </summary>
+    private Godot.Control? _currentScreen;
+
+    /// <summary>
     /// 起動直後に最前面へ overlay する無状態タイトルゲート。IsInitialized == false の
     /// 間だけ生存し、新規/継続のいずれかで世界が初期化（StateInitialized）された瞬間に
     /// QueueFree して静かに退場する（自己崩壊型ライフサイクル）。未展開時は null。
@@ -80,24 +89,10 @@ public partial class GameDirector : Godot.Control
     private TitleScreen? _titleScreen;
 
     /// <summary>
-    /// 婚姻・家系図運営画面（拠点B）への参照。家系図ビューアの「家系図を開く」意思表示
-    /// （<see cref="MarriageUI.PedigreeRequested"/>）を購読し、本ディレクターが
-    /// PedigreeOverlay を最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
-    /// </summary>
-    private MarriageUI? _marriageScreen;
-
-    /// <summary>
     /// 現在前面に展開中の家系図オーバーレイ。閉じる意思表示（CloseRequested）または退場時に
     /// QueueFree して静かに退場する（タイトルゲートと同型の自己崩壊型ライフサイクル）。未展開時は null。
     /// </summary>
     private PedigreeOverlay? _pedigreeOverlay;
-
-    /// <summary>
-    /// 戦闘画面（拠点D）への参照。運命の帯（予言タイムライン）の「開く」意思表示
-    /// （<see cref="BattleUI.ProphecyRequested"/>）を購読し、本ディレクターが
-    /// ProphecyTimelineOverlay を最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
-    /// </summary>
-    private BattleUI? _battleScreen;
 
     /// <summary>
     /// 現在前面に展開中の予言タイムラインオーバーレイ。閉じる意思表示（CloseRequested）または退場時に
@@ -111,13 +106,6 @@ public partial class GameDirector : Godot.Control
     /// ジョブデータは静的なため SoT 購読は不要（オーバーレイ自身が JobCodex/JobMaster を読むだけ）。
     /// </summary>
     private JobManualOverlay? _jobManualOverlay;
-
-    /// <summary>
-    /// 編成画面（大隊編成）への参照。名簿カードの「Details」押下意思表示
-    /// （<see cref="FormationUI.UnitInspectRequested"/>）を購読し、本ディレクターが
-    /// ユニット詳細モーダルを最前面へマウントするために BuildScreens で 1 度だけ捕捉する。
-    /// </summary>
-    private FormationUI? _formationScreen;
 
     /// <summary>
     /// 現在前面に展開中のユニット詳細モーダル。CLOSE 押下（CloseRequested）または退場時に
@@ -143,7 +131,6 @@ public partial class GameDirector : Godot.Control
         _chronicleGlobal?.LoadLocalization();
 
         BuildLayout();
-        BuildScreens();
         SubscribeSignals();
 
         // ★ 起動エントリの単一窓口（タイトルゲート方式）:
@@ -155,8 +142,9 @@ public partial class GameDirector : Godot.Control
         //   届くタイミング（AddChild 済み）で初期化が走り、最初の旅団員と予言が描画される。
         if (_chronicleGlobal is { IsInitialized: true })
         {
-            // 既に世界が在る（ホットリロード・セーブ継続後の再アタッチ等）→ 現在フェーズを描画。
-            RenderCurrentPhase();
+            // 既に世界が在る（ホットリロード・セーブ継続後の再アタッチ等）→ 現在フェーズ画面を動的生成。
+            MountScreenForCurrentPhase();
+            RenderHeader();
         }
         else
         {
@@ -176,48 +164,8 @@ public partial class GameDirector : Godot.Control
         DismissUnitDetailOverlay();
         DismissRestResultOverlay();
 
-        // 家系図ビューアの「開く」意思表示の購読も解除（婚姻画面ノードの破棄に先んじて）。
-        if (_marriageScreen is not null && GodotObject.IsInstanceValid(_marriageScreen))
-        {
-            try
-            {
-                _marriageScreen.PedigreeRequested -= OnPedigreeRequested;
-            }
-            catch
-            {
-                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
-            }
-        }
-        _marriageScreen = null;
-
-        // 戦闘画面の「運命の帯を開く」意思表示の購読も解除（戦闘画面ノードの破棄に先んじて）。
-        if (_battleScreen is not null && GodotObject.IsInstanceValid(_battleScreen))
-        {
-            try
-            {
-                _battleScreen.ProphecyRequested -= OnProphecyRequested;
-                _battleScreen.UnitInspectRequested -= OnUnitInspectRequested;
-            }
-            catch
-            {
-                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
-            }
-        }
-        _battleScreen = null;
-
-        // 編成画面の「Details」意思表示の購読も解除（編成画面ノードの破棄に先んじて）。
-        if (_formationScreen is not null && GodotObject.IsInstanceValid(_formationScreen))
-        {
-            try
-            {
-                _formationScreen.UnitInspectRequested -= OnUnitInspectRequested;
-            }
-            catch
-            {
-                // ノードが既に破棄されている場合の安全網（メモリリーク防止）
-            }
-        }
-        _formationScreen = null;
+        // 現在生きているフェーズ画面（最大1枚）の従属イベント購読を解いて完全消滅させる。
+        FreeCurrentScreen();
 
         UnsubscribeSignals();
     }
@@ -599,63 +547,87 @@ public partial class GameDirector : Godot.Control
         root.AddChild(_screenContainer);
     }
 
-    // ─── 画面生成（フェーズごとに 1 つ、Name をスラッグに設定） ────────────
+    // ─── 動的B型 画面ライフサイクル（オンデマンド生成・遷移で完全消滅） ────────
+    //  起動時一斉生成（旧 BuildScreens / CreateScreenFor）は完全廃止した。フェーズ遷移の
+    //  その瞬間に、現在フェーズの画面【だけ】を new してマウントし、旧画面は QueueFree で
+    //  シーンツリーから完全消滅させる。常に最大 1 枚しか存在しないため、隠れた画面が
+    //  グローバル信号（PhaseChanged 等）を裏で購読して副作用（敵生成・ボタン多重上書き）を
+    //  起こす余地が構造的に消える。各画面の ChronicleGlobal 購読はその画面が生きている間だけ
+    //  有効で、QueueFree（_ExitTree）で確実に解かれる。
 
-    private void BuildScreens()
+    /// <summary>
+    /// 現在フェーズ（<see cref="ChronicleGlobal.CurrentPhase"/>）に対応する画面を【その場で new して】
+    /// マウントする。先に旧画面を <see cref="FreeCurrentScreen"/> で完全消滅させてから、現在フェーズの
+    /// 専用 Control を 1 枚だけ生成し、従属オーバーレイ召喚の意思表示を（その画面が生きている間だけ）
+    /// 購読してツリーへ追加する。Battle 画面は自身の _Ready で（出撃時のみ）開戦＝敵生成する。
+    /// </summary>
+    private void MountScreenForCurrentPhase()
     {
-        if (_screenContainer is null) return;
+        if (_chronicleGlobal is null || _screenContainer is null) return;
 
-        foreach (var phase in GamePhaseFlow.Cycle)
+        // 旧フェーズ画面を Visible=false ではなく QueueFree で完全に消滅させる（イベント汚染封鎖）。
+        FreeCurrentScreen();
+
+        var phase = _chronicleGlobal.CurrentPhase;
+        Godot.Control screen = phase switch
         {
-            var screen = CreateScreenFor(phase);
+            GamePhase.Chronicle => new TimelineUI(),   // 拠点A: 予言・歴史進行
+            GamePhase.Guild     => new MarriageUI(),    // 拠点B: 婚姻・スカウト・今年の行動選択
+            GamePhase.Formation => new FormationUI(),   // 大隊編成（出撃時のみ到達）
+            GamePhase.Battle    => new BattleUI(),       // 戦闘: ターン制 → とどめ → 決算（出撃時のみ）
+            _ => new Godot.Control(),                    // 未知フェーズの安全網（空画面）
+        };
 
-            // 拠点B（婚姻・家系図）画面なら、家系図ビューアの「開く」意思表示を購読する。
-            // オーバーレイの生死は本ディレクターが一手に握る（画面側は無状態のまま）。
-            if (screen is MarriageUI marriageScreen)
-            {
-                _marriageScreen = marriageScreen;
-                marriageScreen.PedigreeRequested += OnPedigreeRequested;
-            }
-
-            // 拠点D（戦闘解決）画面なら、運命の帯（予言タイムライン）の「開く」意思表示を購読する。
-            // 家系図オーバーレイと同型に、ProphecyTimelineOverlay の生死を本ディレクターが一手に握る。
-            if (screen is BattleUI battleScreen)
-            {
-                _battleScreen = battleScreen;
-                battleScreen.ProphecyRequested += OnProphecyRequested;
-                // 戦闘の戦闘員カード［詳細］→ ユニット詳細モーダル（編成画面と同じ窓口を共有）。
-                battleScreen.UnitInspectRequested += OnUnitInspectRequested;
-            }
-
-            // 編成画面なら、名簿カードの「Details」押下意思表示を購読する。
-            // ユニット詳細モーダルの生死は本ディレクターが一手に握る（画面側は無状態）。
-            if (screen is FormationUI formationScreen)
-            {
-                _formationScreen = formationScreen;
-                formationScreen.UnitInspectRequested += OnUnitInspectRequested;
-            }
-
-            // スラッグを Node 名にして、後段で GetNodeOrNull により安全に引き当てる。
-            screen.Name = phase.Slug();
-            // testid もスラッグ込みで付与（E2E がフェーズ画面を一意に掴めるようにする）。
-            screen.SetMeta(TestIdMetaKey, $"game-director-screen-{phase.Slug()}");
-            screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-            screen.Visible = false; // 初期は全て非表示。RenderCurrentPhase で 1 つだけ表示。
-            _screenContainer.AddChild(screen);
+        // 従属オーバーレイ召喚の意思表示を、この画面が生きている間だけ購読する。
+        switch (screen)
+        {
+            case MarriageUI marriage:
+                marriage.PedigreeRequested += OnPedigreeRequested;
+                break;
+            case FormationUI formation:
+                formation.UnitInspectRequested += OnUnitInspectRequested;
+                break;
+            case BattleUI battle:
+                battle.ProphecyRequested += OnProphecyRequested;
+                battle.UnitInspectRequested += OnUnitInspectRequested;
+                break;
         }
+
+        screen.Name = phase.Slug();
+        screen.SetMeta(TestIdMetaKey, $"game-director-screen-{phase.Slug()}");
+        screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        _currentScreen = screen;
+        _screenContainer.AddChild(screen); // AddChild で画面の _Ready が走り、現在状態を描画する
     }
 
     /// <summary>
-    /// フェーズに対応する画面ノードを生成する。各フェーズは専用 Control を持つ。
+    /// 現在生きているフェーズ画面（最大1枚）を、従属イベント購読を解いたうえで QueueFree し、
+    /// シーンツリー・メモリから完全消滅させる。これにより隠れノードの裏購読を構造的に根絶する。
     /// </summary>
-    private static Godot.Control CreateScreenFor(GamePhase phase) => phase switch
+    private void FreeCurrentScreen()
     {
-        GamePhase.Chronicle => new TimelineUI(),     // 拠点A: 予言・歴史進行
-        GamePhase.Guild     => new MarriageUI(),      // 拠点B: 婚姻・スカウト
-        GamePhase.Formation => new FormationUI(),     // 大隊編成
-        GamePhase.Battle    => new BattleUI(),        // 戦闘: ターン制戦闘 → とどめ → 決算（三段）
-        _ => new Godot.Control(),                     // 未知フェーズの安全網（空画面）
-    };
+        if (_currentScreen is null) return;
+
+        if (GodotObject.IsInstanceValid(_currentScreen))
+        {
+            // 破棄に先んじて従属オーバーレイ召喚の購読を解く（ゾンビ購読・二重接続の防止）。
+            switch (_currentScreen)
+            {
+                case MarriageUI marriage:
+                    marriage.PedigreeRequested -= OnPedigreeRequested;
+                    break;
+                case FormationUI formation:
+                    formation.UnitInspectRequested -= OnUnitInspectRequested;
+                    break;
+                case BattleUI battle:
+                    battle.ProphecyRequested -= OnProphecyRequested;
+                    battle.UnitInspectRequested -= OnUnitInspectRequested;
+                    break;
+            }
+            _currentScreen.QueueFree();
+        }
+        _currentScreen = null;
+    }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
 
@@ -688,49 +660,50 @@ public partial class GameDirector : Godot.Control
 
     // ─── シグナルハンドラ ─────────────────────────────────────────────────
 
-    private void OnPhaseChanged() => RenderCurrentPhase();
-    private void OnFormationChanged() => RenderCurrentPhase();
-    private void OnBattleChanged() => RenderCurrentPhase();
+    // ★ フェーズ遷移＝画面の動的な生成/破棄。旧画面を QueueFree し現在フェーズの画面を new する。
+    //   ヘッダも合わせて更新する（画面の生死とヘッダ表示を 1 つの遷移で同期）。
+    private void OnPhaseChanged()
+    {
+        MountScreenForCurrentPhase();
+        RenderHeader();
+    }
+
+    // 行動トグル（FormationChanged）・戦闘進行（BattleChanged）はフェーズを跨がない＝画面は再生成
+    // しない。ヘッダの「次へ」ラベル/活性だけを引き直す（生きている画面ノードを壊さない狙い撃ち）。
+    private void OnFormationChanged() => RenderHeader();
+    private void OnBattleChanged() => RenderHeader();
 
     /// <summary>
     /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
-    /// まずタイトルゲートを退場（QueueFree）させ、その後に現在フェーズ（= 拠点・年代記）を
-    /// 描画する。新規・継続のどちらの経路でも本ハンドラがゲート後始末の単一窓口となる。
+    /// まずタイトルゲートを退場（QueueFree）させ、その後に現在フェーズ画面を【動的生成】して
+    /// ヘッダを更新する。新規・継続のどちらの経路でも本ハンドラがゲート後始末の単一窓口となる。
     /// </summary>
     private void OnStateInitialized()
     {
         DismissTitleScreen();
-        RenderCurrentPhase();
+        MountScreenForCurrentPhase();
+        RenderHeader();
     }
 
-    // ─── 描画（フェーズに応じた画面切り替え + インジケータ更新） ──────────
+    // ─── ヘッダ描画（インジケータ + 次へボタンのみ。画面はマウント側が司る） ──────
+    //  動的B型では「画面の切替」はノードの生成/破棄（MountScreenForCurrentPhase / FreeCurrentScreen）が
+    //  担い、本メソッドは常設ヘッダ（フェーズ名 + 次へボタン）の表示更新だけに専念する。
+    //  フェーズ遷移時のほか、行動トグル（FormationChanged）・戦闘進行（BattleChanged）でも呼ばれ、
+    //  ボタンのラベル/活性を現在の SoT から都度引き直す。
 
-    private void RenderCurrentPhase()
+    private void RenderHeader()
     {
-        if (_chronicleGlobal is null || _screenContainer is null) return;
+        if (_chronicleGlobal is null) return;
 
         var current = _chronicleGlobal.CurrentPhase;
 
-        // 1. 画面切り替え：スラッグをキーに各画面の Visible を設定する。可視判定は純粋層
-        //    ScreenVisibility.IsVisible に一元化（テストと同一定義を共有し、行動分岐＝可視画面の
-        //    連動を結合テストで検証可能にする）。休息は Formation→Chronicle ゆえ Battle 画面は
-        //    決して可視にならない（戦闘フェーズの完全バイパス）。
-        foreach (var phase in GamePhaseFlow.Cycle)
-        {
-            var screen = _screenContainer.GetNodeOrNull<Godot.Control>(phase.Slug());
-            if (screen is not null)
-            {
-                screen.Visible = ScreenVisibility.IsVisible(phase, current);
-            }
-        }
-
-        // 2. インジケータ更新：現在フェーズの日本語名を表示する。
+        // インジケータ更新：現在フェーズの日本語名を表示する。
         if (_phaseIndicatorLabel is not null)
         {
             _phaseIndicatorLabel.Text = $"🧭 現在: {_chronicleGlobal.ResolveCurrentPhaseName()}";
         }
 
-        // 3. 次へボタン更新：次フェーズ名を出し、年代記では隠す（予言選択が前進契機）。
+        // 次へボタン更新：次フェーズ名を出し、年代記では隠す（予言選択が前進契機）。
         if (_advanceButton is not null)
         {
             var nextPhase = GamePhaseFlow.Next(current);
