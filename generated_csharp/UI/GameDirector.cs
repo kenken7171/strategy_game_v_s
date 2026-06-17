@@ -743,23 +743,27 @@ public partial class GameDirector : Godot.Control
                 // 戦闘中：フェーズは飛ばさず戦闘を 1 ターン進める（スキップ根治）。
                 _advanceButton.Text = "▶ 1ターン進める";
             }
+            else if (current == GamePhase.Guild)
+            {
+                // 拠点の「次へ」は今年の行動で行き先が変わる（選択した行動とフェーズが矛盾しない）。
+                //   休息：編成・戦闘を回避し安全に年を送る → 配置は不要。
+                //   出撃：満を持して編成画面へ入場する。
+                _advanceButton.Text = _chronicleGlobal.CurrentAction == PlannedAction.Rest
+                    ? "▶ 次へ：休息（戦闘を回避）"
+                    : "▶ 次へ：出撃（編成へ）";
+            }
             else if (current == GamePhase.Formation)
             {
-                // 編成の「次へ」は選択行動で行き先が変わる（選択した行動とフェーズが矛盾しない）。
-                //   休息：戦闘を回避し安全に年を送る → 配置は不要（無人出撃ガードは発火しない）。
-                //   出撃：最低1名の配置を要求（無人出撃の提示層ガード）。
-                if (_chronicleGlobal.CurrentAction == PlannedAction.Rest)
-                {
-                    _advanceButton.Text = "▶ 次へ：休息（戦闘を回避）";
-                }
-                else if (!DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
+                // 編成へ入るのは出撃を選んだ場合のみ。出撃 → 戦闘の前進は最低1名の配置を要求する
+                // （無人出撃の提示層ガード。出撃時のみ発火＝FormationChanged で随時再評価）。
+                if (!DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))
                 {
                     _advanceButton.Text = "▶ 出撃不可：最低1名を配置せよ";
                     _advanceButton.Disabled = true;
                 }
                 else
                 {
-                    _advanceButton.Text = "▶ 次へ：出撃（戦闘開始）";
+                    _advanceButton.Text = "▶ 次へ：戦闘開始";
                 }
             }
             else
@@ -786,12 +790,13 @@ public partial class GameDirector : Godot.Control
             return;
         }
 
-        // ★ 休息の根治: 編成で「休息」を選んで前進する場合、戦闘フェーズを完全にバイパスする。
-        //   AdvancePhase（年送り）へ即委ねず、まず ExecuteRest() で休息成果を確定・公開し、
-        //   その成果を提示する RestResultOverlay を最前面へ展開する。年送りはオーバーレイの
-        //   「確認（次代へ）」押下（OnRestConfirmed）まで遅延する。これにより編成画面・戦闘画面を
-        //   一切経由せず、その場で休息成果を提示してから安全に年代記へ遷移できる。
-        if (_chronicleGlobal.CurrentPhase == GamePhase.Formation
+        // ★ 休息の根治: 拠点（Guild）で「休息」を選んで前進する場合、編成・戦闘の両フェーズを
+        //   完全にバイパスする（行動決定を編成より上流に置いたので、休息では編成画面も戦闘画面も
+        //   一度も描かれない）。AdvancePhase（年送り）へ即委ねず、まず ExecuteRest() で休息成果を
+        //   確定・公開し、その成果を提示する RestResultOverlay を最前面へ展開する。年送りは
+        //   オーバーレイの「確認（次代へ）」押下（OnRestConfirmed）まで遅延する。これにより
+        //   編成画面・戦闘画面を物理的に 1 ミリも表示せず、その場で休息成果を提示できる。
+        if (_chronicleGlobal.CurrentPhase == GamePhase.Guild
             && _chronicleGlobal.CurrentAction == PlannedAction.Rest)
         {
             _chronicleGlobal.ExecuteRest();

@@ -44,6 +44,7 @@
 using System;
 using System.Collections.Generic;
 using ChronicleKnights.Autoload;
+using ChronicleKnights.Core.GameFlow;        // PlannedAction (今年の行動: 出撃 / 休息)
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
@@ -91,6 +92,9 @@ public partial class MarriageUI : Godot.Control
     // ─── UI 要素 ──────────────────────────────────────────────────────────
 
     private Label? _balanceLabel;
+
+    // 今年の行動（出撃 / 休息）トグル — 編成より上流のこの拠点フェーズで決定する。
+    private VBoxContainer? _actionContainer;
 
     // 婚姻セクション
     private OptionButton? _fatherSelect;
@@ -192,6 +196,22 @@ public partial class MarriageUI : Godot.Control
         _balanceLabel = new Label();
         _balanceLabel.SetMeta(TestIdMetaKey, "marriage-balance");
         header.AddChild(_balanceLabel);
+
+        // ─ 今年の行動（出撃 / 休息）─────────────────────────────
+        //   行動決定は編成より上流のこの拠点フェーズで行う。出撃を選べば編成画面へ入場し、
+        //   休息を選べば編成・戦闘の両画面を一切経由せず休息報酬画面へ直行する（GameDirector が分岐）。
+        var actionSection = new VBoxContainer();
+        actionSection.SetMeta(TestIdMetaKey, "marriage-action-section");
+        root.AddChild(actionSection);
+        var actionTitle = new Label { Text = "── ☾⚔ 今年の行動 ──" };
+        actionTitle.SetMeta(TestIdMetaKey, "marriage-action-title");
+        actionSection.AddChild(actionTitle);
+
+        _actionContainer = new VBoxContainer();
+        _actionContainer.AddThemeConstantOverride("separation", 4);
+        _actionContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _actionContainer.SetMeta(TestIdMetaKey, "marriage-action");
+        actionSection.AddChild(_actionContainer);
 
         // ─ 婚姻セクション ───────────────────────────────────────
         var marriageSection = new VBoxContainer();
@@ -344,6 +364,8 @@ public partial class MarriageUI : Godot.Control
         _chronicleGlobal.EconomyChanged   += OnEconomyChanged;
         _chronicleGlobal.RosterChanged    += OnRosterChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
+        // 今年の行動トグルの選択強調を SoT 同期で再描画する（SetPlannedAction は FormationChanged を発火）。
+        _chronicleGlobal.FormationChanged += OnFormationChanged;
     }
 
     private void UnsubscribeSignals()
@@ -354,6 +376,7 @@ public partial class MarriageUI : Godot.Control
             _chronicleGlobal.EconomyChanged   -= OnEconomyChanged;
             _chronicleGlobal.RosterChanged    -= OnRosterChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
+            _chronicleGlobal.FormationChanged -= OnFormationChanged;
         }
         catch
         {
@@ -383,11 +406,18 @@ public partial class MarriageUI : Godot.Control
 
     private void OnStateInitialized() => RenderAll();
 
+    /// <summary>
+    /// 今年の行動が変わった（SetPlannedAction が FormationChanged を発火）ときのハンドラ。
+    /// 行動トグルの選択強調のみを再描画する（婚姻の父母選択などを巻き込まない狙い撃ち）。
+    /// </summary>
+    private void OnFormationChanged() => RenderActionChoice();
+
     // ─── 描画 ─────────────────────────────────────────────────────────────
 
     private void RenderAll()
     {
         RenderBalance();
+        RenderActionChoice();
         RenderUnitSelectors();
         RenderQuote();
         RenderScoutButton();
@@ -395,6 +425,64 @@ public partial class MarriageUI : Godot.Control
         RenderShop();
         RenderDismissList();
         RenderPedigreeList();
+    }
+
+    /// <summary>
+    /// 今年の行動トグル（⚔出撃 / ☾休息）を描く。選択は ChronicleGlobal.CurrentAction（単一 SoT）を
+    /// 毎回読み直して金字で強調する。押下は SetPlannedAction を呼ぶだけ（FormationChanged →
+    /// OnFormationChanged で本メソッドが再描画）。GameDirector の「次へ」はこの選択を見て分岐する:
+    /// 出撃 → 編成画面へ入場 / 休息 → 編成・戦闘を一切経由せず休息報酬画面へ直行。
+    /// </summary>
+    private void RenderActionChoice()
+    {
+        if (_chronicleGlobal is null || _actionContainer is null) return;
+
+        foreach (var child in _actionContainer.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        var current = _chronicleGlobal.CurrentAction;
+
+        var caption = new Label
+        {
+            Text = current == PlannedAction.March
+                ? "選択中：⚔ 出撃 ▶「次へ」で大隊編成へ入場（敵と交戦）"
+                : "選択中：☾ 休息 ▶「次へ」で編成・戦闘を回避し安全に年を送る（休息報酬へ）",
+        };
+        caption.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        caption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        caption.SetMeta(TestIdMetaKey, "marriage-action-caption");
+        _actionContainer.AddChild(caption);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        row.SetMeta(TestIdMetaKey, "marriage-action-row");
+        _actionContainer.AddChild(row);
+
+        var marchButton = new Button
+        {
+            Text = current == PlannedAction.March ? "⚔ 出撃【選択中】" : "⚔ 出撃",
+        };
+        if (current == PlannedAction.March)
+        {
+            marchButton.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        marchButton.SetMeta(TestIdMetaKey, "marriage-action-march");
+        marchButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.March);
+        row.AddChild(marchButton);
+
+        var restButton = new Button
+        {
+            Text = current == PlannedAction.Rest ? "☾ 休息【選択中】" : "☾ 休息",
+        };
+        if (current == PlannedAction.Rest)
+        {
+            restButton.AddThemeColorOverride("font_color", Colors.Gold);
+        }
+        restButton.SetMeta(TestIdMetaKey, "marriage-action-rest");
+        restButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.Rest);
+        row.AddChild(restButton);
     }
 
     private void RenderBalance()

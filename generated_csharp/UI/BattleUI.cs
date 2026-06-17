@@ -791,19 +791,16 @@ public partial class BattleUI : Godot.Control
         // （Node.CreateTween はノードが SceneTree 内にある必要があるため、生成は parenting 後。）
         var targetedPanels = new List<PanelContainer>();
 
-        // 大隊を横一列に展開する：3 分隊（前衛 / 後衛-左 / 後衛-右）を左から右へ並べ、各分隊は
-        // 「分隊名 + 3 枚の戦闘員カード」の縦組み。多数カードでも横並びを保つよう横スクロールで包む。
-        var boardScroll = new ScrollContainer();
-        boardScroll.VerticalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        boardScroll.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        boardScroll.SetMeta(TestIdMetaKey, "battle-board-scroll");
-        _boardContainer.AddChild(boardScroll);
+        // ▲ウェッジ陣形（編成画面と完全シンクロ）: FRONT（前衛）を中央上にせり出させ、
+        // REAR-L / REAR-R を下段の左右へ広げる逆三角形。横3分隊並びの旧レイアウトは廃止。
+        var wedge = new VBoxContainer();
+        wedge.AddThemeConstantOverride("separation", 12);
+        wedge.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        wedge.SetMeta(TestIdMetaKey, "battle-wedge");
+        _boardContainer.AddChild(wedge);
 
-        var line = new HBoxContainer();
-        line.AddThemeConstantOverride("separation", 16);
-        boardScroll.AddChild(line);
-
-        foreach (var row in FormationBoard.RowOrder)
+        // 1 分隊ブロック（分隊名 + 横並び3マス）を構築し、手触り演出の索引へ登録するローカル関数。
+        VBoxContainer BuildSquadGroup(SquadRow row)
         {
             var group = new VBoxContainer();
             group.AddThemeConstantOverride("separation", 4);
@@ -841,9 +838,25 @@ public partial class BattleUI : Godot.Control
             }
 
             group.AddChild(cardRow);
-            line.AddChild(group);
             _rowPanels[row] = panelsInRow;
+            return group;
         }
+
+        // 上段: FRONT を中央に。
+        var frontRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        frontRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        frontRow.SetMeta(TestIdMetaKey, "battle-wedge-front-row");
+        frontRow.AddChild(BuildSquadGroup(SquadRow.Front));
+        wedge.AddChild(frontRow);
+
+        // 下段: REAR-L / REAR-R を中央寄せで左右に広げる（逆三角形の底辺）。
+        var rearRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        rearRow.AddThemeConstantOverride("separation", 28);
+        rearRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        rearRow.SetMeta(TestIdMetaKey, "battle-wedge-rear-row");
+        rearRow.AddChild(BuildSquadGroup(SquadRow.RearLeft));
+        rearRow.AddChild(BuildSquadGroup(SquadRow.RearRight));
+        wedge.AddChild(rearRow);
 
         // 盤面が tree へ入った後で脈動 Tween を起動する（更地化済みの台帳へ積み直す）。
         foreach (var panel in targetedPanels)
