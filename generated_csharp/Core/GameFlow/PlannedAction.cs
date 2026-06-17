@@ -46,4 +46,14 @@ public static class ActionPhaseRouter
     /// <summary>True when the action bypasses the Formation and Battle phases entirely (Rest).</summary>
     public static bool SkipsBattle(PlannedAction action)
         => action == PlannedAction.Rest;
+
+    /// <summary>
+    /// The enemy-generation結界: enemy / battle instances may be spawned ONLY when the
+    /// player committed to March (sortie). For Rest (or any non-March action) this is
+    /// false, so the enemy-generation path is touched 0 times — no enemy data is ever
+    /// created behind the scenes, permanently sealing the "battle phase poltergeist".
+    /// (Logical inverse of <see cref="SkipsBattle"/>, named for the spawn-site guard.)
+    /// </summary>
+    public static bool MayGenerateEnemy(PlannedAction action)
+        => action == PlannedAction.March;
 }

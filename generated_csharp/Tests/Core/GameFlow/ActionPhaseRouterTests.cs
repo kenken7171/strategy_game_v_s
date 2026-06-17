@@ -43,6 +43,26 @@ public class ActionPhaseRouterTests
         Assert.False(ActionPhaseRouter.SkipsBattle(PlannedAction.March));
     }
 
+    [Fact]
+    public void MayGenerateEnemy_IsTrue_OnlyForMarch()
+    {
+        // 敵・戦闘インスタンスの生成は出撃(March)のときだけ許される。
+        Assert.True(ActionPhaseRouter.MayGenerateEnemy(PlannedAction.March));
+        // 休息(Rest)では敵生成へ一切触れない＝完全隔離（戦闘フェーズ怪奇現象の構造的封鎖）。
+        Assert.False(ActionPhaseRouter.MayGenerateEnemy(PlannedAction.Rest));
+    }
+
+    [Fact]
+    public void MayGenerateEnemy_IsExactInverseOf_SkipsBattle()
+    {
+        foreach (var action in new[] { PlannedAction.March, PlannedAction.Rest })
+        {
+            Assert.Equal(
+                ActionPhaseRouter.MayGenerateEnemy(action),
+                !ActionPhaseRouter.SkipsBattle(action));
+        }
+    }
+
     [Theory]
     [InlineData(PlannedAction.March, GamePhase.Formation)]
     [InlineData(PlannedAction.Rest, GamePhase.Chronicle)]

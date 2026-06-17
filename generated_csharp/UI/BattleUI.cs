@@ -1205,6 +1205,15 @@ public partial class BattleUI : Godot.Control
         // 進行中の戦闘は維持（二重起動・敵リロールを防ぐ。決着済み・未開戦のときだけ開戦する）。
         if (_chronicleGlobal.CurrentBattle is { Outcome: BattleOutcome.Ongoing }) return;
 
+        // ★ 戦闘以外の行動では敵を 1 ビットも生成しない（完全隔離）。出撃(March)選択時のみ開戦する。
+        //   敵生成ファクトリ CreateCurrentYearEnemy を呼び出す【直前】の厳格な条件分岐。休息など
+        //   戦闘以外の行動では、そもそも本フェーズへ入らないが、ここでも敵生成へ一切触れず拒絶する。
+        if (!ActionPhaseRouter.MayGenerateEnemy(_chronicleGlobal.CurrentAction))
+        {
+            GD.Print("[BattleUI] enemy generation skipped: action is not March (rest/other)");
+            return;
+        }
+
         // 無人出撃の防御線（多重防護）: 盤面に1名も配置されていなければ開戦しない。
         // 通常はフェーズ前進ガードで編成→戦闘へ入れないが、ここでも最終拒絶する。
         if (!DeploymentGate.CanMarch(_chronicleGlobal.CurrentFormation))

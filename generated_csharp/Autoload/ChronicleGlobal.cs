@@ -1374,6 +1374,13 @@ public partial class ChronicleGlobal : Godot.Node
         {
             if (!IsInitialized) return null;
 
+            // ★ 戦闘以外の行動では敵・戦闘インスタンスを構造的に生成しない（完全隔離・永久封鎖）。
+            //   CurrentBattle を起こす唯一の窓口が本メソッドであるため、ここで出撃(March)以外を
+            //   no-op で弾けば、休息など戦闘以外の行動では裏に敵データが 1 ビットも作られない。
+            //   フェーズ遷移（拠点→年代記の休息直行）でも構造的に Battle へ入らないが、万一どの
+            //   呼び出し元（休眠中の HubView 等を含む）が誤って到達しても、ここが最終結界となる。
+            if (!ActionPhaseRouter.MayGenerateEnemy(CurrentAction)) return null;
+
             // この戦闘専用の独立した乱数ストリームを（再）シードする。
             _battleRng = battleSeed is { } seed ? new Random(seed) : new Random(_rng.Next());
 
