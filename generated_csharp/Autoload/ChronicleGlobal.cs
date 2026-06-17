@@ -1033,14 +1033,16 @@ public partial class ChronicleGlobal : Godot.Node
 
             var from = CurrentPhase;
 
-            // ★ 行動分岐: 編成からの離脱は選択行動で行き先が変わる（純粋ルータ ActionPhaseRouter）。
-            //   March → 戦闘 / Rest → 年代記（戦闘フェーズを完全バイパス）。それ以外は通常の循環。
-            next = from == GamePhase.Formation
-                ? ActionPhaseRouter.PhaseAfterFormation(CurrentAction)
+            // ★ 行動分岐: 拠点（Guild）からの離脱は選択行動で行き先が変わる（純粋ルータ ActionPhaseRouter）。
+            //   March → 編成（その後 戦闘）/ Rest → 年代記（編成・戦闘の両フェーズを完全バイパス）。
+            //   それ以外は通常の循環。決定を編成より上流（拠点）へ置くことで、休息時は編成画面・
+            //   戦闘画面が一度も描かれない（Visible が false のまま）。
+            next = from == GamePhase.Guild
+                ? ActionPhaseRouter.PhaseAfterGuild(CurrentAction)
                 : GamePhaseFlow.Next(from);
 
-            // 無人出撃の絶対封鎖: 編成 → 戦闘（March）の前進は、盤面に最低 1 名が配置されている時のみ許す。
-            // （Rest は next==Chronicle ゆえ本ガードは発火しない＝休息に配置は不要）。
+            // 無人出撃の絶対封鎖: 編成 → 戦闘 の前進は、盤面に最低 1 名が配置されている時のみ許す。
+            // 編成へ入るのは March のみ（Rest は Guild→Chronicle ゆえここに到達しない）＝出撃時のみ発火。
             if (from == GamePhase.Formation && next == GamePhase.Battle
                 && !DeploymentGate.CanMarch(CurrentFormation))
             {
@@ -1056,10 +1058,10 @@ public partial class ChronicleGlobal : Godot.Node
             }
 
             // ループ 1 周の幕引き（年代記へ復帰）で世代交代（年送り）を行う。
-            //   - Battle → Chronicle  : 出撃の幕引き（戦果還流あり）。
-            //   - Formation → Chronicle: 休息（戦闘を回避した安全な年。戦果還流なし）。
+            //   - Battle → Chronicle: 出撃の幕引き（戦果還流あり）。
+            //   - Guild  → Chronicle: 休息（編成・戦闘を回避した安全な年。戦果還流なし）。
             if (next == GamePhase.Chronicle
-                && (from == GamePhase.Battle || from == GamePhase.Formation))
+                && (from == GamePhase.Battle || from == GamePhase.Guild))
             {
                 formationChanged = AdvanceGenerationLocked();
                 generationAdvanced = true;

@@ -2,14 +2,15 @@
 //  ChronicleKnights — ActionPhaseRouterTests.cs
 // -----------------------------------------------------------------------------
 //  Locks the "the chosen action must match the phase you enter" rule for leaving
-//  the Formation phase:
+//  the Guild (home-base) phase — the action is decided UPSTREAM of Formation:
 //
-//    - March (sortie) -> Battle      : fight this year.
-//    - Rest  (stand down) -> Chronicle: skip the Battle phase entirely, pass the
-//                                       year safely (rest), no enemy/battle/spoils.
+//    - March (sortie) -> Formation   : deploy, then fight this year.
+//    - Rest  (stand down) -> Chronicle: skip BOTH Formation and Battle entirely,
+//                                       pass the year safely (rest), no deployment.
 //
 //  This is the pure decision consumed by ChronicleGlobal.AdvancePhase, so the
-//  absurd state "I chose Rest but got dropped into a battle" can never occur.
+//  absurd state "I chose Rest but was still made to place units / dropped into a
+//  battle" can never occur.
 // =============================================================================
 
 using ChronicleKnights.Core.GameFlow;
@@ -20,17 +21,18 @@ namespace ChronicleKnights.Tests.Core.GameFlow;
 public class ActionPhaseRouterTests
 {
     [Fact]
-    public void March_LeavesFormation_IntoBattle()
+    public void March_LeavesGuild_IntoFormation()
     {
-        Assert.Equal(GamePhase.Battle, ActionPhaseRouter.PhaseAfterFormation(PlannedAction.March));
+        Assert.Equal(GamePhase.Formation, ActionPhaseRouter.PhaseAfterGuild(PlannedAction.March));
     }
 
     [Fact]
-    public void Rest_LeavesFormation_IntoChronicle_SkippingBattle()
+    public void Rest_LeavesGuild_IntoChronicle_SkippingFormationAndBattle()
     {
-        // Rest must NOT enter Battle — it goes straight to Chronicle (the year closes safely).
-        var next = ActionPhaseRouter.PhaseAfterFormation(PlannedAction.Rest);
+        // Rest must NOT enter Formation or Battle — it goes straight to Chronicle.
+        var next = ActionPhaseRouter.PhaseAfterGuild(PlannedAction.Rest);
         Assert.Equal(GamePhase.Chronicle, next);
+        Assert.NotEqual(GamePhase.Formation, next);
         Assert.NotEqual(GamePhase.Battle, next);
     }
 
@@ -42,11 +44,11 @@ public class ActionPhaseRouterTests
     }
 
     [Theory]
-    [InlineData(PlannedAction.March, GamePhase.Battle)]
+    [InlineData(PlannedAction.March, GamePhase.Formation)]
     [InlineData(PlannedAction.Rest, GamePhase.Chronicle)]
-    public void PhaseAfterFormation_IsTotal(PlannedAction action, GamePhase expected)
+    public void PhaseAfterGuild_IsTotal(PlannedAction action, GamePhase expected)
     {
         // Every action routes to exactly one destination (no undefined branch).
-        Assert.Equal(expected, ActionPhaseRouter.PhaseAfterFormation(action));
+        Assert.Equal(expected, ActionPhaseRouter.PhaseAfterGuild(action));
     }
 }
