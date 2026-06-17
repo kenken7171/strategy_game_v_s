@@ -773,6 +773,12 @@ public partial class GameDirector : Godot.Control
             && _chronicleGlobal.CurrentAction == PlannedAction.Rest)
         {
             _chronicleGlobal.ExecuteRest();
+            // ★ 行動トグルの亡霊封鎖（B型: 役目終了＝即消滅）: 休息報酬画面を出す前に、役目を終えた
+            //   拠点画面（MarriageUI＝「今年の行動」トグルの宿主）をノードごと QueueFree で完全消滅
+            //   させる。休息は CurrentPhase が拠点のまま overlay を重ねるため、これを怠ると半透明
+            //   オーバーレイ越しにトグルが透け、さらに確認後の年送りで CurrentAction が March へ戻る
+            //   瞬間に「出撃」へ見た目リセットされた亡霊が一閃する。先に宿主を消せば 1 ピクセルも残らない。
+            FreeCurrentScreen();
             MountRestResultOverlay();
             return;
         }
