@@ -1,166 +1,77 @@
-# Chronicle Knights — 開発タスクリスト
+# Chronicle Knights — 開発タスクリスト（C# / Godot 版）
 
-> 本リストは [instructions.md](instructions.md) で定義されたゲーム方針に基づく実装作業の一覧。
-> チェックボックス完了時は PR/コミットで本ファイルも更新すること。
-> 仕様の根拠が必要なら必ず [instructions.md](instructions.md) を参照する。
-
----
-
-## 🎯 マイルストーン M1: 仕様の反映（フロント実装着手前）
-
-`instructions.md` の絶対ルールをコードベースに反映する。フロントエンド実装着手の **前提条件**。
-
-### バックエンド TODO
-
-#### B-1. 大隊サイズを 12 → 9（3×3）へ統一
-
-- [ ] `packages/core/src/config/ChronicleConfig.extreme.ts`
-  - `BATTLE.SQUAD_SIZE`: 4 → **3**
-  - `BATTLE.FRONT_ROW_COUNT`: 4 → **3**
-  - `SCHEDULE.BATTALION_SIZE`: 12 → **9**
-- [ ] `packages/core/src/config/ChronicleConfig.ts`
-  - 既に 3/3/9 になっていることを再確認
-- [ ] `scripts/meta-analyze-guild.ts`
-  - `formBattalion` のスライス計算 (`rear.slice(0, squadMax)` 等) が 3 で正しく動くか確認
-- [ ] 動作確認: `bun scripts/meta-analyze-guild.ts` でエラーなく10連実行できる
-- [ ] テスト: `bun test packages/core/test/` 41件 PASS
-
-#### B-2. 敵スピード成長率の引き下げ（1.5 → 0.6）
-
-- [ ] `packages/core/src/config/ChronicleConfig.extreme.ts`
-  - `ENEMY_SCALING.SPEED_GAIN_PER_YEAR`: 1.5 → **0.6**
-- [ ] 動作確認: Y100 で敵 SPD=160 と算出される
-- [ ] 効果検証: メタ分析で勝率が 21% → **40〜60%** 程度に回復することを確認
-- [ ] 結果レポート保存（`reports/_speed-detune_*.md`）
-
-#### B-3. 敵生成のランダムバリエーション導入
-
-- [ ] `scripts/run-grand-chronicle.ts` の `makeTrialEnemy(year)` を `makeTrialEnemy(year, rng)` に
-  - 各個体の HP/ATK/SPD を `BASE × (0.85 + rng() × 0.30)` で **±15% 振れ幅**
-  - 10体それぞれ独立にロール（同戦闘内でも個体差を出す）
-- [ ] `scripts/meta-analyze-guild.ts` 同様の修正
-- [ ] 効果検証: 同一シードで複数回ロールするとバトル結果に揺らぎが出るか
-- [ ] レポートでは「乱数化前後の勝率分散」を比較
-
-#### B-4. 自動リストラの凍結 + 手動人事インターフェースの用意
-
-- [ ] `packages/core/src/utils/brigade.ts` の `enforceMaxBrigadeSize` を**自動運用しない**:
-  - `scripts/run-grand-chronicle.ts` から呼び出し削除
-  - メタ分析スクリプト（測定用）はオプション `--auto-cull` で残す
-- [ ] 新規 API: `packages/core/src/services/HumanDecisionService.ts`（仮）
-  - `getPendingDecisions(brigade, options?)`: `{ recruits, retirees, heirs, overflowCandidates }` を返す
-  - `applyDecisions(brigade, decisions)`: 採用/解雇/継承承認を一括適用、新 Brigade を返す
-- [ ] Type 定義: `PendingDecision`, `DecisionResult`
-- [ ] 単体テスト: 各 API が期待通り動く
-- [ ] イミュータビリティ維持: Brigade は新インスタンスを返す
-
-#### B-5. ゲームループ用 API の整備（フロント連携）
-
-- [ ] `packages/core/src/services/GameLoop.ts`（仮）
-  - `startNewGame(seed)`: 初期ステート返却
-  - `stepYear(state, decisions?)`: 1年進める。`decisions` 未指定なら年初の判断待ち
-  - `runBattle(state, battalion)`: 戦闘実行、結果と更新後 state を返す
-  - `serialize(state)` / `deserialize(json)`: セーブデータ用
-- [ ] イベントタイプの整理: `RecruitOffered`, `MarriageProposal`, `RetirementSuggestion`, `BattleResult`
-- [ ] フロントから安全に呼べる**純粋関数 API**として設計（DOM 非依存）
-
-#### B-6. ドキュメント・スキル更新
-
-- [ ] `docs/system_architecture.md` に「人事フェーズ」セクション追加
-- [ ] 新スキル `.claude/skills/game_constitution.md` を作成（本 instructions.md の要点をスキル化）
-- [ ] `docs/job_definitions.md` の推奨配置を「9名（3×3）」前提に書き直し
+> 対象は現役本体 `generated_csharp/`。仕様の根拠は [instructions.md](instructions.md)、実態は [CLAUDE.md](CLAUDE.md)、
+> 将来戦略は [docs/MIGRATION_GODOT_HACK_AND_SLASH.md](docs/MIGRATION_GODOT_HACK_AND_SLASH.md)。
+> 旧 TypeScript 版のタスク（旧 M1/M2/M3）はすべて役目を終えたため破棄した。
+> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 653 pass を維持。
 
 ---
 
-## 🎨 マイルストーン M2: フロントエンド実装（ローグライク画面）
+## ✅ 完了済み（移行マイルストーン）
 
-ローグライク UI として、毎年プレイヤーが判断を下す画面群を実装する。
-フロントエンドのフレームワーク・スタックは別途決定（候補: React + Vite, Bun + HTMX 等）。
+ハクスラ・ローグライト移行（`docs/MIGRATION_GODOT_HACK_AND_SLASH.md` フェーズ 1〜3）の主要部は実装・通電済み。
 
-### フロントエンド TODO
-
-#### F-1. ギルド人事画面 — 「採用」「引退勧告」を委ねる場
-
-- [ ] 志願者リスト UI（名前 / 文化圏 / ジョブ / 推定ステータス）
-- [ ] 採用ボタン / 不採用ボタン
-- [ ] 引退候補者リスト（衰退期ユニットを赤系で強調）
-- [ ] 「血統DNAを持つ者」を別カラム or バッジで強調（親情報・子孫情報）
-- [ ] 定員管理 UI: 旅団残り枠 vs 採用希望者の数
-- [ ] 苦渋の決断を演出する確認モーダル（「本当にこの英雄を解雇しますか？」）
-
-#### F-2. 戦術編成画面 — 3×3 のドラッグ&ドロップ
-
-- [ ] 旅団メンバー一覧（左サイドバー）
-- [ ] **3×3 マスのグリッド**（FRONT / REAR-L / REAR-R × 3スロット）
-- [ ] ドラッグ&ドロップでマスへ配置
-- [ ] **同列・同分隊での好感度ハート演出**:
-  - 男女ペアの好感度が閾値近くで ❤️
-  - 結婚済みカップルは ❤️‍🔥
-  - 親子・兄弟ペアは家紋アイコン
-- [ ] 推定ステータス（HP合計・速度合計・職分布）の即時表示
-- [ ] 出撃ボタン（編成確定）
-
-#### F-3. 年次クロニクル・タイムライン — 歴史のログ
-
-- [ ] 100年タイムラインの横スクロール UI
-- [ ] 年ごとのイベント表示（結婚 💍 / 出産 👶 / 戦闘 ⚔️ / 引退 🕊️ / 入団 ✨）
-- [ ] **家系図ビュー**（クリックで先祖・子孫をたどれる）
-- [ ] 戦闘結果のサマリー（勝敗 / MVPジョブ / ターン数）
-- [ ] 名前枯渇時の称号付き「英雄」を金色強調で表示
-- [ ] エクスポート機能（JSON / Markdown チャレンジレポート）
-
-#### F-4. 敵ステータス予測・出撃確認画面 — 「次の試練」を覚悟する場
-
-- [ ] 敵スケーリング情報の事前表示（今年の敵想定 HP/ATK/SPD 範囲）
-- [ ] **「乱数による振れ幅」を可視化**（HP: 460〜540 のような範囲表記）
-- [ ] 大隊の予想初速 vs 敵速度の比較バー
-- [ ] 「先制を取れる/取れない」の予測アイコン
-- [ ] 敗北リスクの言語化（「7割で前衛壊滅」等）
-- [ ] 「撤退」オプション（戦闘を回避して家系継承に専念）
+- [x] Godot 土台一式（`project.godot` / `ChronicleKnights.csproj` / `.sln` / `Main.tscn` / autoload 登録）
+- [x] 起動スイッチ（`GameDirector` → `NewGameFactory` → `ChronicleGlobal.Initialize`／`LoadGame`、タイトルゲート）
+- [x] Core 純粋層（Unit / JobMaster / PointsEconomy / RosterLifecycle / TimelineEngine / Naming / Persistence）
+- [x] 戦闘コア（`BattleResolver` / `BattleSnapshot` / `EnemyState` / `EnemyScaler` / `AttackIntent(Roller)` / `BattleManager.ExecuteLastHit`）
+- [x] V 字 3×3 編成盤面（`FormationBoard`）＋ 無人出撃封鎖（`DeploymentGate`）＋ ローテーション
+- [x] フェーズ状態機械（一方通行）＋ 行動分岐（March/Rest・`ActionPhaseRouter`）＋ 構造的ゲート群
+- [x] 「1 世代＝1 周」年送り（加齢→完全ロスト→収入→予言再生成）と戦果決算（`BattleSpoils` → 経済）
+- [x] 手動婚姻（有償・自然婚姻 0pt）／外様スカウト／兵器廠（装備購入・強化）
+- [x] ローカライズ結線（`MasterDataNameResolver` 等で job/item/prophecy/敵スキル/章名を辞書解決）
+- [x] 動的 B 型 UI（現在フェーズ画面のみ new/QueueFree・リークフリー・各種オーバーレイ・JuiceDirector）
+- [x] セーブ/ロード（アトミック書き込み・DTO・スキーマ Version 1）
+- [x] xUnit 653 pass（Core 全域）＋ 手動トリガー CI
 
 ---
 
-## 🛠️ マイルストーン M3: 追加コンテンツ・ポリッシュ
+## 🧹 直近の整理（負債解消・低リスク）
 
-M1/M2 完了後の改善・拡張。
+### T-1. 並走 UI（`UserInterface/`）の整理 — 最優先の負債
 
-### バックエンド拡張
+- [ ] `UserInterface/`（`UserInterfaceRoot`/`TitleView`/`HubView`/`BattleView`/`SettlementView` ＋ Hub 部品）は
+      `Main.tscn`・`GameDirector` から実行時に未参照のデッドコード（→ [CLAUDE.md](CLAUDE.md) G-3）。**採用一本化 or 削除**を決める。
+- [ ] `ProphecyTimelineOverlay` の二重定義（`UI/` と `UserInterface/Hub/`）を解消。
+- [ ] 現役共有の `UserInterface/JobTextureLibrary.cs` は配置場所を見直す（`UI/` 直下 or `Assets` 系へ）。
 
-- [ ] 称号システムを 100年プレイで稼働させる（プール削減 or 長期化）
-- [ ] 新ジョブ追加: hero（血統限定の上位職）/ champion 等
-- [ ] 戦闘イベント: 罠 / 増援 / 天候による速度補正
-- [ ] 装備システム（武器・防具で stats 補正）
-- [ ] セーブ/ロード（SQLite or LocalStorage）
+### T-2. ドキュメント・警告の微修正
 
-### フロント拡張
-
-- [ ] BGM/SE（V&B風オーケストラル）
-- [ ] アニメーション（戦闘・継承・引退の演出）
-- [ ] チュートリアルモード
-- [ ] 多言語対応（日本語/英語）
+- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 653）。
+- [ ] `Tests/Core/Battle/BattleSeatingContractTests.cs:82` の xUnit2013 警告（`Assert.Equal(1, …)` → `Assert.Single`）を解消。
 
 ---
 
-## ✅ 完了済み（参考）
+## 🎮 ゲーム拡張（中核体験の作り込み）
 
-これらは過去マイルストーンで完了。詳細は [docs/system_architecture.md](docs/system_architecture.md) と reports/ 参照。
+### T-3. 予言生成の本実装
 
-- [x] コア戦闘エンジン（Unit / Brigade / BattleManager / BattleSimulator）
-- [x] 8ジョブ実装（iron_wall_knight / tactician / medic / sniper / sorcerer / standard_bearer / heavy_infantry / scout）
-- [x] 三段階経年変化モデル（修業期 / 全盛期 / 衰退期）
-- [x] 個体差システム（rollPeakAges ±3）
-- [x] 血統継承（gender / affinity / marriage / birth / 15歳入団）
-- [x] 多文化命名（910名 × 3 Origin + 称号フォールバック）
-- [x] CHRONICLE_CONFIG 統合（5+2 セクション、`as const` 不変）
-- [x] マルチConfig（default + extreme、`--config` 切替）
-- [x] 敵スケーリング（ENEMY_SCALING、HP/ATK/SPD 年率上昇）
-- [x] 10連メタ分析スクリプト（grand-chronicle / guild）
-- [x] 検証スクリプト群（verify-bloodline / verify-naming / verify-individuality）
+- [ ] `TimelineEngine.DefaultGenerator`（暫定の均等巡回）を `ProphecyMaster` 相当へ置換し、種別・SkipYears・Value をバランス設計。
+- [ ] 予言の `DescriptionKey` を `localization_ja.json` に登録（説明文の辞書化）。
+
+### T-4. ハクスラ拡張（ドロップ・Affix）
+
+- [ ] `EquipmentDrop` 予言の効果ハンドラを実装（戦闘後 3 択ドロップ等）。
+- [ ] Affix（接尾効果）システム — 既存パッシブ命名を活用した付加価値の生成・解決マスター。
+- [ ] 敵撃破ポイント（`EarnFromKill`）の戦闘フローへの結線を最終化。
+
+### T-5. アセット ＆ 見栄え（`docs/VISUAL_AND_JUICE_ROADMAP.md`）
+
+- [ ] 背景 4 枚（dawn/upheaval/decline/twilight）＋ 敵 5 枚（archetype 別）の追加と専用ローダ
+      （`BackgroundTextureLibrary` / `EnemyTextureLibrary`）。詳細 [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md)。
+- [ ] ヒットエフェクト・効果音などの Juice 強化。
+
+---
+
+## 🧪 テスト拡充
+
+- [ ] 戦闘ライフサイクル（`StartBattle`→`ResolveBattleTurn`→`EndBattle`→`FinalizeBattleSpoils`）の統合シナリオ追加。
+- [ ] セーブ/ロード往復の網羅（血統・婚姻リンク・装備の復元）。
 
 ---
 
 ## 進行管理
 
-- 各タスクのオーナーが決まったら `[ ]` の直後に `@担当者名` を追記
-- 完了時は `[x]` にチェック + コミット
-- ブロッカーは別途 GitHub Issues で管理
+- 各タスクのオーナーが決まったら `[ ]` の直後に `@担当者名` を追記。
+- 完了時は `[x]` ＋ コミット。仕様変更を伴う場合は先に `instructions.md` を更新。
+- ブロッカーは GitHub Issues で管理。

@@ -1,152 +1,119 @@
 # Chronicle Knights — 設計書 (Design Blueprint)
 
-## コンセプト
-
-100年間の騎士団の歴史を、世代交代を繰り返しながら紡ぐRPG。
-Venus & Braves (V&B) にインスパイアされ、時間の流れと人の一生を中心に据えたゲームデザイン。
-
-プレイヤーは騎士団長として、生まれ・老い・逝く騎士たちを束ねながら100年を生き抜く。
+> 対象は現役本体 `generated_csharp/`（Godot 4.3 / .NET 8 / C# 12）。本書は「設計の思想と核となる仕組み」を述べる。
+> 実装の俯瞰は `CLAUDE.md`、アーキテクチャ詳細は `docs/system_architecture.md`、移行戦略は
+> `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` を参照。
 
 ---
 
-## アーキテクチャ方針
+## 1. コンセプト
 
-### 1. Immutable Data Structure
+『ヴィーナス＆ブレイブス』にインスパイアされた **世代交代型シミュレーション RPG** を、
+**ハクスラ（ハック＆スラッシュ）／ローグライト** の遺伝子と融合させた作品。
 
-ユニットの状態は不変（immutable）とする。
+プレイヤーは個々の英雄ではなく **「旅団（大隊）」という組織と、そこに連なる血脈** を導く。
+最強の剣士もやがて老いて旅団を去る（完全ロスト）。だからこそ子を産み育て、外様を雇い、
+何世代にもわたって旅団を存続させる — それが根幹。
 
-- `Unit` インスタンスは作成後に内部状態を変更しない
-- `grow()` / `takeDamage()` / `withBuffs()` / `withHeal()` などの状態遷移メソッドは、変化後の新しいインスタンスを返す
-- 過去の全年齢データを履歴として保持可能（スナップショット設計）
-- これによりタイムトラベル・リプレイ・デバッグが容易になる
-
-### 2. API-First / Headless Logic
-
-コアロジックはUI・外部APIから完全に分離する。
-
-- `packages/core` はピュアなTypeScriptロジックのみ
-- 加齢・成長・戦闘計算はすべて副作用のない純粋関数または不変クラスとして実装
-- CLIやWebフロントエンドはコアロジックを呼び出すだけのアダプター層として機能する
-
-### 3. Scalability
-
-最初はローカル環境で動かし、将来的にクラウドへ移行できる構成。
-
-- 初期: **Bun + SQLite** でローカル動作
-- 将来: **Cloudflare Workers (Hono)** 等のエッジ環境へ移行可能
-- `packages/core` がランタイム非依存であることがこれを実現する鍵
+> **「1 周（1 旅団の興亡）を約 3 時間で完結でき、ドロップ・育成・配合に一喜一憂する中毒性」** を志向する。
 
 ---
 
-## ディレクトリ構成
+## 2. コア思想：「1 世代 ＝ 時間軸 1 周」
 
 ```
-chronicle-knights/
-├── packages/
-│   └── core/                     # ゲームエンジン（ランタイム非依存）
-│       ├── src/
-│       │   ├── models/
-│       │   │   ├── Unit.ts       # 騎士の不変データモデル・経年変化
-│       │   │   ├── Brigade.ts    # 旅団・年次進行・大隊選出
-│       │   │   ├── Squad.ts      # 分隊（最大3体）
-│       │   │   └── Enemy.ts      # 敵
-│       │   ├── BattleManager.ts  # ターン処理・ダメージ計算
-│       │   ├── BattleSimulator.ts# 高レベル戦闘シミュレーター
-│       │   ├── config.ts         # 定数
-│       │   └── index.ts          # パブリックAPI
-│       └── test/                 # ユニットテスト
-├── apps/
-│   └── cli/                      # CLI シミュレーション群
-│       └── src/
-│           ├── simulate_history.ts        # 100年旅団シミュレーション
-│           ├── simulate_brigade_battle.ts # 大隊間戦闘デモ
-│           └── simulate_battle_*.ts       # 各種バトルシナリオ
-├── scripts/
-│   ├── run-sim.ts                # プリセット対戦CLI
-│   └── age_progression_test.ts   # 経年変化動作確認
-├── config/
-│   ├── jobs.json                 # ジョブデフォルト値（正規ソース）
-│   └── game_settings.json
-└── docs/
-    ├── design_blueprint.md       # このファイル
-    ├── system_architecture.md    # 実装アーキテクチャ
-    ├── job_definitions.md        # ジョブ仕様
-    └── simulation_guide.md       # CLI 操作ガイド
+   ┌──────── 1 世代（ゲームループ 1 周） ────────┐
+ 年代記 ──▶ 拠点 ──▶ 大隊編成 ──▶ 戦闘 ──┐
+ (予言を選ぶ) (婚姻/スカウト) (9名配置)  (決着)  │
+   ▲                                      │
+   └──────── 年送り（数年が一気に流れる）◀┘
+            ・全員が加齢　・寿命/戦死は永久離脱（完全ロスト）
+            ・収入が入る　・次の予言が提示される
 ```
+
+年代記フェーズで選ぶ **予言** には「この先 ◯ 年が流れる（タイムスキップ）」という年数が記されている。
+その年数ぶんの未来を 1 周のループで戦い抜き、ループの最後（戦闘 → 年代記）で **その年数が一気に経過する**。
+つまり **「Chronicle で選んだ年数＝この世代の長さ」**。30 回ループを回せば、それが旅団の 30 年史そのものになる。
 
 ---
 
-## コアモデル設計
+## 3. アーキテクチャ方針
 
-### Unit（騎士）
+### 3-1. 不変データ構造（Immutable）
 
-騎士1人を表す不変オブジェクト。年齢に応じて `stats` が動的に算出される。
+- ドメイン（`Unit` / `Equipment` / `Prophecy` / `BattleSnapshot` 等）はすべて **`record`**。一度作ったら書き換えない。
+- 状態遷移は `with` 式で新インスタンスを返す（`unit.WithAgeProgress(4)` 等）。
+- コレクションは `ImmutableList` / `ImmutableArray` / `ImmutableDictionary`。
+- これによりタイムトラベル・リプレイ・デバッグが容易になり、「気づかぬうちに誰かが変えていた」が原理的に起きない。
 
-| フィールド       | 型              | 説明                                |
-|----------------|-----------------|-------------------------------------|
-| `id`           | string          | ユニーク識別子                       |
-| `name`         | string          | 騎士名                              |
-| `age`          | number          | 現在年齢                            |
-| `birthYear`    | number \| null  | 生まれ年（Brigade.currentYear と組み合わせ） |
-| `peakStartAge` | number          | 全盛期開始年齢                       |
-| `peakEndAge`   | number          | 全盛期終了年齢                       |
-| `maxAge`       | number          | 引退年齢（これ以上で `isRetired = true`）|
-| `baseStats`    | Stats           | 全盛期の最大能力値                   |
-| `stats`        | Stats (derived) | 年齢補正後の現在能力値（getter）       |
-| `job`          | JobType \| null | ジョブ（iron_wall_knight 等）        |
+### 3-2. 純粋ロジックと Godot の分離
 
-### 経年変化アルゴリズム（三段階モデル）
+- `Core/` は `Godot.*` を一切参照しない純粋 C#。CLI / xUnit で高速に検証できる。
+- Godot 依存は autoload `ChronicleGlobal`（SoT）と `UI/`（描画）に局所化する。
+- 副作用は SoT のオーケストレータへ集約し、Core の純粋関数からは追い出す。
 
-`baseStats` を全盛期の最大値とし、年齢 `a` に対して係数 `growthFactor` を算出する。
+### 3-3. 単一 SoT ＋ 単方向データフロー
 
-| フェーズ | 条件                                | growthFactor                       |
-|---------|------------------------------------|------------------------------------|
-| 修業期   | `a < peakStartAge`                  | `a / peakStartAge`（線形 0→1）      |
-| 全盛期   | `peakStartAge <= a <= peakEndAge`   | `1.0` 固定                          |
-| 衰退期   | `a > peakEndAge`                    | `0.97^(a - peakEndAge)`（複利 3%/年）|
-| 引退     | `a >= maxAge`                       | `0`（`isRetired = true`）           |
+- 状態は `ChronicleGlobal` 1 か所に集約（真実の食い違いを防ぐ）。
+- UI は状態を直接書き換えず、API を呼んでシグナルで受け取り再描画する（無状態 UI）。
 
-実効ステータス:
+### 3-4. 完全決定論
 
-```
-stats[key] = Math.max(1, Math.round(baseStats[key] * growthFactor))
-```
-
-### Brigade（旅団）
-
-複数の Unit を束ねる集団。年次進行と大隊選出を担う。
-
-- `currentYear: number` を保持し、`advance(recruits)` で1年進める
-- `advance` は加齢・引退判定・新兵追加を行い、新しい `Brigade` と `events`（join/retire）を返す
-- `selectBattalion(n)` は `stats.strength` 上位 n 体（未引退）を返す → 戦闘前の編成に使う
-
-### Squad / BattleManager / BattleSimulator
-
-- **Squad**: 最大3体（`MAX_UNITS_PER_SQUAD`）。スロットID（`FRONT` / `REAR-L` / `REAR-R`）で識別
-- **BattleManager**: 1戦闘のターン処理。バフリセット → tactician バフ → イニシアチブ → アクション → medic 回復
-- **BattleSimulator**: BattleManager を wrap し、旅団 vs 旅団の戦闘を統計付きで実行（DynamicEnemy 経由）
-
-詳細は [system_architecture.md](system_architecture.md) を参照。
+- 新規ゲームは 1 シードを注入し、同一シードは同一の歴史を再現する（`StartNewGame(seed)`）。Random は引数注入。
 
 ---
 
-## ジョブシステム
+## 4. コアモデル設計
 
-現在4ジョブが実装済み。`config/jobs.json` が正規ソース、仕様詳細は [job_definitions.md](job_definitions.md) を参照。
+### 4-1. Unit（騎士）— ステータスを持たない経歴書
 
-| Job ID              | 役割              | 主な能力               |
-|---------------------|------------------|------------------------|
-| `iron_wall_knight`  | 前衛防御・大隊防護  | SDF / BDF（FRONT 配置時）|
-| `tactician`         | 全体バフ支援      | AB（速度・攻撃力バフ）   |
-| `medic`             | 回復後方支援      | HL（ターン末分隊回復）   |
-| `sniper`            | 後衛高火力        | 2連撃（条件付き）        |
+C# 版の `Unit` は HP・攻撃力・速度を **持たない**。保持するのは個体の履歴・属性のみ:
+`Id / Job / Age / MaxAge / Level(1〜3) / Origin / Gender / 名前キー / 装備 / 好感度 / IsDead / 血統 / 配偶者`。
+戦闘数値は `unit.Job` から `JobMaster` で動的解決する（数値の SoT を 1 か所へ一元化）。
+
+ハクスラ 4 大仕様: **完全ロスト**（戦闘死・寿命で永久離脱）／ **レベル上限 3** ／ **Lv3 限定引退** ／
+**タイムスキップ加齢**（予言の SkipYears ぶん一気に加齢）。
+
+### 4-2. ジョブ（数値の SoT）
+
+`JobMaster` が 8 ジョブの `JobStats`（MaxHp/Speed/Front/Rear/各種パッシブ）・配置ガイド・Rating を保持。
+パッシブ判定は `HasPassive(id, kind)` のデータ駆動で行い、戦闘ロジックをジョブ非依存に保つ。
+
+### 4-3. 戦闘・編成
+
+- 編成盤面 `FormationBoard` は V 字 3×3 = 9 スロットの薄い参照レイヤ（占有 Id のみ）。
+- `BattleResolver`（1 ターン解決）＋ `BattleSnapshot`（不変スナップショット）＋ `EnemyState`（敵）。
+- 敵は `EnemyScaler` で年次スケール ＋ ±15% 個体差。章ボスは 25/50/75/100 年に出現。
+
+### 4-4. 資源ループ（単一通貨）
+
+`PointsEconomy`（ポイント一元経済）を、スカウト・婚姻・装備購入/強化がすべて共有する。
+収入は「タイムスキップ年次収入 ＋ 撃破報酬 ＋ 戦果決算（婚姻ポイント）」。婚姻は有償・即時・手動。
 
 ---
 
-## 今後の設計課題
+## 5. ジョブシステム（現行 8 種）
 
-- [ ] **100年タイムラインとバトルの統合** — 現状 `simulate_history`（年次進行）と `BattleSimulator`（戦闘）が分離。毎年 or 任意年に大隊選出 → 戦闘 → 損耗持ち越し のループが未実装
-- [ ] **世代交代トリガー** — 戦死・師弟継承・指名後継のイベント機構
-- [ ] **パーティ編成とシナジー** — ジョブ間の追加効果・分隊間の連携
-- [ ] **セーブデータ構造（SQLite スキーマ）** — 旅団・ユニット履歴・戦闘ログの永続化
-- [ ] **Web フロントエンド** — API-First 方針に沿ったアダプター層
+`config` ではなく `Core/Job/JobMaster.cs` が数値の正規ソース。詳細は `docs/job_definitions.md`。
+
+| Job ID | 役割 | 主な能力 |
+|---|---|---|
+| `IronWallKnight` 鉄壁騎士 | 前衛防御・大隊防護 | 大隊総守護力 / 分隊守護力 |
+| `HeavyInfantry` 重装歩兵 | 単騎完結の前衛 | 高 HP/FA・分隊守護力 |
+| `StandardBearer` 旗手 | 全体支援（最大規模） | 突撃号令 40 |
+| `Tactician` 戦術官 | 軽量支援 | 突撃号令 20・中速 |
+| `Medic` 衛生兵 | 継続回復 | ターン末分隊治癒 |
+| `Sniper` 狙撃兵 | 後衛高火力 | 二の矢（連続攻撃） |
+| `Sorcerer` 呪術師 | 後衛超火力（要護衛） | RA 120・最脆 |
+| `Scout` 斥候 | 高速削り | SPD 60（最速） |
+
+---
+
+## 6. 今後の設計課題（将来構想は移行憲法へ）
+
+- [ ] 予言生成の本実装（現状 `TimelineEngine.DefaultGenerator` は暫定の均等巡回。`ProphecyMaster` へ）
+- [ ] Affix（接尾効果）システムと装備ドロップ予言の効果ハンドラ
+- [ ] 並走 UI（`UserInterface/`）の整理 — 採用一本化 or 削除（`CLAUDE.md` G-3）
+- [ ] 背景 4 枚 / 敵 5 枚アセットと専用ローダ（`docs/ASSET_MANIFEST.md`）
+
+詳細なロードマップは `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` §5 と `docs/VISUAL_AND_JUICE_ROADMAP.md`。

@@ -219,6 +219,43 @@ public static class ChronicleTimelineConfig
     }
 
     /// <summary>
+    /// 年送りで <paramref name="currentYear"/> から <paramref name="requestedYears"/> 年を一気に飛ばすとき、
+    /// 章ボス出現年（25/50/75/100）を「踏み越し」てボス戦を取りこぼさないよう、実際に進める年数を
+    /// クランプ（スナップ）して返す純粋関数。
+    ///
+    /// 規則: 現在年より大きい最小の章ボス年 B（最も近い未来のボス年）を <paramref name="requestedYears"/> が
+    /// 超える場合は、ちょうど B へ着地する年数（B - currentYear）を返す。超えない場合・以降にボス年が無い
+    /// （最終ボスを越えた）場合は要求年数をそのまま返す。結果は常に 1 以上（暦の前進保証）。
+    ///
+    /// これにより、暦は基本 requestedYears ぶんジャンプしつつ、ボス接近周だけはボス年へちょうど止まり、
+    /// 次の周回でその年（= ボス年）の戦闘がボス戦になる（IsBossYear の完全一致判定を壊さない）。
+    /// </summary>
+    /// <param name="currentYear">現在の暦年（年送り前）。</param>
+    /// <param name="requestedYears">予言が告げた飛ばし年数（Prophecy.SkipYears）。</param>
+    /// <returns>章ボス年を踏み越さないようクランプした、実際に進める年数（1 以上）。</returns>
+    public static int ClampSkipToNextBossYear(int currentYear, int requestedYears)
+    {
+        var years = Math.Max(1, requestedYears);
+
+        // Epochs は BossYear 昇順。現在年より先の最も近いボス年だけ見れば十分
+        // （それを超えなければ、更に先のボス年は当然超えない）。
+        foreach (var epoch in Epochs)
+        {
+            var bossYear = epoch.BossYear;
+            if (bossYear > currentYear)
+            {
+                if (currentYear + years > bossYear)
+                {
+                    return bossYear - currentYear; // ちょうどボス年へ着地（スナップ）
+                }
+                break;
+            }
+        }
+
+        return years;
+    }
+
+    /// <summary>
     /// その年の戦闘で出現すべき敵の原型を決定論的に選ぶ。章ボス出現年（25/50/75/100）はその章の
     /// 章ボス、それ以外の年は章の通常敵（試練の門の守護者）を返す。年は [FirstYear, TotalYears] に
     /// クランプされるため、101 年目以降は終焉の最終年（章ボス出現年）へ丸められ EternalSovereign を、

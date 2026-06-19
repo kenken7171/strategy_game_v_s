@@ -120,17 +120,22 @@ public sealed record TimelineEngine
     // ─── 次ターンへの遷移 ──────────────────────────────────────────────────
 
     /// <summary>
-    /// ターンを次に進め、新たな 3 つの予言を生成した不変エンジン状態を返す。
+    /// 暦を <paramref name="yearsToAdvance"/> 年ぶん進め、新たな 3 つの予言を生成した不変エンジン状態を返す。
     ///
-    /// 注意: SkipYears による加齢は ApplyTimeSkipToRoster で別途行う。
-    /// 本メソッドはエンジン状態（ターン番号と予言リスト）の遷移のみを行う。
+    /// <see cref="Turn"/> は「暦の年」であり、予言の SkipYears ぶん一気に進む（既定 1）。これにより
+    /// 「○年経過」が暦・加齢・収入と同一年数で整合する。加齢自体（全旅団員への WithAgeProgress）は
+    /// ロスタ側 RosterLifecycle.AdvanceGeneration で同じ年数を用いて別途適用する。
+    /// 年数は最低 1（前進保証）にクランプされる。
     /// </summary>
-    public TimelineEngine AdvanceToNextTurn(ProphecyGenerator generator, Random rng)
+    /// <param name="generator">次ターンの予言を生成するジェネレータ。</param>
+    /// <param name="rng">予言生成に注入する乱数。</param>
+    /// <param name="yearsToAdvance">暦を進める年数（Prophecy.SkipYears 由来。既定 1）。</param>
+    public TimelineEngine AdvanceToNextTurn(ProphecyGenerator generator, Random rng, int yearsToAdvance = 1)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(rng);
 
-        var nextTurn = Turn + 1;
+        var nextTurn = Turn + Math.Max(1, yearsToAdvance);
         var nextOptions = ValidateOptions(generator(nextTurn, rng));
         return this with
         {

@@ -21,6 +21,8 @@
 //  action contradicts the phase" can never happen. Unit-tested directly.
 // =============================================================================
 
+using ChronicleKnights.Core.Timeline;
+
 namespace ChronicleKnights.Core.GameFlow;
 
 /// <summary>The committed action for the year, decided at the Guild (home-base) phase.</summary>
@@ -42,6 +44,29 @@ public static class ActionPhaseRouter
     /// </summary>
     public static GamePhase PhaseAfterGuild(PlannedAction action)
         => action == PlannedAction.March ? GamePhase.Formation : GamePhase.Chronicle;
+
+    /// <summary>
+    /// The action a freshly chosen prophecy commits the year to. The prophecy picked at the
+    /// Chronicle phase decides whether this is a fighting year: a <see cref="ProphecyKind.Battle"/>
+    /// prophecy means March (deploy and fight), and EVERY other kind (Rest / RewardPoints /
+    /// ScoutReward / EquipmentDrop) means Rest (skip BOTH Formation and Battle — a safe year).
+    /// This is what wires "choose a non-battle prophecy at Chronicle" to "no battle this year".
+    /// The Guild action toggle (<see cref="PlannedAction"/>) can still override it before "next".
+    /// </summary>
+    public static PlannedAction ActionForProphecy(ProphecyKind kind)
+        => kind == ProphecyKind.Battle ? PlannedAction.March : PlannedAction.Rest;
+
+    /// <summary>
+    /// The action for a chosen prophecy, accounting for MANDATORY epoch-boss years. On an
+    /// epoch-boss year (25/50/75/100) the battle is compulsory — the chapter boss cannot be
+    /// skipped by resting — so this returns <see cref="PlannedAction.March"/> regardless of the
+    /// prophecy kind. On any other year it defers to <see cref="ActionForProphecy"/>
+    /// (Battle -> March, every other kind -> Rest). The caller supplies whether the CURRENT
+    /// calendar year is a boss year (e.g. ChronicleTimelineConfig.IsEpochBossYear), keeping this
+    /// pure and free of the Chronicle config dependency.
+    /// </summary>
+    public static PlannedAction ActionForProphecyAtYear(ProphecyKind kind, bool isBossYear)
+        => isBossYear ? PlannedAction.March : ActionForProphecy(kind);
 
     /// <summary>True when the action bypasses the Formation and Battle phases entirely (Rest).</summary>
     public static bool SkipsBattle(PlannedAction action)

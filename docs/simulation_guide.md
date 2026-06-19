@@ -1,137 +1,87 @@
-# Simulation Guide
+# Build / Test / Simulation Guide（C# 版）
 
-## 前提
-
-ランタイムは **Bun** を使用する。すべてのスクリプトは `bun` コマンドで実行する。
+> 対象は現役本体 `generated_csharp/`。旧 TypeScript 版の Bun CLI（`bun scripts/run-sim.ts` 等）は
+> 凍結された参照専用で、現行ゲームのビルド・検証経路ではない。
+> 現行の検証は **`dotnet test`** と **Godot 実機起動** の 2 経路に集約されている。
 
 ---
 
-## scripts/run-sim.ts — 大隊間バトルシミュレーター
+## 0. 前提ツール
 
-大隊プリセット2つを対戦させ、詳細ターンログと統計レポートを出力する。
-
-### 基本実行
-
-```bash
-bun scripts/run-sim.ts
-```
-
-### オプション
-
-| フラグ | デフォルト | 説明 |
+| ツール | 用途 | 確認 |
 |---|---|---|
-| `--seed <n>` | `42` | 乱数シード（再現性確保） |
-| `--turns <n>` | `30` | 最大ターン数 |
-| `--quiet` | なし | ターン詳細ログを抑制 |
-| `--preset <name>` | `balanced` | 味方プリセット |
-| `vs <name>` | `balanced` | 敵プリセット |
+| **.NET SDK**（8 以上） | ビルド・テスト | `dotnet --version`（`net8.0` ターゲットを `RollForward=LatestMajor` で実行） |
+| **Godot 4.3（.NET/mono 版）** | 実機起動 | `godot --version` → `4.3.stable.mono.official` |
 
-### 利用可能なプリセット
+すべてのコマンドは `generated_csharp/` ディレクトリから実行する。
 
-| プリセット名 | 特徴 |
+---
+
+## 1. ビルド
+
+```sh
+dotnet build ChronicleKnights.csproj --configuration Debug
+```
+
+`Godot.NET.Sdk/4.3.0` を採用。`net8.0` ターゲットだが `RollForward=LatestMajor` を焼き込んであるため、
+8.0 ランタイムが無く 10.x のみの環境でも環境変数なしで動く。
+
+---
+
+## 2. テスト（xUnit / Core 純粋層）
+
+```sh
+dotnet test Tests/ChronicleKnights.Tests.csproj
+```
+
+- 現況 **653 pass / 0 fail**。
+- Godot 非依存。`Tests` プロジェクトは `Core/**/*.cs` を `<Compile Include>` で取り込み、Godot 本体を参照しない。
+- `WarningsAsErrors` に 13 個の CS 警告コードを列挙しており、禁止警告が混入するとビルドが赤くなる（構造的品質ガード）。
+
+### 個別テストの絞り込み
+
+```sh
+# クラス名・メソッド名で絞る
+dotnet test Tests/ChronicleKnights.Tests.csproj --filter "FullyQualifiedName~BattlePassive"
+dotnet test Tests/ChronicleKnights.Tests.csproj --filter "FullyQualifiedName~ChronicleHundredYear"
+```
+
+---
+
+## 3. 100 年シミュレーション・バランス検証（テストとして実装）
+
+旧 TS の `run-grand-chronicle` / メタ分析に相当する検証は、xUnit テストへ移植されている
+（`Tests/Core/Chronicle/`）:
+
+| テスト/ランナー | 役割 |
 |---|---|
-| `balanced` | 全4ジョブをバランス配置（鉄壁×2, 戦術官×1, 狙撃×2, 衛生×3） |
-| `aggressive` | 狙撃×5 + 戦術官×2 の火力特化 |
-| `defensive` | 鉄壁×4 + 衛生×4 の耐久特化 |
+| `ChronicleHundredYearSimulationTests` | 100 年（1 旅団の興亡）を決定論シードで通し、不変条件を検証 |
+| `MultiverseSimulationRunner` | 複数シード（多元宇宙）でモンテカルロ実行 |
+| `MetricsCollector` / `MetricsReporter` / `MetricsLogFormatter` | 年次メトリクスの収集・整形・ASCII 構造化ログ出力 |
+| `UniverseEvaluator` | 1 周の結果（絶滅率・勝率等）を評価し黄金均衡を判定 |
+| `EnemyScalingResolver` / `EpochBossForecast` | 時代難易度曲線・章ボス前兆スケジュールの検証 |
 
-### 使用例
-
-```bash
-# aggressive vs defensive を100ターン最大で
-bun scripts/run-sim.ts --preset aggressive vs defensive --turns 100
-
-# シードを変えて複数回試行
-bun scripts/run-sim.ts --seed 1 --quiet
-bun scripts/run-sim.ts --seed 2 --quiet
-```
+実走時の機械可読ログは `ChronicleGlobal` が `GD.Print(MetricsLogFormatter.Format...)` で標準出力へ流す
+（戦闘開始・戦果決算の年・内訳・残高など）。実機プレイ中にこれをコンソールで観測できる。
 
 ---
 
-## scripts/age_progression_test.ts — 経年変化確認
+## 4. 実機起動（手で 1 周回す）
 
-1体のユニットが修業期→全盛期→衰退期をたどる様子を5年刻みで出力する。
-
-```bash
-bun scripts/age_progression_test.ts
+```sh
+./play.command          # C# 自動ビルド → godot --path . で起動
+./play.command -e       # Godot エディタを開く
 ```
 
-出力例:
-
-```
-======================================================================
-  経年変化テスト  (peakStart=25, peakEnd=30, maxAge=55)
-======================================================================
-年齢    フェーズ  係数    STR   AGI   INT   END
-----------------------------------------------------------------------
-20      修業期    0.800   80    64    48    56
-25      全盛期    1.000   100   80    60    70
-30      全盛期    1.000   100   80    60    70
-35      衰退期    0.859   86    69    52    60
-```
+- 起動の流れ: Godot が `/root/ChronicleGlobal`（autoload）を生成 → `Main.tscn` が `GameDirector` を起動 →
+  タイトル → 新規/継続で `Initialize`/`LoadGame` → 年代記（予言 3 択）→ 拠点（婚姻/スカウト/行動選択）→
+  編成（▲ウェッジ配置）→ 戦闘（ターン → とどめ → 戦果決算）→ 年送りで年代記へ。
+- macOS の `--headless` は Godot 4.3 既知の不具合でクラッシュする。画面確認は必ず windowed で行う。
 
 ---
 
-## apps/cli/src/simulate_history.ts — 100年旅団シミュレーション
+## 5. 決定論の確認
 
-旅団が100年にわたって兵士の加入・引退を繰り返す様子を JSON で出力する。
-
-```bash
-bun apps/cli/src/simulate_history.ts
-```
-
-出力先: `apps/cli/output/<timestamp>/history.json`
-
-最新の実行結果は `apps/cli/output/.latest` に記録される。
-
-### JSON 構造
-
-```json
-{
-  "generatedAt": "ISO timestamp",
-  "totalYears": 100,
-  "totalRecruits": 150,
-  "years": [
-    {
-      "year": 1,
-      "averageStrength": 72.5,
-      "unitCount": 7,
-      "units": [{ "id": "u000", "name": "Leon", "age": 16, "strength": 58 }],
-      "events": [{ "type": "join", "unitId": "u001", "unitName": "Arthur", "age": 15 }]
-    }
-  ],
-  "roster": {
-    "u000": {
-      "joinYear": 1, "retireYear": 45,
-      "joinAge": 16, "peakStartAge": 24, "peakEndAge": 28, "maxAge": 48,
-      "baseStrength": 95, "peakStrength": 95
-    }
-  }
-}
-```
-
----
-
-## apps/cli/src/simulate_battle_*.ts — 個別バトルシナリオ
-
-各ファイルがそれぞれ異なる編成・ロジックの確認用シナリオを実装している。
-
-```bash
-bun apps/cli/src/simulate_battle_offense.ts
-bun apps/cli/src/simulate_battle_rotation.ts
-```
-
----
-
-## packages/core/test/ — ユニットテスト
-
-```bash
-bun test packages/core/test/
-```
-
-テストファイル:
-
-| ファイル | カバー範囲 |
-|---|---|
-| `enemy.test.ts` | Enemy アクションループ |
-| `squad.test.ts` | Squad の編成・HP管理 |
-| `passive_ability.test.ts` | SDF/BDF/AB/HL のパッシブ発動 |
+同一シードからは同一の歴史が再現される（憲法④）。テストでは `Initialize(rng: new Random(seed))` や
+`StartBattle(enemy, battleSeed)` に固定シードを渡して再現性を担保している。実機では
+`StartNewGame(seed)` が 1 本の乱数ストリームでその 100 年史を決定づける。

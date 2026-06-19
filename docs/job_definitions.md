@@ -1,211 +1,114 @@
-# Job Definitions
+# Job Definitions（C# 版）
 
-ジョブ定義のカタログ。`config/jobs.json` が正規ソースだが、ここでは能力の詳細な挙動まで記述する。
-
----
-
-## 一覧
-
-| Job ID | 日本語名 | 役割 |
-|---|---|---|
-| `iron_wall_knight` | 鉄壁騎士 | 前衛防御・大隊防護 |
-| `tactician` | 戦術官 | 全体バフ支援 |
-| `medic` | 衛生兵 | 回復後方支援 |
-| `sniper` | 狙撃兵 | 後衛高火力 |
-| `sorcerer` | 呪術師 | 後衛超火力（要護衛） |
-| `standard_bearer` | 旗手 | 火力特化バフ |
-| `heavy_infantry` | 重装歩兵 | 単体特化型前衛 |
-| `scout` | 斥候 | 高速削り役 |
+> ジョブ定義のカタログ。**数値の正規ソースは `generated_csharp/Core/Job/JobMaster.cs`**（`JobMaster.All`）、
+> 日本語ラベル・解説の SoT は `generated_csharp/Config/localization_ja.json` の `jobs` セクション。
+> 本書は能力の挙動まで含めた人間向けリファレンス。略称（SDF/BDF/AB/HL）は廃止し正式名称を用いる。
 
 ---
 
-## iron_wall_knight（鉄壁騎士）
+## 0. パッシブ用語（`PassiveKind`）
 
-**デフォルトステータス**
+| 正式名称 | 旧略称 | UI ラベル | 効果 |
+|---|---|---|---|
+| `BattalionDefense` | BDF | 🛡️ 大隊総守護力 | **FRONT 配置時のみ**、大隊全員の被ダメを軽減 |
+| `SquadDefense` | SDF | 🛡️ 分隊守護力 | 所属分隊の被ダメを軽減（配置不問） |
+| `InitiativeBuff` | AB | ⚡ 突撃号令 | ターン頭に大隊全員（自分以外）の速度・攻撃を底上げ |
+| `TurnEndSquadHeal` | HL | 💚 ターン末分隊治癒 | ターン末に所属分隊の生存者を回復（HP 上限クランプ） |
+| `ConsecutiveStrike` | — | 🎯 二の矢 | イニシアチブ 1 番手かつ分隊先頭時に通常攻撃 2 回 |
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 250 |
-| speed | 10 |
-| frontAttack | 50 |
-| rearAttack | 10 |
-| sdf | 15 |
-| bdf | 10 |
-
-**能力詳細**
-
-- **SDF（Squad Defense）**: 自分が属する分隊が受けるダメージを `sdf` だけ軽減する。同じ分隊に複数いれば加算。
-- **BDF（Brigade Defense）**: `FRONT` スロットに配置されている場合、大隊全体（全スロット）が受けるダメージを `bdf` だけ軽減。複数いれば加算。
-- 最低ダメージ保証: `Math.max(1, damage - reduction)` のため0にはならない。
-
-**推奨配置**: `FRONT` スロット。`FRONT` 配置時に BDF が発動し、全体防護を担う。
+判定は `JobMaster.HasPassive(JobId, PassiveKind)` のデータ駆動（数値系は `JobStats` 値 > 0、特殊系は `SpecialPassives` 包含）。
 
 ---
 
-## tactician（戦術官）
+## 1. 一覧（`JobId`）
 
-**デフォルトステータス**
+| Job ID | 日本語名 | 役割 | EffectKind（UI 配色） |
+|---|---|---|---|
+| `IronWallKnight` | 鉄壁騎士 | 前衛防御・大隊防護 | Defend（青） |
+| `HeavyInfantry` | 重装歩兵 | 単騎完結型前衛 | Attack（朱） |
+| `StandardBearer` | 旗手 | 全体支援（最大規模） | Buff（金） |
+| `Tactician` | 戦術官 | 軽量全体支援 | Buff（金） |
+| `Medic` | 衛生兵 | 継続回復 | Heal（緑） |
+| `Sniper` | 狙撃兵 | 後衛高火力 | Attack（朱） |
+| `Sorcerer` | 呪術師 | 後衛超火力（要護衛） | Attack（朱） |
+| `Scout` | 斥候 | 高速削り役 | Attack（朱） |
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 120 |
-| speed | 35 |
-| frontAttack | 20 |
-| rearAttack | 20 |
-| ab | 20 |
-
-**能力詳細**
-
-- **AB（Attack Buff）**: ターン開始時（バフリセット後）に、大隊全体の全ユニット（自分以外）の `speedBuff` と `attackBuff` を `ab` 加算する。
-- 複数いれば加算。自分自身へはバフが乗らない。
-- バフは毎ターンリセットされるため永続しない。
-
-**推奨配置**: `FRONT` または `REAR` スロット。複数編成でバフを積み上げる構成が有効。
+`JobMaster.DisplayOrder` は上表の順（防御→攻撃前衛→支援→回復→後衛火力→速度）。
 
 ---
 
-## medic（衛生兵）
+## 2. 各ジョブ（数値は `JobMaster.All`）
 
-**デフォルトステータス**
+### IronWallKnight（鉄壁騎士）
+MaxHp 250 / Speed 10 / FrontAttack 50 / RearAttack 10 / BattalionDefense **10** / SquadDefense **15** ／ RoleBonus 30
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 100 |
-| speed | 25 |
-| frontAttack | 10 |
-| rearAttack | 10 |
-| hl | 30 |
+- **BattalionDefense**: FRONT 配置時、大隊全体の被ダメを軽減（複数いれば加算）。
+- **SquadDefense**: 所属分隊の被ダメを軽減（配置不問・加算）。最終被ダメ = `max(1, baseDamage − 大隊守護 − 分隊守護)`。
+- 推奨配置: `Front`（FRONT で BDF が発動し全体防護を担う）。
 
-**能力詳細**
+### HeavyInfantry（重装歩兵）
+MaxHp **300** / Speed 15 / FrontAttack **70** / RearAttack 20 / SquadDefense 10 ／ RoleBonus 0
 
-- **HL（Heal）**: ターン終了時に、自分が属する分隊の生存全ユニットを `hl` だけ回復。`Math.min(maxHp, hp + hl)` で上限あり。
-- 同じ分隊に複数いれば回復量が加算される。
-- 異なる分隊の衛生兵は、それぞれ自分の分隊のみを回復する（クロス回復なし）。
+- 全ジョブ最高 HP と高 FA を持つ単騎完結の前衛。BDF は持たない（大隊全体防護なし）。
+- 推奨配置: `Front`。鉄壁騎士の隣で攻撃役を担うと強力。
 
-**推奨配置**: `REAR` スロット。生存率を高めて毎ターン回復を継続させる。
+### StandardBearer（旗手）
+MaxHp 150 / Speed 20 / FrontAttack 30 / RearAttack 30 / SquadDefense 5 / InitiativeBuff **40** ／ RoleBonus 65
 
----
+- **InitiativeBuff 40**: 大隊全員（自分以外）の速度・攻撃を底上げ（最大規模・戦術官と併用可・加算）。
+- 推奨配置: `Front` / `RearLeft` / `RearRight`（どこでも全体に効く）。後衛火力役の底上げと好相性。
 
-## sniper（狙撃兵）
+### Tactician（戦術官）
+MaxHp 120 / Speed 35 / FrontAttack 20 / RearAttack 20 / InitiativeBuff **20** ／ RoleBonus 65
 
-**デフォルトステータス**
+- 軽量 InitiativeBuff ＋ 自身も中速。旗手と重ねて号令を積み上げられる。
+- 推奨配置: どこでも可。複数編成でバフを積む構成が有効。
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 80 |
-| speed | 40 |
-| frontAttack | 20 |
-| rearAttack | 90 |
+### Medic（衛生兵）
+MaxHp 100 / Speed 25 / FrontAttack 10 / RearAttack 10 / TurnEndSquadHeal **30** ／ RoleBonus 90
 
-**能力詳細**
+- **TurnEndSquadHeal 30**: ターン末に所属分隊の生存者を回復（`min(maxHp, hp + heal)` でクランプ・同分隊複数で加算）。
+  異なる分隊の衛生兵はそれぞれ自分の分隊のみ回復（クロス回復なし）。
+- 推奨配置: `RearLeft` / `RearRight`。唯一の継続支援役（RoleBonus 最大）。
 
-- **2連撃条件**: イニシアチブが大隊内で1番手かつ、分隊内で最速の場合、同ターン2回攻撃。
-- rearAttack が高いため `REAR` スロット配置で真価を発揮。
-- 速度が高く tactician バフが乗ると2連撃発動率が向上する。
+### Sniper（狙撃兵）
+MaxHp 80 / Speed 40 / FrontAttack 20 / RearAttack **90** / SpecialPassives: **ConsecutiveStrike** ／ RoleBonus 0
 
-**推奨配置**: `REAR-L` または `REAR-R`。`REAR-L` の1番手に置き、tactician のバフで速度をさらに上げると2連撃を安定発動できる。
+- **二の矢**: イニシアチブ 1 番手かつ分隊先頭スロット時、通常攻撃が 2 回（例: `(後衛90 + 号令20) × 2 = 220`）。
+- 推奨配置: `RearLeft` / `RearRight`。号令で速度を上げて先頭を取り、二連撃を安定発動。
 
----
+### Sorcerer（呪術師）
+MaxHp **40** / Speed 15 / FrontAttack 10 / RearAttack **120** ／ RoleBonus 0
 
-## sorcerer（呪術師）
+- 全職最高の後衛火力。一方で MaxHp 40 は最低で即死しやすい「砲台」。
+- 推奨配置: `RearLeft` / `RearRight`（FRONT は厳禁）。前衛を厚くし号令を乗せて運用。
 
-**デフォルトステータス**
+### Scout（斥候）
+MaxHp 90 / Speed **60** / FrontAttack 40 / RearAttack 40 ／ RoleBonus 30
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 40 |
-| speed | 15 |
-| frontAttack | 10 |
-| rearAttack | **120** |
-| sdf | 0 |
-| bdf | 0 |
-
-**能力詳細**
-
-- 大隊最高クラスの rearAttack（120）。狙撃兵（90）を上回る後衛火力。
-- 一方で maxHp 40 は全ジョブ最低。敵の標準的な一撃で即死しやすい。
-- 守られて初めて真価を発揮する「砲台」型。前衛で受け、後方から焼き払う運用が前提。
-
-**推奨配置**: `REAR-L` または `REAR-R`。前衛に鉄壁騎士・重装歩兵を厚く配置し、tactician/standard_bearer のバフを乗せて運用する。`FRONT` は厳禁（即死）。
+- 全職最速。配置に依存せずダメージを出せ、先制で敵を削って後衛火力役の安全を確保する。
+- 推奨配置: `RearLeft` / `RearRight` / `Front`（推奨 row が広い）。
 
 ---
 
-## standard_bearer（旗手）
+## 3. 戦闘パッシブの解決順（`BattleManager`）
 
-**デフォルトステータス**
+1. **行動順構築**: 実効速度（自身 Speed ＋ 号令ボーナス）の高い順。同速は味方優先のタイブレーク。
+2. **号令ブロードキャスト**: InitiativeBuff 持ちが自分以外の全生存者へ「速度＝配り手の Speed / 攻撃＝配り手の InitiativeBuff」を加算。
+3. **連続攻撃**: 先頭かつ ConsecutiveStrike 保持時のみ攻撃 2 回。
+4. **ダメージ軽減**: `max(1, baseDamage − 大隊守護 − 分隊守護)`（最低 1 は必ず通る）。
+5. **継続回復**: ターン末に衛生兵が自分隊を回復（上限クランプ）。
 
-| 項目 | 値 |
-|---|---|
-| maxHp | 150 |
-| speed | 20 |
-| frontAttack | 30 |
-| rearAttack | 30 |
-| sdf | 5 |
-| ab | **40** |
-
-**能力詳細**
-
-- **AB（Attack Buff）**: ターン開始時に、大隊全体の全ユニット（自分以外）の `speedBuff` と `attackBuff` を `ab` 加算する。
-- 戦術官の倍となる ab=40 で大隊火力を底上げする。複数いれば加算（戦術官と併用可）。
-- 自身も sdf=5 を持ち、分隊にわずかな防護も提供する。
-- 戦術官より HP が高く（150 vs 120）、前線でも耐えやすい精神的支柱。
-
-**推奨配置**: `FRONT` または `REAR`。呪術師・狙撃兵・重装歩兵の火力を引き上げる構成と相性が良い。
+数値例は `PROGRESS_REPORT.md` §3-4（テストで固定済みの実例）と `Tests/Core/Managers/BattlePassiveTests.cs` を参照。
 
 ---
 
-## heavy_infantry（重装歩兵）
+## 4. 新ジョブ追加手順（データ駆動）
 
-**デフォルトステータス**
-
-| 項目 | 値 |
-|---|---|
-| maxHp | **300** |
-| speed | 15 |
-| frontAttack | **70** |
-| rearAttack | 20 |
-| sdf | 10 |
-| bdf | 0 |
-
-**能力詳細**
-
-- 全ジョブ最高の HP（300）と高水準の frontAttack（70）を持つ単騎完結型の前衛。
-- 鉄壁騎士と異なり BDF を持たないため、大隊全体への防護効果はない。
-- sdf=10 で自分隊にわずかな防護を提供する。
-- 「単体で粘り強く戦う」ことが役割。
-
-**推奨配置**: `FRONT`。鉄壁騎士と併置すると、BDF を提供する鉄壁の隣で攻撃役を担う形になり強力。
-
----
-
-## scout（斥候）
-
-**デフォルトステータス**
-
-| 項目 | 値 |
-|---|---|
-| maxHp | 90 |
-| speed | **60** |
-| frontAttack | 40 |
-| rearAttack | 40 |
-| sdf | 0 |
-| bdf | 0 |
-
-**能力詳細**
-
-- 全ジョブ最速（speed=60）。狙撃兵（40）を上回る。
-- frontAttack=rearAttack=40 で配置に依存せずダメージを出せる。
-- 単発火力は控えめだが、確実に先制してターン頭から敵HPを削れる。
-- イニシアチブ1番手を取れば、後続の狙撃兵・呪術師の生存率を上げる効果もある。
-
-**推奨配置**: `REAR-L` または `REAR-R`。先制で敵を削り、後衛火力役（sniper/sorcerer）の安全を確保する役回り。
-
----
-
-## 新ジョブ追加手順
-
-1. `config/jobs.json` に新エントリを追加（`id`, `name`, `description`, `defaults`）
-2. `packages/core/src/models/Unit.ts` の `JobType` に ID を追加
-3. `BattleManager.ts` に必要であれば能力発動ロジックを実装（`applyTacticianBuffs` 等を参考）
-4. `docs/job_definitions.md`（本ファイル）に仕様を追記
-5. `scripts/run-sim.ts` の `JOB_DEFAULTS` に値を追加
+1. `Core/Job/JobData.cs` の `JobId` enum に ID を追加。
+2. `Core/Job/JobMaster.cs` の `BuildAll()` に `JobDefinition`（`JobStats` / `FormationGuide` / `RoleBonus` /
+   必要なら `SpecialPassives`）を追加。
+3. `Config/localization_ja.json` の `jobs` セクションに表示名・解説キーを追加。
+4. 立ち絵 `Assets/Textures/Jobs/{job}/{male|female}.png` を配置（任意・未配置でも null フォールバック）。
+5. 数値で表せない特殊パッシブが必要なら `PassiveKind` に種別を足し、`BattleManager` に発動ロジックを実装。
+6. 本書（`docs/job_definitions.md`）に仕様を追記。

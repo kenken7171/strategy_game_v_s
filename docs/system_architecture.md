@@ -1,309 +1,174 @@
-# System Architecture
+# System Architecture（C# / Godot 版）
 
-## Overview
-
-Chronicle Knights はターン制ストラテジーゲームのコアロジックライブラリ (`packages/core`) と CLI アプリ (`apps/cli`) から構成される。
+> 対象は現役本体 `generated_csharp/`（Godot 4.3 mono / .NET 8 / C# 12）。
+> 旧 TypeScript 版（`packages/core` 等）は凍結された参照専用で本書の対象外。
+> 数値の根拠は各 SoT クラスの定数。実装の俯瞰は `CLAUDE.md`、設計理念は `docs/design_blueprint.md`。
 
 ---
 
-## 統合 Config（CHRONICLE_CONFIG）
+## 1. 三層アーキテクチャ — 「純粋な脳」と「Godot の身体」の分離
 
-すべてのチューニングパラメータは `packages/core/src/config/ChronicleConfig.ts` の `CHRONICLE_CONFIG`（`as const` Readonly オブジェクト）に集約されている。**各モジュールは数値をハードコードせず、必ず参照すること**（[chronicle_config skill](../.claude/skills/chronicle_config.md) で禁止ルール明示）。
+```
+  ┌─────────────┐   ① API     ┌──────────────────┐   ② 委譲    ┌─────────────┐
+  │   UI 層      │ ──────────▶ │   Autoload        │ ──────────▶ │   Core 層    │
+  │ UI/*.cs      │             │ ChronicleGlobal    │            │ Core/**.cs   │
+  │ (Godot依存)  │ ◀────────── │ (唯一の真実 SoT)   │ ◀────────── │ (純粋ロジック) │
+  └─────────────┘ ④ シグナル   └──────────────────┘ ③ 新レコード └─────────────┘
+                                      ↑↓ lock 保護          Random は引数注入で再現可能
+```
 
-### セクション
+| 層 | 場所 | 責務 | Godot 依存 |
+|---|---|---|---|
+| Core | `generated_csharp/Core/` | ゲームのルール（不変ドメイン・純粋関数）。xUnit で単体検証 | なし |
+| Autoload | `generated_csharp/Autoload/ChronicleGlobal.cs` | 全状態の保持・API・シグナル・セーブ/ロード | あり（Node） |
+| UI | `generated_csharp/UI/` | 無状態の描画（コードで動的構築）。シグナルで読み直して再描画 | あり（Control） |
 
-| Section | 主要キー | 意図 |
+このご利益: 戦闘計算・経済・世代交代といった「心臓部」を、Godot を起動せず `dotnet test` で検証できる
+（例: 狙撃兵の二連撃ダメージが 220 か、を画面なしで機械検証）。
+
+---
+
+## 2. 常駐 SoT（`ChronicleGlobal`）
+
+Godot の autoload として `/root/ChronicleGlobal` に常駐し、ゲーム全体の唯一の真実を保持する。
+
+### 2-1. 保持する状態（外部からは読み取り専用）
+
+| 状態 | 型 | 内容 |
 |---|---|---|
-| `TIME` | `BASE_PEAK_START_AGE` (24), `BASE_PEAK_END_AGE` (28), `INDUCTION_AGE` (15), `DECAY_RATE` (0.03), `MIN_STAT_VALUE` (1) | 経年変化モデルの根本パラメータ |
-| `SCHEDULE` | `CHRONICLE_YEARS` (100), `RECRUIT_INTERVAL` (2), `RECRUIT_COUNT` (2), `BATTLE_INTERVAL` (5), `INITIAL_MEMBER_COUNT` (5), `BATTALION_SIZE` (9) | 旅団運営とイベント周期 |
-| `LINEAGE` | `AFFINITY_PER_BATTLE` (10), `MARRIAGE_THRESHOLD` (100), `MARRIAGE_PROBABILITY` (0.3), `BIRTH_PROBABILITY` (0.2), `CULTURE_INHERIT_PROB` (0.5) | 好感度・結婚・血統 |
-| `BATTLE` | `MAX_TURNS` (30), `SQUAD_SIZE` (3), `FRONT_ROW_COUNT` (3) | バトルロジック係数 |
-| `NAMING` | `POOL_MIN_SIZE` (150) | 各名前プールの最低保証件数 |
+| `CurrentEconomy` | `PointsEconomy` | ポイント一元経済の財布 |
+| `CurrentTimeline` | `TimelineEngine?` | 予言タイムラインの現在状態 |
+| `BattalionRoster` | `ImmutableList<Unit>` | 大隊の全旅団員 |
+| `CurrentFormation` | `FormationBoard` | V 字 3×3 編成盤面（占有 Id のみ保持） |
+| `CurrentBattle` | `BattleSnapshot?` | 進行中戦闘の不変スナップショット（非戦闘時 null） |
+| `LastBattleSpoils` | `BattleSpoils` | 直近戦闘の統合台帳（戦果決算） |
+| `LastRestOutcome` | `RestOutcome` | 直近の休息年の決算 |
+| `CurrentPhase` | `GamePhase` | フェーズ状態マシンの現在地 |
+| `CurrentAction` | `PlannedAction` | 今年の行動（March / Rest） |
+| `_chronicleLog`（private） | `ImmutableArray<ChronicleLogEntry>` | 旅団史ナレーション（セーブ対象） |
+| `_ancestralArchive`（private） | `ImmutableDictionary<Guid,Unit>` | 英霊アーカイブ（去った祖先の遺影。非セーブ） |
 
-### バランス調整方針
+### 2-2. シグナル（観測側 UI への通知）
 
-仕様変更時は **本ファイル1箇所の編集で完結する**ことを目標とする。例:
-- 「100年→200年に拡張」→ `SCHEDULE.CHRONICLE_YEARS = 200` だけ変更
-- 「衰退を緩やかに（5%→3%）」→ `TIME.DECAY_RATE = 0.05` だけ変更
-- 「大隊を12名に」→ `SCHEDULE.BATTALION_SIZE = 12` だけ変更
+`StateInitialized` / `EconomyChanged` / `TimelineChanged` / `RosterChanged` / `FormationChanged` /
+`BattleChanged` / `PhaseChanged`。すべて const string で宣言され、`SafeEmit`（`IsInsideTree()` ガード ＋ try/catch）で
+発火するため、Godot 非依存の xUnit 環境でも例外なく動く。
 
----
+### 2-3. 単方向データフローの規律
 
-## 個体差システム（peakStartAge / peakEndAge のランダム化）
-
-`packages/core/src/utils/age.ts` の `rollPeakAges` / `rollChildPeakAges` ヘルパーで決定する。Unit のコンストラクタは純粋（RNG 非依存）に保つため、個体差の決定は呼び出し側が行う方針。
-
-### 新人（rollPeakAges）
-
-- `peakStartAge = BASE_PEAK_START_AGE + offset(-3..+3)` → **21〜27** の範囲
-- `peakEndAge = BASE_PEAK_END_AGE + offset(-3..+3)` → **25〜31** の範囲
-- start/end は独立ロール後に `start < end` ガード（違反時は `start = end - 1` に補正）
-
-### 子供（rollChildPeakAges）
-
-- `peakStartAge = round(avg(father.peakStartAge, mother.peakStartAge) + offset(-1..+1))`
-- `peakEndAge = round(avg(father.peakEndAge, mother.peakEndAge) + offset(-1..+1))`
-- 「両親平均±1」の狭めレンジで成長タイプの遺伝性を表現
-- `BirthRegistry.childPeakStartAge` / `childPeakEndAge` に出産予約時点でロール・記録され、15年後の入団時にそのまま使われる（親が老いても／死んでも出産時の能力ピークが子に反映される）
-
-### 効果
-
-- 100名生成時に peakStartAge は 21〜27 の **7値すべて**が出現
-- 入団(15歳)から全盛期入りまでの年数が **6〜12年**でバラつく
-- 標準型(24/28) × 晩成型(30/34) の親 → 子は確実に 26〜28 / 30〜32 範囲（平均27/31 ±1）
-
-検証: `bun scripts/verify-individuality.ts`
+1. UI が `ChronicleGlobal` の API を呼ぶ（例: `ResolveLastHit`）。
+2. `ChronicleGlobal` が `lock(_stateLock)` 内で Core の純粋関数を叩き、不変レコードを「丸ごと差し替える」。
+3. **ロックを解放してから** 該当シグナルを `SafeEmit`（ロック内発火はデッドロックの危険があるため厳禁）。
+4. UI がシグナルを受け、SoT を読み直して再描画する。
 
 ---
 
-## Battle Logic
+## 3. ゲームループ ＆「1 世代 = 時間軸 1 周」
 
-### 構成要素
+### 3-1. フェーズ循環（`Core/GameFlow/GamePhaseFlow`）
 
-| クラス | 役割 |
+```
+Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──┐
+(年代記/予言) (拠点)     (大隊9名編成)  (戦闘)    │
+     ▲                                        │
+     └──────────（年送り：数年が一気に流れる）◀┘
+```
+
+`Next(current)` は「次はただ 1 つ」、`CanTransition(from,to)` は後退・飛び越し・自己遷移をすべて false。
+
+### 3-2. 行動分岐（`Core/GameFlow/ActionPhaseRouter`）
+
+拠点（Guild）で確定した `PlannedAction` で離脱先が変わる:
+- **March**: Guild → Formation → Battle（戦う年）。
+- **Rest**: Guild → Chronicle（編成・戦闘の両画面を完全バイパスする安全な年。`RestService` で休息決算）。
+
+### 3-3. 年送り（`ChronicleGlobal.AdvanceGenerationLocked`）
+
+予言の `SkipYears` は選択時に消費せず保留（`_pendingGenerationSkipYears`）。ループ幕引き（Battle→Chronicle、
+または Rest の Guild→Chronicle）で一括適用する:
+
+適用年数は `SkipYears` を `ChronicleTimelineConfig.ClampSkipToNextBossYear` で章ボス年（25/50/75/100）を踏み越さないよう
+クランプした `years` で、加齢・収入・暦の前進すべてに同一値を用いる（「○年経過」が暦・加齢・収入で整合）:
+
+1. 全旅団員を `years` ぶん加齢 → 寿命到達・戦闘死を完全ロストとして仕分け（`RosterLifecycle.AdvanceGeneration`）。
+2. 年代記ナレーション（損失・昇級）を `_chronicleLog` へ追記、去る者を英霊アーカイブへ写し取り。
+3. 盤面から完全ロスト者を掃き出し（`ReconcileFormationWithRoster`）。
+4. 定期収入 `EarnFromTimeSkip(years)` を加算。
+5. 暦の年 `Turn` を `years` ぶん進めて次世代の予言 3 つを再生成（`TimelineEngine.AdvanceToNextTurn(…, years)`）。
+   ボス接近周は暦がボス年へちょうど着地し、次周がボス戦になる（取りこぼし防止）。
+
+発火順: **Roster → Economy → Timeline →（必要時 Formation）→ Phase**（画面切替前にデータ確定を保証）。
+出撃の幕引きでは加えて `ApplyBattleSpoils(LastBattleSpoils)` が戦果から婚姻ポイントを算出し経済へ加算する。
+
+---
+
+## 4. 戦闘の常駐統合
+
+純粋層 `BattleResolver`（1 ターン解決器）を SoT へ昇格させ、3 つの薄い API が統治する:
+
+| API | 役割 |
 |---|---|
-| `Unit` | 兵士1人。イミュータブル。全ステータスは `readonly`。 |
-| `Squad` | 最大3体 (`MAX_UNITS_PER_SQUAD`) のユニットグループ。スロットID（`FRONT`, `REAR-L`, `REAR-R` 等）で識別。 |
-| `Enemy` | 固定アクションローテーションを持つ敵。 |
-| `BattleManager` | 1回の戦闘を管理。ターン処理・ダメージ計算の中枢。 |
-| `BattleSimulator` | `BattleManager` を wrap し、統計収集・ログ出力を行う高レベル API。 |
-| `Brigade` | ユニット集団（旅団）。年次進行 (`advance`) と大隊選出 (`selectBattalion`) を管理。 |
+| `StartBattle(enemy, seed?)` | `BattleResolver.CreateInitial` で初期 `BattleSnapshot` を生成し `CurrentBattle` へ。`_battleRng` を再シード |
+| `ResolveBattleTurn(rotation?)` | 1 ターン解決し `CurrentBattle` を差し替え、`ImmutableArray<BattleEvent>` を返す |
+| `EndBattle()` | 戦闘後の複製を正本ロスタへ書き戻し、`CurrentBattle=null`（非戦闘へ） |
 
-### ターン処理順序（`processIntegratedTurn`）
+- とどめ: `ResolveLastHit(unitId)` → `BattleManager.ExecuteLastHit`。その後 `FinalizeBattleSpoils` が
+  「開戦時 → とどめ完了後」の Guid 突合で統合台帳 `BattleSpoils` を確定する。
+- 敵: `CreateCurrentYearEnemy(seed?)` が暦から原型を選び、時代スケール（`EnemyScaler`）＋ ±15% 個体差で 1 体合成。
+- 攻撃予告: `ForecastEnemyIntents / ...WithOmens` が現局面から決定論シードで「運命の帯」を先読み。
 
-1. **全バフをリセット** — 前ターンの `speedBuff`/`attackBuff` をゼロに戻す
-2. **戦術官のバフ適用** — 生存中の `tactician` が大隊全体の SPD と FA/RA を加算
-3. **イニシアチブ決定** — `finalSpeed` 降順でアクション順を確定
-4. **アクション実行** — 速い側から交互に敵攻撃 / 味方攻撃
-5. **衛生兵の回復** — ターン末に生存中の `medic` が分隊全員を `hl` 分回復
-
-### ダメージ軽減（SDF / BDF）
-
-- **BDF** (`bdf`): `FRONT` スロットにいる `iron_wall_knight` が大隊全体への被ダメを軽減。複数いれば加算。
-- **SDF** (`sdf`): ターゲット分隊内の `iron_wall_knight` が自分隊への被ダメを軽減。
-- 計算式: `effectiveDamage = Math.max(1, baseDamage - totalReduction)`
-
-### 狙撃兵の2連撃条件
-
-`sniper` がイニシアチブ1番手かつ分隊内で最速の場合、同ターン2回攻撃。
+詳細な戦闘・パッシブ仕様は `PROGRESS_REPORT.md` §3-4 と `docs/job_definitions.md` を参照。
 
 ---
 
-## 経年変化システム
+## 5. 永続化（`Core/Persistence/`）
 
-ユニットのステータスは年齢によって三段階で変化する。`baseStats` は全盛期の最大値を示す。
-
-### フェーズ定義
-
-| フェーズ | 条件 | growthFactor |
-|---|---|---|
-| 修業期 | `age < peakStartAge` | `age / peakStartAge` （線形上昇 0→1） |
-| 全盛期 | `peakStartAge <= age <= peakEndAge` | `1.0`（固定） |
-| 衰退期 | `age > peakEndAge` | `(0.97)^(age - peakEndAge)`（複利 3%/年減衰） |
-| 引退 | `age >= maxAge` | `0`（`isRetired = true`） |
-
-実効ステータス:
-
-```
-stats[key] = Math.max(1, Math.round(baseStats[key] * growthFactor))
-```
-
-### Unit フィールド一覧
-
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `birthYear` | `number \| null` | 生まれ年（Brigade.currentYear と組み合わせて年齢確認に使用） |
-| `peakStartAge` | `number` | 全盛期開始年齢 |
-| `peakEndAge` | `number` | 全盛期終了年齢 |
-| `maxAge` | `number` | この年齢以上で引退（`isRetired = true`） |
-
-### Brigade.currentYear
-
-`Brigade` は `currentYear: number` を保持し、`advance()` を呼ぶたびにインクリメントされる。  
-大隊編成には `selectBattalion(n)` を使うことで、その時点のステータスで上位 n 体を選出できる。
+- `SaveSerializer`（純粋・DTO マッピング）＋ `SaveManager`（Godot I/O）に層分離。
+- `user://save_data.json` に **未暗号化の整形 JSON** で保存。クラッシュ耐性のため
+  アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）。
+- enum は文字列で保存（定義順変更に強い）、Guid キー辞書は文字列キー化。`Version`（現 1）でスキーマ管理。
+- **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog`。
+  **非保存**: Random（ロード時に新規再注入）・盤面・戦闘・英霊アーカイブ・保留年数。
+- ロード後 `CurrentPhase` は **常に Chronicle から再開**。
 
 ---
 
-## 血統継承システム
+## 6. ローカライズ ＆ 命名（`Core/Naming/` `Core/Localization/`）
 
-ユニットに性別・好感度・配偶者・親情報を持たせ、戦闘経験から結婚 → 出産予約 → 15年後に「継承者」が旅団に加入する世代交代モデル。
-
-### Unit 拡張フィールド
-
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `gender` | `'Male' \| 'Female'` | 性別。コンストラクタ未指定時のデフォルトは `'Male'`（既存コード互換）。新規生成箇所では呼び出し側で乱数 50:50 を渡すこと |
-| `affinity` | `ReadonlyMap<string, number>` | 他ユニットIDをキーとする好感度マップ。`getAffinity(otherId)` で取得（未記録は 0） |
-| `parents` | `{ fatherId, motherId } \| null` | 親の ID 記録（継承者にのみ設定される） |
-| `spouseId` | `string \| null` | 配偶者ID。`isMarried` ゲッターで未婚判定 |
-
-### Brigade.pendingBirths
-
-`BirthRegistry[]` を旅団に保持。これは「結婚カップルが子を授かったが、Unit インスタンスはまだ生成されていない」予約状態。
-
-```ts
-interface BirthRegistry {
-  fatherId: string;
-  motherId: string;
-  birthYear: number;          // 予約された年（旅団暦）
-  potentialStats: Stats;      // 父母の baseStats 平均（子の全盛期予想値）
-  job: JobType | null;        // 両親のいずれかから 50:50 で継承
-  plannedJoinYear: number;    // = birthYear + 15
-}
-```
-
-### advance() の年次処理順序
-
-```
-1) 好感度更新     — battlePairs に渡された ally 同分隊ペアに +affinityPerBattle
-2) 加齢 → 引退判定 — 全ユニット grow()、age >= maxAge を retire イベント
-3) 結婚判定        — 未婚男女・互いに >= affinityThreshold・marriageProb で成立
-                    各ユニットは1年で最大1組まで成立。spouseId を双方向に記録
-4) 出産予約        — 結婚済みカップル毎年 birthProb で BirthRegistry を作成
-                    pendingBirths に push（カップル単位、双方向重複を排除）
-5) 15歳入団        — pendingBirths のうち plannedJoinYear = newYear のものを Unit 化
-                    baseStats に potentialStats を入れ、age=15 とすることで
-                    stats ゲッターが自動的に growthFactor = 15/peakStartAge を適用
-6) recruits 追加  — 既存の入団ロジック（外部から渡されたユニット）
-```
-
-### 継承者ステータス計算
-
-子の baseStats（全盛期最大値）は両親の baseStats を整数平均:
-
-```
-potentialStats[k] = round((father.baseStats[k] + mother.baseStats[k]) / 2)
-```
-
-15歳入団時の実効ステータスは三段階モデルの修業期式そのもの:
-
-```
-stats[k] = max(1, round(potentialStats[k] * (15 / peakStartAge)))
-```
-
-例: peakStartAge=25 なら growthFactor = 0.6、potentialStats.strength=110 → stats.strength=66。
-
-### AdvanceOptions
-
-| オプション | 既定 | 用途 |
-|---|---|---|
-| `battlePairs` | `[]` | バトル直後に渡す `[allyId, allyId]` 配列。`BattleSimulator.run()` の `squadmatePairs` をそのまま渡せる |
-| `rng` | `Math.random` | DI された乱数生成器（再現性のため） |
-| `marriageProb` | `0.3` | 条件成立ペアの結婚成立確率 |
-| `birthProb` | `0.2` | 結婚済みカップル毎年の出産予約確率 |
-| `affinityPerBattle` | `10` | バトル1回で同分隊ペアに加算される好感度 |
-| `affinityThreshold` | `100` | 結婚条件の好感度閾値 |
-| `childPeakStartAge` | `25` | 子の全盛期開始年齢（実ステータス算出にも使用） |
-| `childPeakEndAge` | `32` | 子の全盛期終了年齢 |
-| `childMaxAge` | `55` | 子の引退年齢 |
-
-### YearEvent 拡張
-
-```ts
-type YearEvent =
-  | { type: 'join'; unit }
-  | { type: 'retire'; unit }
-  | { type: 'marriage'; husband; wife }
-  | { type: 'birth_planned'; registry }
-  | { type: 'birth'; unit };          // 15歳入団した継承者
-```
-
-### BattleSimulator 連携
-
-`SimulationResult.squadmatePairs: ReadonlyArray<[string, string]>` に、そのバトルで同一 Squad に同居していた ally ユニットの ID 組が片方向で格納される。これを `brigade.advance({ battlePairs: result.squadmatePairs })` または `brigade.applyBattleAffinity(result.squadmatePairs)` に渡すと好感度が更新される。
-
-### 検証スクリプト
-
-`scripts/verify-bloodline.ts` で「同分隊10戦 → 結婚 → 出産 → 15年後継承者加入」の一連流れを決定的シード + 確率100%設定で検証できる。
+- 全日本語テキストの SoT は `Config/localization_ja.json`（セクション: phases / passives / squadRows /
+  effectKinds / effectScopes / jobs / items / prophecyKinds / enemySkills / epochs / enemyArchetypes / names / ui / marriage）。
+- `NameResolver`（キー→氏名、`@` 連結の称号付き複合キーを「称号＋名＋姓」へ連結）／ `PhaseNameResolver` ／
+  `MasterDataNameResolver`（ジョブ/アイテム/予言/敵スキル/章名）が解決。`ChronicleGlobal.LoadLocalization` が
+  res:// から一度だけ読み込んで各リゾルバを構築する。
+- `NameGenerator` は 3 文化圏 × 性別のプールから歴史的重複を避けてキーを払い出し、枯渇時は称号複合キーへフォールバック。
+- **未知キーは例外を投げず生キーを返す**（画面が落ちず、未登録キーが一目で分かる）。
 
 ---
 
-## 命名システム
+## 7. テスト ＆ CI
 
-旅団 100年史で全ユニットが固有の存在感を持てるよう、多文化ネーミングデータと「歴史的に重複しない」ユニーク制約を実装している。
-
-### 文化圏 (Origin)
-
-| Origin | 雰囲気 | 含まれる名前の系統 |
-|---|---|---|
-| `Japanese` | 古風・力強い和風 | 戦国武将・古典文学・神話・公家武家の名乗り・幕末志士・自然/神獣 |
-| `European` | 叙事詩的・中世風 | ニーベルンゲン・アーサー王・シャルルマーニュ・神聖ローマ・北欧ヴァイキング |
-| `Classical` | 神話・星・幻想 | ギリシャ/ローマ・メソポタミア・エジプト・ケルト・天体・カバラ・ヒンドゥー |
-
-### データ規模
-
-`packages/core/src/data/names.ts` に各 Origin × Gender = 6 プール、各 150 名以上、合計 **910名** を収録。プール定義時に内部重複と件数下限（150）をモジュール読み込み時にアサートしており、欠落は即座に throw する。
-
-### 重複回避の仕様
-
-1. **Brigade.historicalNames: ReadonlySet<string>** — 過去に旅団に所属した全ユニット（新人・子供・引退者含む）の名前を永続記録。
-   - Brigade コンストラクタが現 `units` の名前を自動登録する。
-   - `advance()` が新規追加（recruits + 子供）の名前も追記して新 Brigade に引き継ぐ。
-   - `applyBattleAffinity()` など他のメソッドも `historicalNames` を引き継いで返す。
-
-2. **NameGenerator.pick(origin, gender, historical)** — `historical` Set を参照し、未登場の候補名を返す。
-   - プール内の使用済みを除外して残候補からランダム抽出
-   - プール枯渇時は称号（`TITLES`: 「暁の」「古の」「不屈の」など32種）を接頭辞として付与
-   - 称号付き名も `historical` と照合してユニーク性を保証
-
-3. **「Jr.」「II世」「(2)」式の記号的重複回避は厳禁**（仕様）。回避手段は称号付与のみ。
-
-### 命名の継承ロジック
-
-- **新人の命名**: ランダムな `Origin` + `Gender` から未登場名を選択。
-- **子供の命名**（出産予約時）: 両親のいずれかの `Origin` を **50% で継承**。出産予約 `BirthRegistry.origin` に記録され、15歳入団時に `NameGenerator.pick(reg.origin, gender, historical)` で名前を決定する。
-- `Brigade.advance({ nameGenerator })` に NameGenerator を渡さない場合は旧挙動（`継承者child-<year>-<n>`）にフォールバックする（後方互換）。
-
-### Unit.origin
-
-`Origin` を Unit のフィールドとして保持し、子供の文化圏継承に使う。`UnitProps.origin` はオプショナル、未指定時のデフォルトは `"European"`（既存テスト互換）。新規生成箇所では NameGenerator と合わせて明示指定すること（[`unit_generation` skill](../.claude/skills/unit_generation.md) 参照）。
-
-### 検証
-
-`scripts/verify-naming.ts` で以下を確認できる:
-
-1. 300名連続生成で全員ユニーク + 3文化圏バランス分布（各 60〜140 範囲）
-2. プール枯渇テスト（European/Male を 200連続 → 151番目から称号付与に切替）
-3. Brigade.historicalNames の自動蓄積（50年経過 → 投入名全件保持）
+- xUnit。対象は **Core 純粋層のみ**（Godot 非依存）。`ChronicleGlobal` も `SafeEmit` 隔離により Godot なしで API を検証可能。
+- 現況 **653 pass / 0 fail**（`dotnet test Tests/ChronicleKnights.Tests.csproj`）。
+- `Tests/ChronicleKnights.Tests.csproj` は `Core/**/*.cs` を `<Compile Include>` で取り込み、Godot 本体アセンブリを参照しない。
+  `WarningsAsErrors` で 13 個の CS 警告コードをビルドエラー化（構造的品質ガード）。
+- CI: `.github/workflows/dotnet-test.yml`（**手動トリガー専用** / ubuntu / .NET 8 SDK / Tests のみ）。
 
 ---
 
-## ファイル構成
+## 8. 主要ファイル早見
 
 ```
-packages/core/src/
-  models/
-    Unit.ts          ← ユニット定義・経年変化ロジック
-    Brigade.ts       ← 旅団・年次進行
-    Squad.ts         ← 分隊
-    Enemy.ts         ← 敵
-  BattleManager.ts   ← ターン処理・ダメージ計算
-  BattleSimulator.ts ← 高レベルシミュレーター
-  config.ts          ← MAX_UNITS_PER_SQUAD 等
-
-apps/cli/src/
-  simulate_history.ts  ← 100年旅団シミュレーション
-  simulate_battle_*.ts ← 各種バトルシナリオ
-  generate_report.ts   ← JSON → コンソールレポート
-
-scripts/
-  run-sim.ts               ← 大隊間バトルCLI
-  run-grand-chronicle.ts   ← 100年旅団変遷シミュレーター
-  age_progression_test.ts  ← 経年変化の動作確認
-  verify-bloodline.ts      ← 血統継承システムのE2E検証
-  verify-naming.ts         ← 命名重複回避システムのE2E検証
-  verify-individuality.ts  ← peak年齢の個体差・遺伝性 E2E検証
-
-packages/core/src/config/
-  ChronicleConfig.ts       ← 統合Config（全チューニングパラメータの単一SoT）
-
-packages/core/src/data/
-  names.ts                 ← 多文化名前データ(910名) + NameGenerator
-
-packages/core/src/utils/
-  age.ts                   ← rollPeakAges / rollChildPeakAges
-
-config/
-  jobs.json           ← ジョブデフォルト値
-  game_settings.json  ← MAX_UNITS_PER_SQUAD 等
+Core/Unit/Unit.cs                旅団員（不変・ステータス非保持）
+Core/Job/JobMaster.cs            8 ジョブ数値 SoT
+Core/Formation/FormationBoard.cs V 字 3×3 盤面
+Core/Battle/BattleResolver.cs    1 ターン解決器
+Core/Battle/EnemyScaler.cs       敵スケーリング（±15% 個体差）
+Core/Managers/PointsEconomy.cs   ポイント一元経済
+Core/Managers/RosterLifecycle.cs 世代交代（加齢・完全ロスト仕分け）
+Core/Timeline/Prophecy.cs        予言レコード + 種別
+Core/Chronicle/ChronicleTimelineConfig.cs  章・年数・章ボス年
+Core/Persistence/SaveSerializer.cs         状態 ⇄ JSON（純粋）
+Autoload/ChronicleGlobal.cs      常駐 SoT・全 API・シグナル
+UI/GameDirector.cs               画面切替の司令塔（動的 B 型）
+Config/localization_ja.json      全日本語テキストの辞書
 ```

@@ -200,4 +200,39 @@ public class ChronicleTimelineConfigTests
         var second = ChronicleTimelineConfig.BuildOmenScheduleForYear(48);
         Assert.Equal(first, second);
     }
+
+    // ─── 5. 章ボス年スナップ（年送りジャンプがボス年を踏み越さない） ────────────
+
+    [Theory]
+    // 跨ぐ場合: ボス年へちょうど着地する年数へクランプ（スナップ）。
+    [InlineData(23, 4, 2)]   // 23 + 4 = 27 が 25 を踏み越す -> 25 へ着地 (=2)
+    [InlineData(24, 3, 1)]   // 24 + 3 = 27 -> 25 へ着地 (=1)
+    [InlineData(48, 4, 2)]   // 48 + 4 = 52 -> 50 へ着地 (=2)
+    [InlineData(98, 5, 2)]   // 98 + 5 = 103 -> 100 へ着地 (=2)
+    public void ClampSkipToNextBossYear_SnapsOntoBossYear_WhenWouldOvershoot(
+        int currentYear, int requested, int expected)
+    {
+        Assert.Equal(expected, ChronicleTimelineConfig.ClampSkipToNextBossYear(currentYear, requested));
+    }
+
+    [Theory]
+    // 跨がない場合・ちょうど着地する場合・最終ボス超えは、要求年数をそのまま返す。
+    [InlineData(10, 3, 3)]    // 10 + 3 = 13、25 まで余裕 -> クランプなし
+    [InlineData(22, 3, 3)]    // 22 + 3 = 25 ちょうど着地 -> クランプなし（次周がボス戦）
+    [InlineData(25, 4, 4)]    // ボス年に居る -> 次ボス 50 まで余裕 -> クランプなし
+    [InlineData(100, 3, 3)]   // 最終ボス(100)以降はボス年なし -> クランプなし
+    [InlineData(105, 4, 4)]   // 100 超え -> クランプなし
+    public void ClampSkipToNextBossYear_LeavesUnchanged_WhenNoBossCrossed(
+        int currentYear, int requested, int expected)
+    {
+        Assert.Equal(expected, ChronicleTimelineConfig.ClampSkipToNextBossYear(currentYear, requested));
+    }
+
+    [Fact]
+    public void ClampSkipToNextBossYear_AlwaysAdvancesAtLeastOneYear()
+    {
+        // 防御的: 要求 0 でも暦は必ず 1 以上前進する。
+        Assert.True(ChronicleTimelineConfig.ClampSkipToNextBossYear(10, 0) >= 1);
+        Assert.True(ChronicleTimelineConfig.ClampSkipToNextBossYear(24, 0) >= 1);
+    }
 }

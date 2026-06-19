@@ -137,9 +137,31 @@ public partial class RestResultOverlay : Godot.Control
             detail, "英気を養った大隊員", $"{outcome.RestedUnitCount} 名（全員 万全）",
             "rest-result-recovered-line", "rest-result-recovered-val", GainHighlightColor);
 
-        var pointsValue = AppendLine(
-            detail, "休息ボーナス", $"+{outcome.PointsReward} pt",
-            "rest-result-points-line", "rest-result-points-val", GainHighlightColor);
+        // 予言の恵み（ポイント）— RewardPoints / Rest のときだけ表示（0 のときは出さない）。
+        Label? pointsValue = null;
+        if (outcome.PointsReward > 0)
+        {
+            pointsValue = AppendLine(
+                detail, "獲得ポイント", $"+{outcome.PointsReward} pt",
+                "rest-result-points-line", "rest-result-points-val", GainHighlightColor);
+        }
+
+        // 新人加入（ScoutReward 予言）— 加入があった年だけ表示。
+        if (outcome.RecruitedCount > 0)
+        {
+            AppendLine(
+                detail, "新たな加入", $"+{outcome.RecruitedCount} 名",
+                "rest-result-recruit-line", "rest-result-recruit-val", GainHighlightColor);
+        }
+
+        // 装備ドロップ（EquipmentDrop 予言）— ドロップがあった年だけ表示。
+        if (outcome.DroppedItemId is { } droppedItem)
+        {
+            var itemName = _chronicleGlobal?.ResolveItemName(droppedItem) ?? droppedItem.ToString();
+            AppendLine(
+                detail, "装備ドロップ", $"{itemName} Lv{outcome.DroppedItemLevel}",
+                "rest-result-drop-line", "rest-result-drop-val", GainHighlightColor);
+        }
 
         AppendLine(
             detail, "ポイント残高", $"{outcome.BalanceAfter} pt",
@@ -151,8 +173,11 @@ public partial class RestResultOverlay : Godot.Control
         closeButton.Pressed += OnClosePressed;
         outer.AddChild(closeButton);
 
-        // ── 演出点火: 休息ボーナス > 0 のときだけ「コインのきらめき」を焚く ─────
-        IgnitePointsJuice(panel, pointsValue, outcome.PointsReward);
+        // ── 演出点火: ポイント獲得 > 0 のときだけ「コインのきらめき」を焚く ─────
+        if (pointsValue is not null)
+        {
+            IgnitePointsJuice(panel, pointsValue, outcome.PointsReward);
+        }
     }
 
     /// <summary>

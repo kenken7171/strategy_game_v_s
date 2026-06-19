@@ -344,6 +344,15 @@ public partial class ChronicleGlobal : Godot.Node
     private int _pendingGenerationSkipYears;
 
     /// <summary>
+    /// Chronicle で選択された予言そのもの（Kind / Value）を、その年の決算まで保留しておく値。
+    /// 非戦闘の予言（RewardPoints / ScoutReward / EquipmentDrop / Rest）は休息に流れるため、
+    /// <see cref="ExecuteRest"/> がこれを読んで予言の報酬（ポイント加算 / 新人加入 / 装備ドロップ）を
+    /// 確定する。消費後・年送り（<see cref="AdvanceGenerationLocked"/>）でクリアする。
+    /// ★ Random / 保留年数と同様セーブには含めない。常に _stateLock 内でのみ読み書きする。
+    /// </summary>
+    private Prophecy? _pendingProphecy;
+
+    /// <summary>
     /// 名前キー → 表示用日本語文字列のリゾルバ。LoadLocalization で
     /// res://Config/localization_ja.json から構築される。未ロード時は null で、
     /// その場合 ResolveDisplayName は生のキーをフォールバック表示する。
@@ -403,6 +412,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle = null;                       // 新規開始時は非戦闘状態
             _battleRng = new Random();                  // 戦闘乱数は StartBattle で再シード
             _pendingGenerationSkipYears = 0;            // 新規開始時は保留年数なし
+            _pendingProphecy = null;                    // 保留予言も更地
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty; // 戦果基準点も更地
             _lastBattleOutcome = BattleOutcome.Ongoing; // 退避中の決着状態も更地
             LastBattleSpoils = BattleSpoils.Empty;      // 新規開始時は戦果なし
@@ -446,6 +456,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle            = null;
             _battleRng               = new Random();
             _pendingGenerationSkipYears = 0;
+            _pendingProphecy         = null;
             _battleOpeningCombatants = ImmutableDictionary<Guid, Unit>.Empty;
             _lastBattleOutcome       = BattleOutcome.Ongoing;
             LastBattleSpoils         = BattleSpoils.Empty;
@@ -569,12 +580,23 @@ public partial class ChronicleGlobal : Godot.Node
             // 実際の年送りはループ幕引き（Battle→Chronicle）でまとめて適用する。
             selected = CurrentTimeline.GetSelectionOrThrow(prophecyId);
             _pendingGenerationSkipYears = selected.SkipYears;
+            _pendingProphecy = selected; // その年の報酬決算（ExecuteRest）まで保留
+
+            // ★ 予言の種別がこの年の行動を決める（結線の要）: Battle のみ出撃(March)、それ以外
+            //   （Rest / RewardPoints / ScoutReward / EquipmentDrop）は休息(Rest)。これにより
+            //   「年代記で戦闘以外の予言を選んだのに編成・戦闘へ進んでしまう」事故を根絶する。
+            //   ★ ただし章ボス年（25/50/75/100）は出撃必至（強制戦闘）: 休息予言でも March に上書きし、
+            //     章ボスを休息で素通りできないようにする（ボススナップで暦は必ずボス年へ着地するため、
+            //     その年に戦闘を強制すれば 4 体の章ボスは構造的に取りこぼせない）。
+            CurrentAction = ActionPhaseRouter.ActionForProphecyAtYear(
+                selected.Kind, ChronicleTimelineConfig.IsEpochBossYear(CurrentTimeline.Turn));
         }
 
         // 予言を選択したら自動的に次フェーズ（Guild）へ。Chronicle 以外で呼ばれた
         // 場合は状態マシンのガードにより no-op となる（一方通行の安全性）。
-        // ※ 年送りは行わないため Roster/Economy/Timeline は変化せず、ここで発火する
-        //   のは PhaseChanged（TryAdvanceTo 内）のみ。
+        // ※ 年送りは行わないため Roster/Economy/Timeline は変化せず、ここで発火するのは
+        //   PhaseChanged（TryAdvanceTo 内）のみ。CurrentAction は上のロック内で予言種別から
+        //   確定済みで、PhaseChanged を受けて新たにマウントされる旅団組合画面がそれを読み直す。
         TryAdvanceTo(GamePhase.Guild);
 
         return selected;
@@ -1124,7 +1146,25 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     private bool AdvanceGenerationLocked()
     {
-        var years = _pendingGenerationSkipYears;
+        // 出撃経路で未消費の予言報酬を、年送り（戦闘後）にここで確定する。休息経路では ExecuteRest が
+        // 既に消費し _pendingProphecy=null のため no-op。Battle 予言は RestService 側で報酬 0（戦果で
+        // 報いる）ゆえ通常の戦闘年も実質 no-op。発火するのは「章ボス年で非戦闘予言を選び強制出撃に
+        // なった」周など、出撃したのにカード報酬が残っているケース（「戦闘後にも加算」を満たす）。
+        // 加齢より前に適用するため、加入した新人は休息経路と同様にこの周の年送りで加齢される（整合）。
+        if (_pendingProphecy is { } pendingReward)
+        {
+            var rewardRes = RestService.Resolve(BattalionRoster, CurrentEconomy, pendingReward, _rng);
+            CurrentEconomy  = rewardRes.NextEconomy;
+            BattalionRoster = rewardRes.NextRoster;
+        }
+
+        // 予言が告げた飛ばし年数。ただし章ボス年（25/50/75/100）を踏み越さないよう、現在の暦年から
+        // 見て次のボス年でクランプ（スナップ）する。これにより加齢・収入・暦の前進が同一年数で完全に
+        // 整合し（「○年経過」が暦にも効く）、かつボス戦を取りこぼさない（接近周はボス年へちょうど着地し、
+        // 次の周回でその年の戦闘がボス戦になる）。
+        var currentYear = CurrentTimeline?.Turn ?? 0;
+        var years = ChronicleTimelineConfig.ClampSkipToNextBossYear(
+            currentYear, _pendingGenerationSkipYears);
 
         // 1. 加齢 → 完全ロストの仕分け（純粋層 RosterLifecycle に委譲）。
         //    現役のみを次世代ロスタへ持ち越す（離脱者は不可逆に外れる）。
@@ -1149,15 +1189,19 @@ public partial class ChronicleGlobal : Godot.Node
         // 3. 定期収入を加算（SoT #1）。
         CurrentEconomy = CurrentEconomy.EarnFromTimeSkip(years);
 
-        // 4. 次世代の予言 3 つを再生成（過去予言は完全破棄）。
+        // 4. 暦を years ぶん進めて次世代の予言 3 つを再生成（過去予言は完全破棄）。
+        //    暦の前進は加齢・収入と同一の years を用いる（「○年経過」の整合）。
         if (CurrentTimeline is not null)
         {
             CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
-                TimelineEngine.DefaultGenerator, _rng);
+                TimelineEngine.DefaultGenerator, _rng, years);
         }
 
-        // 5. 保留年数をリセット（次の Chronicle 選択で改めて設定される）。
+        // 5. 保留年数・保留予言をリセット（次の Chronicle 選択で改めて設定される）。
+        //    予言報酬は休息決算（ExecuteRest）で既に消費済みのため、ここでは取りこぼし防止の
+        //    防御的クリア（出撃＝Battle 予言の経路では報酬がないため、そのまま破棄してよい）。
         _pendingGenerationSkipYears = 0;
+        _pendingProphecy = null;
 
         // 盤面に掃き出しが起きたかを呼び出し側へ返す（FormationChanged 発火の判断材料）。
         return formationChanged;
@@ -1597,17 +1641,29 @@ public partial class ChronicleGlobal : Godot.Node
     public RestOutcome ExecuteRest()
     {
         RestOutcome outcome;
+        bool rosterChanged;
         lock (_stateLock)
         {
             if (!IsInitialized) return RestOutcome.None;
 
-            var resolution = RestService.Resolve(BattalionRoster, CurrentEconomy);
+            // 保留中の予言（この年に選んだカード）の報酬を、休息決算と同時に確定する。
+            //   RewardPoints → ポイント加算 / ScoutReward → 新人加入 / EquipmentDrop → 装備ドロップ /
+            //   Rest（または予言なし）→ 固定の休息ボーナス。純粋層 RestService が算術・生成を担う。
+            var resolution = RestService.Resolve(
+                BattalionRoster, CurrentEconomy, _pendingProphecy, _rng);
+
             CurrentEconomy  = resolution.NextEconomy;
+            rosterChanged   = !ReferenceEquals(resolution.NextRoster, BattalionRoster);
+            BattalionRoster = resolution.NextRoster;
             LastRestOutcome = resolution.Outcome;
             outcome = resolution.Outcome;
+
+            // 予言報酬はここで消費済み。年送り（AdvanceGenerationLocked）で二重適用しないようクリア。
+            _pendingProphecy = null;
         }
 
         SafeEmit(SignalEconomyChanged);
+        if (rosterChanged) SafeEmit(SignalRosterChanged); // 新人加入・装備ドロップで名簿が動いた時
         return outcome;
     }
 
@@ -1805,6 +1861,14 @@ public partial class ChronicleGlobal : Godot.Node
     public int RosterSize => BattalionRoster.Count;
 
     /// <summary>
+    /// 現在の暦年（<see cref="CurrentTimeline"/>.Turn）が章ボス出現年（25/50/75/100）か。
+    /// 未初期化・タイムライン null のときは false。UI が「この年は出撃必至（章ボス）」表示に使う。
+    /// </summary>
+    public bool IsCurrentYearEpochBossYear()
+        => CurrentTimeline is not null
+           && ChronicleTimelineConfig.IsEpochBossYear(CurrentTimeline.Turn);
+
+    /// <summary>
     /// 生存中の旅団員のみを返す純粋クエリ。
     /// </summary>
     public IReadOnlyList<Unit> GetAliveUnits()
@@ -1998,6 +2062,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentBattle   = null;              // 戦闘は永続化しない（ロード再開は非戦闘状態）
             _battleRng      = new Random();       // 戦闘乱数は次の StartBattle で再シード
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
+            _pendingProphecy = null;             // 保留予言も保存しない
             _chronicleLog   = loaded.ChronicleLog; // ★ 旅団史を永続化セーブから復元（v1 は空配列）
             IsInitialized   = true;
         }

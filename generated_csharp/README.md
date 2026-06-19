@@ -195,7 +195,7 @@ res://Assets/Textures/Jobs/{ジョブ識別子}/{male|female}.png
 
 - `dotnet build ChronicleKnights.csproj --configuration Debug` → 0 警告 / 0 エラー。
 - `dotnet test Tests/ChronicleKnights.Tests.csproj`（環境変数なし、焼き込んだ roll-forward で net8.0→net10）
-  → 失敗 0 / 合格 630 / 警告 0。
+  → 失敗 0 / 合格 653 / 警告 0。
 - 実機起動（Intel Mac / macOS 12.7.6 / Godot 4.3 .NET）→ Vulkan(Forward+) でウィンドウ描画、
   ジョブ画像ロード・.NET 解決エラーなし。
 

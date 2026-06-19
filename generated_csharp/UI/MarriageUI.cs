@@ -428,10 +428,11 @@ public partial class MarriageUI : Godot.Control
     }
 
     /// <summary>
-    /// 今年の行動トグル（⚔出撃 / ☾休息）を描く。選択は ChronicleGlobal.CurrentAction（単一 SoT）を
-    /// 毎回読み直して金字で強調する。押下は SetPlannedAction を呼ぶだけ（FormationChanged →
-    /// OnFormationChanged で本メソッドが再描画）。GameDirector の「次へ」はこの選択を見て分岐する:
-    /// 出撃 → 編成画面へ入場 / 休息 → 編成・戦闘を一切経由せず休息報酬画面へ直行。
+    /// 今年の行動を「提示するだけ」の表示ブロックを描く（行動トグルは撤去）。戦う/休むは年代記の予言が
+    /// 既に確定している（ActionPhaseRouter.ActionForProphecy: Battle のみ出撃、それ以外は休息）ため、
+    /// 拠点では選び直させない——矛盾する選択肢（休息の年に⚔出撃 等）を一切出さない。表示は
+    /// ChronicleGlobal.CurrentAction（単一 SoT）を読み直して金字で示すだけ。GameDirector の「次へ」が
+    /// この確定行動を見て分岐する: 出撃 → 大隊編成へ入場 / 休息 → 編成・戦闘を経由せず休息報酬へ直行。
     /// </summary>
     private void RenderActionChoice()
     {
@@ -443,46 +444,30 @@ public partial class MarriageUI : Godot.Control
         }
 
         var current = _chronicleGlobal.CurrentAction;
+        var isBossYear = _chronicleGlobal.IsCurrentYearEpochBossYear();
 
-        var caption = new Label
+        // 章ボス年は出撃必至（予言が休息でも強制 March）。その理由をプレイヤーへ明示し、
+        // 無言の強制戦闘を「バグ」に見せない。通常年は確定した出撃/休息をそのまま示す。
+        string captionText;
+        if (isBossYear)
         {
-            Text = current == PlannedAction.March
-                ? "選択中：⚔ 出撃 ▶「次へ」で大隊編成へ入場（敵と交戦）"
-                : "選択中：☾ 休息 ▶「次へ」で編成・戦闘を回避し安全に年を送る（休息報酬へ）",
-        };
+            captionText = "⚠ 章ボス出現の年！出撃必至 ▶「次へ」で大隊編成へ入場（章ボスと決戦）";
+        }
+        else if (current == PlannedAction.March)
+        {
+            captionText = "⚔ 出撃の年 ▶「次へ」で大隊編成へ入場（敵と交戦）";
+        }
+        else
+        {
+            captionText = "☾ 休息の年 ▶「次へ」で編成・戦闘を回避し安全に年を送る（休息報酬へ）";
+        }
+
+        var caption = new Label { Text = captionText };
         caption.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         caption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        caption.AddThemeColorOverride("font_color", Colors.Gold);
         caption.SetMeta(TestIdMetaKey, "marriage-action-caption");
         _actionContainer.AddChild(caption);
-
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 12);
-        row.SetMeta(TestIdMetaKey, "marriage-action-row");
-        _actionContainer.AddChild(row);
-
-        var marchButton = new Button
-        {
-            Text = current == PlannedAction.March ? "⚔ 出撃【選択中】" : "⚔ 出撃",
-        };
-        if (current == PlannedAction.March)
-        {
-            marchButton.AddThemeColorOverride("font_color", Colors.Gold);
-        }
-        marchButton.SetMeta(TestIdMetaKey, "marriage-action-march");
-        marchButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.March);
-        row.AddChild(marchButton);
-
-        var restButton = new Button
-        {
-            Text = current == PlannedAction.Rest ? "☾ 休息【選択中】" : "☾ 休息",
-        };
-        if (current == PlannedAction.Rest)
-        {
-            restButton.AddThemeColorOverride("font_color", Colors.Gold);
-        }
-        restButton.SetMeta(TestIdMetaKey, "marriage-action-rest");
-        restButton.Pressed += () => _chronicleGlobal?.SetPlannedAction(PlannedAction.Rest);
-        row.AddChild(restButton);
     }
 
     private void RenderBalance()

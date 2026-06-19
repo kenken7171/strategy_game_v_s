@@ -1,502 +1,477 @@
 # CLAUDE.md — Chronicle Knights プロジェクト現状ドキュメント
 
-> このドキュメントは **本リポジトリの「現在のありのままの設計図」** を記録するものである。
-> 提案・将来構想は含まない。コードを読み取って実態のみを写す。
+> このドキュメントは **本リポジトリの「現在のありのままの設計図」** を記録する。
+> 提案・将来構想は含まない。コードを読み取って実態のみを写す（将来構想は
+> `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` 側）。
 >
-> 一次仕様書（絶対ルール）は別途 `instructions.md` に存在する。本書は「コードの実態」、
-> instructions.md は「守るべきルール」と役割が分かれている。
+> 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
+> 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠コミット: `3673cca`（ローテーション直感統一 + 次鋒予告 UI）
+> 最終更新の根拠コミット: `abc249b`（休息トグルの宿主即 QueueFree）／ 検収: `dotnet test` 653 pass / 0 fail。
+
+---
+
+## 0. 最重要 — このリポジトリは「2 つの時代」が同居している
+
+| 区分 | 場所 | 実態 | 扱い |
+|---|---|---|---|
+| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・653 テスト緑 | **すべての新規実装はここ** |
+| 凍結された旧本体 | `apps/`・`packages/`・`scripts/`・`config/jobs.json`・`tools/` | Bun + Hono + React + Vite の TypeScript 版。もうゲームには一切繋がっていない | **参照専用（変更禁止・原則放置）**。アーキタイプ検証の歴史的レファレンス |
+
+旧 TS 版は「先に TS で検証 → C# へ翻訳」というかつてのフローの名残で、今は完全に役目を終えている。
+**本書の B 章以降はすべて `generated_csharp/`（C# 版）について記述する。** 旧 TS 版の構造を知りたい場合は
+git 履歴（`abc249b` 以前）と各旧ファイルのコメントを参照する。
 
 ---
 
 ## A. システムアーキテクチャ概要
 
-### A-1. リポジトリ構成（モノレポ）
+### A-1. プロジェクト構成（`generated_csharp/`）
 
 ```
-strategy_game_v_s/
-├── apps/
-│   ├── api/          @chronicle-knights/api      Hono 4 + Bun の HTTP API
-│   └── cli/          @chronicle-knights/cli      検証・シミュレーション CLI 群
-├── packages/
-│   ├── core/         @chronicle-knights/core     ゲームロジックの純粋 TS ライブラリ
-│   └── frontend/     @chronicle-knights/frontend React 18 + Vite 5 の SPA
-├── config/           設定 JSON（jobs.json 等）
-├── docs/             設計ドキュメント
-├── scripts/          スクリプト（run-grand-chronicle 等）
-├── tools/            補助ツール
-├── reports/          シミュレーション出力レポート
-├── image/            16-bit ドット絵原本（複製先: packages/frontend/public/image）
-├── instructions.md   絶対ルール集（プロジェクト永続指示書）
-└── TODO.md           タスクトラッキング
+generated_csharp/
+├── project.godot                Godot プロジェクト定義（main_scene=Main.tscn / autoload=ChronicleGlobal）
+├── Main.tscn                    起動シーン（ルート Control に UI/GameDirector を結ぶ唯一の .tscn）
+├── ChronicleKnights.csproj      本体ビルド定義（Godot.NET.Sdk/4.3.0 / net8.0 / RollForward=LatestMajor）
+├── ChronicleKnights.sln         本体 + Tests を束ねるソリューション
+├── play.command                 Mac 用ワンクリック起動ランチャ（C# ビルド → godot 実機起動）
+│
+├── Core/        ★純粋ゲームロジック（Godot を一切知らない「脳」。xUnit で単体検証可）
+├── Autoload/    ☆ChronicleGlobal.cs — 常駐 SoT（唯一の真実）。Godot 依存の中枢
+├── UI/          ☆現役 UI（Godot Control をコードで動的構築。.tscn は Main 以外不使用）
+├── UserInterface/  ⚠駐機中の第 2 UI（後述 G-3。Main.tscn から未結線＝実行時に到達しない）
+├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
+├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
+└── Tests/       xUnit 単体テスト（Core を対象。653 pass）
 ```
 
 ### A-2. 技術スタック
 
 | レイヤ | 技術 | バージョン |
 |---|---|---|
-| ランタイム | **Bun** | 1.3.13 |
-| 言語 | **TypeScript** | 5.7.2（strict mode） |
-| API サーバ | **Hono** | 4.6.14 |
-| API HTTP アダプタ | `@hono/node-server` | 1.13.7 |
-| フロント UI | **React** | 18.3.1 |
-| フロントビルド | **Vite** | 5.4.11 |
-| Vite React プラグイン | `@vitejs/plugin-react` | 4.3.4 |
-| スタイル | **Plain CSS**（Tailwind は未導入） | 単一ファイル `styles/global.css` |
+| ゲームエンジン | **Godot Engine**（.NET / mono 版必須） | 4.3 stable mono |
+| ランタイム | **.NET** | ターゲット `net8.0`、`RollForward=LatestMajor`（手元の .NET 10 でも動作） |
+| 言語 | **C#** | 12（nullable 有効・record 多用） |
+| ビルド SDK | **Godot.NET.Sdk** | 4.3.0 |
+| テスト | **xUnit** | Core 純粋層のみ対象（Godot 非依存） |
+| UI | **Godot Control ノードをコードで動的構築**（`.tscn` は `Main.tscn` 1 枚のみ） | — |
 
-### A-3. 依存関係（モノレポ内 import）
+### A-3. 三層アーキテクチャ（脳・SoT・身体の分離）
 
-- `apps/api` → `packages/core/src/index.ts` 経由で全 core エクスポートを参照
-  - import 例: `import { Unit, Squad, BattleSimulator, ... } from "../../../packages/core/src/index"`
-- `apps/api/src/session.ts` → 同上（GameSession 用）
-- `packages/frontend` → core への直接依存 **なし**（API JSON 経由で疎結合）
-- `packages/frontend/src/api/types.ts` が「API レスポンスと一致する型」を独自に定義する責務を持つ
-- `apps/cli` → `packages/core` を参照（シミュレーションスクリプト群）
+```
+  ┌─────────────┐   ① API を呼ぶ    ┌──────────────────┐   ② 委譲   ┌─────────────┐
+  │   UI 層      │ ───────────────▶ │   Autoload       │ ────────▶ │   Core 層    │
+  │ (Godot依存)  │                  │ ChronicleGlobal   │           │ (純粋ロジック) │
+  │ UI/*.cs      │ ◀─────────────── │ (唯一の真実 SoT)  │ ◀──────── │ Core/**.cs   │
+  └─────────────┘  ④ シグナルで通知 └──────────────────┘ ③ 新レコード └─────────────┘
+                                          ↑↓ lock で状態保護          Random は引数注入で再現可
+```
 
-### A-4. パッケージ間プロキシ（開発時）
+- **Core/** は `Godot.*` を一切 import しない純粋 C#。`dotnet test` で画面なしに検証できる。
+- **Autoload/ChronicleGlobal** だけが全状態を握り、UI からの API 呼び出しを受けて Core の純粋関数を叩き、
+  結果を「丸ごと差し替え」てシグナルを発火する（単方向データフロー）。
+- **UI/** は状態を持たず（無状態 UI）、シグナルを受けるたびに SoT を読み直して再描画する。
 
-- Vite dev server: `:5173`（host: true、外部 IP からもアクセス可）
-- API サーバ: `:8787`（`bun --hot run apps/api/src/server.ts`）
-- フロントの `/api/*` は Vite proxy で `http://localhost:8787` に転送される（`packages/frontend/vite.config.ts`）
+### A-4. コマンド実行規約（すべて `generated_csharp/` から）
 
-### A-5. コマンド実行規約
+| コマンド | 内容 |
+|---|---|
+| `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**653 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
+| `./play.command -e` | Godot エディタを開く |
+| `godot --path .` | （ビルド済み前提で）直接起動 |
 
-| コマンド | 場所 | 内容 |
-|---|---|---|
-| `bun test` | リポジトリルート | 全テスト実行（後述 D-1） |
-| `bun run type-check` | `apps/api/` | `tsc --noEmit` |
-| `bun run type-check` | `packages/frontend/` | `tsc --noEmit` |
-| `bun run build` | `packages/frontend/` | `tsc --noEmit && vite build` |
-| `bun run dev` | `apps/api/` | `bun --hot run src/server.ts`（API 起動） |
-| `bun run dev` | `packages/frontend/` | `vite`（フロント開発サーバ） |
-| `bun run sim` | `apps/cli/` | `bun run scripts/run-sim.ts` |
-| `bun run simulate` | `apps/cli/` | `simulate_history.ts` |
-| `bun run simulate:unit` | `apps/cli/` | `simulate_unit.ts` |
-| `bun run simulate:brigade` | `apps/cli/` | `simulate_brigade_battle.ts` |
-
-ルート `package.json` は **存在しない**（各サブパッケージが独立した `package.json` を持つ）。
+- `godot` は **.NET（mono）版** が必須（`godot --version` が `4.3.stable.mono.official` を返すこと）。
+- macOS の `--headless` は Godot 4.3 既知の不具合（`recursive_mutex lock failed`）でクラッシュするため、
+  画面確認は必ず windowed 起動で行う（CI でもヘッドレスは避ける）。
 
 ---
 
 ## B. Unit クラス / 型定義の現在の設計
 
-実体: `packages/core/src/models/Unit.ts`
+実体: `generated_csharp/Core/Unit/Unit.cs`（namespace は型名衝突回避で `ChronicleKnights.Core.Units`）
 
-### B-1. プロパティ一覧（`Unit` クラスのインスタンスが保持するもの）
+### B-1. 設計の核心 — Unit は「数値ステータスも HP も持たない」
 
-| プロパティ | 型 | デフォルト | 説明 |
+TS 版の `Unit` は HP・攻撃力・速度を自前で保持していたが、**C# 版は意図的にそれらを捨てた**。
+`Unit` が持つのは「個体の履歴・属性」だけ。戦闘数値は `unit.Job` から `JobMaster.All[Job].Stats` で
+**動的解決**する（数値の SoT は `JobMaster` ただ 1 つ）。
+
+| プロパティ | 型 | 説明 |
+|---|---|---|
+| `Id` | `Guid` | 一意 ID。`BattleAffinity` のキー・盤面占有・突合の基準 |
+| `Job` | `JobId` | ジョブ enum。HP/ATK/SPD/パッシブは本値から JobMaster で解決 |
+| `Age` | `int` | 現在年齢。`WithAgeProgress(years)` で一気に加算（タイムスキップ） |
+| `MaxAge` | `int` | 寿命。`Age >= MaxAge` で `HasReachedMaxAge`（完全ロスト対象） |
+| `Level` | `int` | 1〜`MaxUnitLevel`(=3)。`WithLevelUp(out overflow)` で +1（上限時 overflow） |
+| `Origin` | `Origin` | 命名文化圏（Japanese/European/Classical）。既定 European |
+| `Gender` | `Gender` | Male/Female。婚姻は男女ペア限定。既定 Male |
+| `FirstNameKey` | `string` | ASCII の名前引き当てキー（例 `name-japanese-male-007`） |
+| `LastNameKey` | `string` | ASCII の姓引き当てキー |
+| `MainEquipment` | `Equipment?` | 装備（5 大アイテム。null=未装備）。戦闘死で同時ロスト |
+| `BattleAffinity` | `IReadOnlyDictionary<Guid,int>` | 自然婚姻ポイント（好感度）。**結婚条件には不使用**（後述 E-3） |
+| `IsDead` | `bool` | 戦闘死フラグ。一度 true なら永久に旅団から失われる（完全ロスト） |
+| `Parentage` | `Parentage?` | 父母 Id（婚姻で生まれた子のみ非 null）。家系図の縦軸の鍵 |
+| `SpouseId` | `Guid?` | 配偶者 Id（婚姻成立で双方向リンク） |
+
+### B-2. 派生プロパティ（純粋な読み取り）
+
+| ゲッタ | 内容 |
+|---|---|
+| `IsAlive` | `!IsDead && !HasReachedMaxAge` |
+| `HasReachedMaxAge` | `Age >= MaxAge`（タイムスキップを跨ぐため等号ではなく以上） |
+| `IsAtMaxLevel` | `Level >= 3` |
+| `IsRemovedFromRoster` | `IsDead || HasReachedMaxAge`（世代交代で外す判定） |
+| `CanRetire` | `IsAlive && Level >= 3`（**Lv3 限定引退ルール**） |
+| `HasEquipment` / `EquippedItemId` | 装備の有無 / 種別の射影（SoT は MainEquipment、ItemId は派生のみ） |
+| `HasParentage` / `IsMarried` | 血統リンク / 婚姻の有無 |
+
+### B-3. 不変更新メソッド（すべて新インスタンスを返す `record` + `with`）
+
+`WithAgeProgress(years)` / `WithLevelUp(out overflow)` / `WithAddedAffinity(id, amount)` /
+`WithEquipment(equip?)` / `MarkDeadInBattle()` / `WithParentage(fatherId, motherId)` / `WithSpouse(spouseId)`
+
+### B-4. ハクスラ・ローグライト 4 大仕様（Unit に直結）
+
+- **完全ロスト**: 戦闘死・寿命到達したユニットは旅団から永久に失われる。装備も同時ロスト。復活手段なし。
+- **レベル上限 3**: `WithLevelUp` は Lv3 で overflow=true（余剰経験値は別系統へ）。
+- **Lv3 限定引退**: 明示引退の対象になれるのは Lv3 の生存者のみ。
+- **タイムスキップ加齢**: 予言の `SkipYears`（2〜4 年）ぶん `Age` が一気に進む（年 1 ずつではない）。
+
+---
+
+## C. ジョブシステム（数値の SoT）
+
+実体: `Core/Job/JobMaster.cs`（数値 SoT）／ `Core/Job/JobData.cs`（enum・型）／ `Core/Job/JobCodex.cs`
+
+### C-1. `JobId` enum（8 ジョブ）
+
+`IronWallKnight / HeavyInfantry / StandardBearer / Tactician / Medic / Sniper / Sorcerer / Scout`
+
+`Unit.Job` は **enum**（文字列 union ではない）。日本語ラベル・解説は `localization_ja.json` の `jobs` セクションが SoT。
+
+### C-2. `JobStats`（JobMaster.All に格納された各ジョブの不変数値）
+
+| ジョブ | MaxHp | Speed | FrontAttack | RearAttack | BattalionDefense | SquadDefense | InitiativeBuff | TurnEndSquadHeal | 特殊 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 鉄壁騎士 IronWallKnight | 250 | 10 | 50 | 10 | 10 | 15 | 0 | 0 | — |
+| 重装歩兵 HeavyInfantry | 300 | 15 | 70 | 20 | 0 | 10 | 0 | 0 | — |
+| 旗手 StandardBearer | 150 | 20 | 30 | 30 | 0 | 5 | 40 | 0 | — |
+| 戦術官 Tactician | 120 | 35 | 20 | 20 | 0 | 0 | 20 | 0 | — |
+| 衛生兵 Medic | 100 | 25 | 10 | 10 | 0 | 0 | 0 | 30 | — |
+| 狙撃兵 Sniper | 80 | 40 | 20 | 90 | 0 | 0 | 0 | 0 | ConsecutiveStrike |
+| 呪術師 Sorcerer | 40 | 15 | 10 | 120 | 0 | 0 | 0 | 0 | — |
+| 斥候 Scout | 90 | 60 | 40 | 40 | 0 | 0 | 0 | 0 | — |
+
+### C-3. パッシブ種別 `PassiveKind`（略称完全廃止・正式名称化）
+
+| enum | 旧略称 | 効果 | UI ラベル（localization） |
 |---|---|---|---|
-| `id` | `string` | 必須 | 一意 ID |
-| `name` | `string` | 必須 | 表示名（NameGenerator 由来） |
-| `age` | `number` | 必須 | 現在年齢 |
-| `birthYear` | `number \| null` | `null` | 出生年。手動入団者は null |
-| `peakStartAge` | `number` | 必須 | 全盛期開始年齢（`rollPeakAges`） |
-| `peakEndAge` | `number` | 必須 | 全盛期終了年齢 |
-| `maxAge` | `number` | 必須 | 引退（=死亡）年齢 |
-| `baseStats` | `Stats` | 必須 | 全盛期最大値（strength/agility/intelligence/endurance） |
-| `maxHp` | `number` | `100` | 最大 HP |
-| `hp` | `number` | `maxHp` | 現在 HP |
-| `speed` | `number` | `0` | 素早さ（バフ前） |
-| `frontAttack` | `number` | `0` | FRONT 配置時の攻撃力 |
-| `rearAttack` | `number` | `0` | REAR 配置時の攻撃力 |
-| `job` | `JobType \| null` | `null` | ジョブ（B-2 参照） |
-| `sdf` | `number` | `0` | 自分隊被ダメ軽減（Squad Defense） |
-| `bdf` | `number` | `0` | 大隊全員被ダメ軽減（Brigade Defense, FRONT 配置時のみ発動） |
-| `ab` | `number` | `0` | 自分以外への速度+攻撃バフ（Ally Buff） |
-| `hl` | `number` | `0` | 自分隊回復量（Heal） |
-| `speedBuff` | `number` | `0` | バフで加算された速度 |
-| `attackBuff` | `number` | `0` | バフで加算された攻撃 |
-| `gender` | `Gender` | `"Male"` | `"Male" \| "Female"` |
-| `affinity` | `ReadonlyMap<string, number>` | `new Map()` | 他ユニット ID → 好感度 |
-| `parents` | `Parents \| null` | `null` | `{ fatherId, motherId }`、継承者ならセット |
-| `spouseId` | `string \| null` | `null` | 配偶者の ID（既婚なら非 null） |
-| `origin` | `Origin` | `"European"` | `"Japanese" \| "European" \| "Classical"`（命名文化圏） |
+| `BattalionDefense` | BDF | FRONT 配置時、大隊全員の被ダメ軽減 | 🛡️ 大隊総守護力 |
+| `SquadDefense` | SDF | 所属分隊の被ダメ軽減（配置不問） | 🛡️ 分隊守護力 |
+| `InitiativeBuff` | AB | ターン頭に大隊全員（自分以外）の速度・攻撃を底上げ | ⚡ 突撃号令 |
+| `TurnEndSquadHeal` | HL | ターン末に所属分隊の生存者を回復（HP 上限クランプ） | 💚 ターン末分隊治癒 |
+| `ConsecutiveStrike` | 二の矢 | イニシアチブ 1 番手かつ分隊先頭時に通常攻撃 2 回 | 🎯 二の矢 |
 
-`Unit` は **完全イミュータブル**：`grow()` / `takeDamage()` / `withBuffs()` / `withHeal()` / `resetBuffs()` / `withIncreasedAffinity()` / `withSpouse()` はすべて新インスタンスを返す。
-
-### B-2. `job` の型・保持形式
-
-```ts
-export type JobType =
-  | "iron_wall_knight"
-  | "tactician"
-  | "medic"
-  | "sniper"
-  | "sorcerer"
-  | "standard_bearer"
-  | "heavy_infantry"
-  | "scout";
-```
-
-- `Unit.job` は **`JobType | null` の文字列 union**。オブジェクト型ではない
-- `null` 許容：敵ボス（`makeTrialEnemy` の「試練の門の守護者」）は `job: null`
-- ジョブの **能力値の SoT** は `packages/core/src/data/jobs.ts` の `JOB_DEFAULTS: Record<JobType, JobDefaults>`
-- ジョブの **能力解説 SoT** は同ファイルの `JOB_ABILITY: Record<JobType, JobAbility>`
-- ジョブの **日本語ラベル SoT** は同ファイルの `JOB_JP`
-- API ルート `apps/api/src/routes/battle.ts` 内に `buildBattleUnit(u)` があり、`Unit` を渡すと該当 `JOB_DEFAULTS[u.job]` の値を `growthFactor` でスケールして新 `Unit` を返す（実戦投入時の最終ステータス確定処理）
-
-### B-3. 派生ゲッタ
-
-| ゲッタ | 戻り値 | 内容 |
-|---|---|---|
-| `growthFactor` | `number 0.0–1.0` | 年齢補正係数（三段階モデル: 修業期 / 全盛期 / 衰退期） |
-| `stats` | `Stats` | `baseStats × growthFactor`（最小値 `CHRONICLE_CONFIG.TIME.MIN_STAT_VALUE`） |
-| `isRetired` | `boolean` | `age >= maxAge` |
-| `isAlive` | `boolean` | `hp > 0` |
-| `isMarried` | `boolean` | `spouseId !== null` |
-| `finalSpeed` | `number` | `speed + speedBuff` |
-| `finalFrontAttack` | `number` | `frontAttack + attackBuff` |
-| `finalRearAttack` | `number` | `rearAttack + attackBuff` |
-| `finalAttack` | `number` | `frontAttack + attackBuff`（互換用、`finalFrontAttack` と同値） |
-
-### B-4. 補助型（同ファイル内 export）
-
-```ts
-export interface Stats {
-  readonly strength: number;
-  readonly agility: number;
-  readonly intelligence: number;
-  readonly endurance: number;
-}
-export interface Parents {
-  readonly fatherId: string;
-  readonly motherId: string;
-}
-```
-
-`Gender`, `Origin`, `JobType`, `UnitProps`, `Unit` はすべて `packages/core/src/index.ts` から再エクスポートされている。
+- `JobMaster.HasPassive(id, kind)` が **データ駆動**で判定（`unit.Job == "..."` の文字列マッチを完全排除）。
+  数値系は対応 `JobStats` 値 > 0、特殊系は `SpecialPassives` 包含で判定。
+- `JobFormationGuide`（推奨 row / 効果範囲 / `EffectScope` / `EffectKind`）と `RoleBonus`・`TargetRating`
+  （UI 比較用総合値 = `floor(MaxHp/5 + max(Front,Rear) + Speed) + RoleBonus`）も JobMaster が保持。
+- 補助 enum: `SquadRow{Front,RearLeft,RearRight}` / `EffectScope{SelfOnly,OwnSquad,EntireBattalion,EntireBattalionWhenFront,OwnRow}` / `EffectKind{Defend(青),Buff(金),Heal(緑),Attack(朱)}`。
 
 ---
 
-## C. バトル・編成システムとの現在の連携状況
+## D. 戦闘・編成システム
 
-### C-1. `Squad` クラス（`packages/core/src/models/Squad.ts`）
+### D-1. 編成盤面 `FormationBoard`（`Core/Formation/FormationBoard.cs`）
 
-- `id: string`（実用上は `"FRONT" | "REAR-L" | "REAR-R"`）
-- `private _units: Unit[]`、getter `units: ReadonlyArray<Unit>`
-- 最大保持数 `MAX_UNITS_PER_SQUAD = 3`（`packages/core/src/config.ts`）
-- 主要メソッド:
-  - `addUnit(unit)`
-  - `replaceUnits(units)` — **units 配列を一括差し替える**（ローテーション・編成変更の基本操作）
-  - `averageSpeed` — 生存ユニットの `finalSpeed` 平均
-  - `isDefeated` — 全員 HP ≤ 0
-  - `applyDamage(damage)` / `applyBuff(...)` / `resetBuffs()` / `applyHeal(...)` — 一括更新（内部で `Unit.takeDamage` 等を呼ぶ）
+- V 字 3×3 = **9 スロット**（`RowCount=3` × `ColumnsPerRow=3` = `SlotCount=9`）。
+- 座標は `SlotCoordinate(SquadRow Row, int Column)`。row は `Front`(中央上)/`RearLeft`(左下)/`RearRight`(右下)。
+- 盤面は **Unit 実体を持たず `OccupantId(Guid?)` だけを保持する薄い参照レイヤ**。正本はロスタ側（単一 SoT）。
+- 不変メソッド: `WithUnitAt` / `ClearedAt` / `SwapSlots` / `Rotated(RotationDirection)` / `RetainingUnits(validIds)`。
+- `RotationDirection{Clockwise, CounterClockwise}` で分隊（行）単位ローテーション（列順 0/1/2 は保持）。
+- `DeploymentGate.CanMarch(board)`: 盤面に最低 1 名いないと編成→戦闘へ前進できない（無人出撃の絶対封鎖）。
 
-### C-2. 配置データ（`GridPlacement`）
+### D-2. 戦闘の常駐統合（`ChronicleGlobal` の戦闘ライフサイクル）
 
-`packages/core/src/BattleSimulator.ts` でエクスポート。UI 表示用に毎ターン生成される：
-
-```ts
-export interface GridPlacement {
-  readonly unitId: string;
-  readonly unitName: string;
-  readonly job: string | null;          // ジョブ ID（フロントでアイコンパスに使用）
-  readonly gender: "Male" | "Female";   // フロントでアイコン path /image/{job}/{gender}.png
-  readonly row: "FRONT" | "REAR-L" | "REAR-R";
-  readonly col: number;                  // 0 / 1 / 2
-  readonly hp: number;
-  readonly maxHp: number;
-}
-```
-
-`BattleSimulator.collectPlacements()` が、各 Squad の `units` 配列インデックスを `col` として `GridPlacement[]` を組み立てる。
-
-### C-3. 分隊単位ローテーション（squad swap）
-
-`BattleSimulator.rotateGrid(strategy: "CW" | "CCW")` の現行ロジック：
+純粋層 `BattleResolver`（1 ターン解決器）を SoT へ昇格させ、3 つの薄い API が統治する:
 
 ```
-CW (時計回り):
-  REAR-L → FRONT
-  FRONT  → REAR-R
-  REAR-R → REAR-L
-
-CCW (反時計回り):
-  REAR-R → FRONT
-  FRONT  → REAR-L
-  REAR-L → REAR-R
+StartBattle(enemy, seed?)        → BattleResolver.CreateInitial で初期 BattleSnapshot 生成・CurrentBattle へ
+ResolveBattleTurn(rotation?)     → 1 ターン解決し CurrentBattle を差し替え、ImmutableArray<BattleEvent> を返す
+EndBattle()                      → 戦闘後の複製を正本ロスタへ書き戻し、CurrentBattle=null（非戦闘へ）
 ```
 
-- 実装は **`Squad.replaceUnits` で全 units 配列を 3 squad 間で swap** するだけ
-- squad 内のスロット順（col 0/1/2）は完全保持
-- 敵の分隊単位ダメージは squad ID にバインドされるため、内部 units 配列を入れ替えるだけで「正しい分隊」にダメージが落ちる整合性を保つ
-- ローテーション後に `collectPlacements()` を呼んで `turnLog.placements` を生成するため、UI 反映も自動で同期
+- 戦闘専用乱数 `_battleRng` を `StartBattle` で再シード（同一局面＋同一シードで全環境同一結果＝決定論）。
+- `StartBattle` は `ActionPhaseRouter.MayGenerateEnemy(CurrentAction)`（=March のみ true）を最終結界とし、
+  **戦闘以外の行動では敵・戦闘インスタンスを構造的に 1 ビットも生成しない**。
+- `BattleProgressGate.CanLeaveBattlePhase(CurrentBattle)`: 戦闘が未決着の間は 戦闘→年代記 へ前進しない。
 
-### C-4. 敵ボスの単体化と `EnemyState`
+### D-3. スナップショットと型
 
-- `apps/api/src/routes/battle.ts` の `makeTrialEnemy(year, rng)` で **敵を単体ボス「試練の門の守護者」として生成**
-- `Unit` として表現される（`job: null`, `id: "enemy-1"`）
-- HP は旧 10 体合算と同等のスケール（`baseHp × 10`）、攻撃力・速度は `±15%` 乱数（`0.85 + rng() * 0.30`）
-- `BattleSimulator` 内では `DynamicEnemy`（`Enemy` のサブクラス）でラップされ、`unitRecords[0]` に唯一のレコードを保持
-- `BattleSimulator.getEnemyState()` がフロントへの公開メソッド：
-
-```ts
-export interface EnemyState {
-  readonly name: string;
-  readonly job: string | null;
-  readonly hp: number;
-  readonly maxHp: number;
-  readonly speed: number;
-  readonly frontAttack: number;     // baseAttack（生成時の攻撃力固定値）
-  readonly rearAttack: number;      // 同上（front と同値）
-}
-```
-
-- `/api/battle/init` と `/api/battle/turn` のレスポンスに毎回 `enemy: EnemyState` が含まれる（HP は毎ターン減算）
-
-### C-5. 攻撃予告システム
-
-```ts
-export type AttackPatternKind = "SINGLE_STRIKE" | "PINCER" | "TOTAL_ASSAULT";
-export interface AttackIntent {
-  readonly kind: AttackPatternKind;
-  readonly skillName: string;
-  readonly targetRows: ReadonlyArray<"FRONT" | "REAR-L" | "REAR-R">;
-  readonly damagePerUnit: number;
-}
-```
-
-- `BattleSimulator.getNextActionIntent()` が次ターンの行動を予告
-- `DynamicEnemy.setNextAction(action)` で予告された行動を次の `runOneTurn` 実行時に強制的に使用
-- フロントでは `BattleSimulationPage` の `EnemyIntentBanner` と「ライブ陣形の赤枠脈動」（`data-targeted` 属性）でこれを可視化
-
-### C-6. 戦闘フロー全体（API シーケンス）
-
-```
-[フロント] BattalionFormationPage で 9 名配置 → sessionStorage に保存
-   ↓
-[フロント] BattleSimulationPage マウント
-   ↓ POST /api/battle/init { placements }
-[API] makeTrialEnemy() で敵生成、BattleSimulator を session.activeBattle に格納
-   ← { placements, timeline, currentTurn:0, nextActionIntent, enemy: EnemyState }
-   ↓
-[フロント] 表示: 敵カード（最上部）→ 攻撃予告 → V字陣形（targetRows に赤枠）
-   ↓ ユーザーがコマンドボタン押下
-   ↓ POST /api/battle/turn { strategy: "NONE" | "CW" | "CCW" }
-[API] sim.runOneTurn(strategy) → 戦闘 1 ターン処理
-   ← { turnLog, timeline, finished, winner, currentTurn, enemy: EnemyState,
-        nextActionIntent (or null if finished), allySurvivors, enemySurvivors }
-   ↓
-[フロント] ターンログ追加 → placements 更新 → 次ターンへ
-   ↓ 戦闘終了後 unmount で
-   ↓ POST /api/battle/finish
-[API] session.advanceYear(rng) → 次年へ
-   ← { nextYear, eventsCount, brigadeSize }
-```
-
-### C-7. セッション
-
-- `apps/api/src/session.ts` の `GameSession` が **インメモリで単一プレイヤー状態を保持**
-- 現状は API サーバ 1 プロセス = 1 セッション
-- `session.activeBattle` フィールドに `BattleSimulator` インスタンスを格納して、ターン間で状態を持続させる
-- `getOrCreateSession()` が `apps/api/src/routes/*.ts` から呼ばれる
-
-### C-8. 編成フロー（V字配置）
-
-- `packages/frontend/src/phases/BattalionFormation/BattalionFormationPage.tsx`
-- 分隊ごとに 3 スロット × 3 squad = 9 マスの **V 字レイアウト**
-  - FRONT は中央上にせり出し
-  - REAR-L / REAR-R は左下 / 右下
-- ベンチクリック → `UnitDetailModal` 表示 → モーダル内 V 字ミニグリッドからマス指定
-- 配置完了で `sessionStorage["formation:placements"]` に `BattlePlacement[]` を保存
-
-### C-9. API 経由で公開される Unit 情報
-
-`packages/frontend/src/api/types.ts` で定義される行型：
-
-| 型 | 表示用フィールド（抜粋） |
+| 型 | 内容 |
 |---|---|
-| `RosterUnit` | id, name, job, gender, origin, age, **strength**, baseStrength, growthFactor, isMarried, spouseId, parents, isAlive, isRetired, descendantCount + `BattleStatsFields` |
-| `RecruitRow` | id, name, job, gender, origin, age, baseStrength, source ("application"\|"heir"), hasLineage, relatedFamilyIds + `BattleStatsFields` |
-| `RetireeRow` | id, name, job, gender, origin, age, strength, **strengthRank**, reasons, hasLineage, descendantCount, isMarried + `BattleStatsFields` |
-| `BattleStatsFields` | maxHp, attack (= max(frontAttack,rearAttack)), frontAttack, rearAttack, speed, totalRating |
-| `SurvivorRow` | name, job, gender?, hp, maxHp |
-| `GridPlacement` | unitId, unitName, job, gender, row, col, hp, maxHp |
+| `BattleSnapshot` | 戦闘の不変スナップショット（`Combatants: Guid→Unit` / `Enemy` / `TurnNumber` / `Outcome`） |
+| `BattleOutcome` | `Ongoing` / `BattalionVictory` / `BattalionDefeat` |
+| `EnemyState` | 敵 1 体（`Archetype` / `MaxHp` / `Attack` / `Speed` 等） |
+| `EnemyArchetype` | `TrialGuardian`（通常敵・全時代共通）＋ 章ボス 4 種 `DawnWarden`/`UpheavalConqueror`/`DeclineTyrant`/`EternalSovereign` |
+| `AttackIntent` | 攻撃予告（`AttackPatternKind{SingleStrike,Pincer,TotalAssault}` / `SkillNameKey` / 対象 row / ダメージ） |
 
-`Unit` クラス本体はフロントには露出せず、これら **API 行型に正規化されて送出される**。
+### D-4. 敵生成・スケーリング
+
+- `EnemyScaler`（`Core/Battle/`）: `BaseHp=150` / `BaseAttack=30` / `BaseSpeed=100`、年率 `HpGainPerYear=5.0` /
+  `AttackGainPerYear=0.6` / `SpeedGainPerYear=0.6`、個体差ジッタ `0.85 + rng()*0.30`（**±15%**）、`PerLevelGain=0.5`。
+- `ChronicleTimelineConfig`: 100 年 / 25 年で 1 章（`YearsPerEpoch=25`）。章ボス出現年は **25 / 50 / 75 / 100**、
+  時代は `EpochId{Dawn, Upheaval, Decline, Twilight}`。`BattleArchetypeForYear(year)` がその年の原型を決定論選択。
+- `ChronicleGlobal.CreateCurrentYearEnemy(seed?)` が「今年は誰と戦うか」を暦から決め、時代スケール＋個体差で敵 1 体を合成。
+- `AttackIntentRoller.Forecast / ForecastWithOmens`: 現局面から決定論的に攻撃予告の帯を先読み（章ボス接近前兆を重畳）。
+
+### D-5. ラストヒット（とどめ）解決 `BattleManager.ExecuteLastHit(unit, rng)`
+
+「誰がトドメを刺したか」で報酬が変わるハクスラの脳汁ポイント:
+1. ユニット成長（Lv<3 なら +1、Lv3 は overflow）
+2. 装備強化（Lv<5 なら +1）
+3. Lv5 装備の運命（50% 破壊 / 50% 生存）
+4. 強欲の古銭(CoinGreed) Lv5: 100% 破壊だが引き換えに +1pt を強奪（`EarnDirect`）
+
+`ChronicleGlobal.ResolveLastHit(unitId)` が結果をロスタ・経済へ反映。後段の `FinalizeBattleSpoils` が
+「開戦時 → とどめ完了後」の Guid 突合で `BattleSpoils`（統合台帳）を確定する。
 
 ---
 
-## D. テスト規約と data-testid 規約
+## E. 経済・婚姻・スカウト・装備（資源ループ）
 
-### D-1. テストファイル一覧（41 pass / 0 fail）
+### E-1. ポイント一元経済 `PointsEconomy`（`Core/Managers/`）
 
-| ファイル | 主な describe | 対象 |
+すべての消費（スカウト・結婚・装備購入/強化）が **単一通貨「ポイント」** を共有。状態は 3 値（現在残高 / 累計獲得 / 累計消費）。
+
+| 収入 | メソッド | 式 |
 |---|---|---|
-| `packages/core/test/squad.test.ts` | Config, Squad, Brigade.assignUnitToSquad | Squad / Brigade の基本動作 |
-| `packages/core/test/enemy.test.ts` | Enemy.getActionForTurn, Enemy バリデーション, BattleManager ダメージ処理, BattleManager 攻撃予報, BattleManager hitCount と ActionResult | 敵行動・BattleManager |
-| `packages/core/test/passive_ability.test.ts` | 狙撃兵×戦術官 SPD バフ, 鉄壁騎士ダメージ軽減, 衛生兵回復, Unit バフ適用 | ジョブパッシブ・バフ仕様 |
-| `scripts/age_progression_test.ts` | 経年変化テスト（修業期/全盛期/衰退期） | `growthFactor` 三段階モデル |
+| タイムスキップ年次収入 | `EarnFromTimeSkip(years)` | `years × 1`（`YearlyMinimumIncomePerYear=1`） |
+| 敵撃破報酬 | `EarnFromKill(enemyLevel)` | `floor(enemyLevel × 1.5)`（`KillRewardMultiplier=1.5`） |
+| 特殊効果（強欲・戦果決算等） | `EarnDirect(delta)` | 任意の正数を直接加算 |
 
-合計: **4 ファイル / 41 tests / 0 fail**（最新 `bun test` 出力）。
+`CanAfford(cost)` で純粋判定、`SpendPoints(cost)` は残高不足なら `InvalidOperationException`（マイナス残高は構造的に発生しない）。
 
-`apps/api` および `packages/frontend` には現時点でユニットテスト無し（型チェックと `bun run build` で代替）。
+### E-2. 戦果決算 `BattleSpoils`（戦闘 → 経済の資源ループの入口）
 
-### D-2. data-testid 命名規則
+`AdvancePhase` の Battle→Chronicle 幕引きで `ApplyBattleSpoils` が婚姻ポイントを算出・経済へ非破壊加算する。
+婚姻ポイント = （勝利時のみ）`VictoryBase 5` ＋ 昇級 `2/人` ＋ 装備進化 `1/件` − 完全ロスト `3/人`。敗北・戦果なしは 0。
 
-instructions.md の「全コンポーネントに data-testid を例外なく付与」ルールに基づき、フロント全コンポーネントが testid を持つ。命名パターンは以下の通り：
+### E-2b. 予言の報酬（カードの効果を「年末」に確定）
 
-#### 静的 testid（コンポーネント単位）
+選択した予言（`_pendingProphecy`）の Kind/Value は、その年の決算で `RestService.Resolve` が現金化する
+（非戦闘＝休息は `ExecuteRest`、章ボス年で強制出撃した非戦闘予言は `AdvanceGenerationLocked` 冒頭が拾う）:
+- `RewardPoints` → `EarnDirect(Value)` でポイント加算。
+- `ScoutReward` → `ScoutService.CreateOutsiderUnit` で無償の新人を `Value` 名加入（コスト 0）。
+- `EquipmentDrop` → 生存者 1 名へ Lv `clamp(Value,1,5)` の装備をドロップ装着。
+- `Rest`/予言なし → 固定の休息ボーナス `RestPointsReward=2`。`Battle` → 報酬 0（戦果決算で報いる）。
 
-`{phase-or-section}-{element-type}` の kebab-case。
+成果は `RestOutcome`（休息頭数 / 獲得ポイント / 加入数 / ドロップ装備）として `RestResultOverlay` が提示する。
 
-例:
-- `app-root`, `game-manager-root`, `game-manager-header`, `game-manager-main`, `game-manager-footer`
-- `phase-indicator-root`, `next-phase-button`
-- `chronicle-page-root`, `chronicle-page-title`, `chronicle-summary-card`, `chronicle-enemy-preview-card`, `chronicle-history-section`
-- `guild-management-page-root`, `guild-candidates-section`, `guild-retirees-section`, `guild-overflow-summary`
-- `battalion-formation-page-root`, `formation-v-shape-root`, `formation-instruction-banner`, `formation-roster-section`
-- `battle-simulation-page-root`, `battle-enemy-status-card`, `battle-enemy-intent-banner`, `battle-live-grid-section`, `battle-preview-timeline-section`, `battle-turn-command-root`, `battle-log-section`, `battle-result-section`
-- `unit-detail-modal-root`, `unit-detail-modal-backdrop`, `unit-detail-modal-close-button`, `unit-detail-header`, `unit-detail-stats-section`, `unit-detail-assign-section`, `unit-detail-mini-grid`
-- `roster-controls-root`, `roster-sort-select`, `roster-filter-job-select`
-- `common-loading-spinner`, `common-error-banner`
+### E-3. 手動婚姻 `MarriageService`
 
-#### 動的 testid（ID / row / col / idx を埋め込む）
+- コスト = `ceil((父TargetRating×倍率 + 母TargetRating×倍率) / 20)`（`CostDivisor=20`）。
+- **自然婚姻（コスト 0）**: 双方向 `BattleAffinity` がともに **150 以上**（`NaturalMarriageThreshold=150`）なら無償。
+- 子: Level 1・ジョブは父母から 50/50 継承（`OverrideJob` 可）・Origin も 50/50 継承・名前は文化圏プールから自動払い出し・好感度/装備は空。
+- 死亡同士は不可（例外）。`ChronicleGlobal.ExecuteMarriage` は例外を握り潰し null を返す（UI を落とさない）。
 
-`{phase}-{element-type}-{key}` の形：
+### E-4. 外様スカウト `ScoutService`
 
-| パターン | 例 |
-|---|---|
-| **マス系（row/col）** | `formation-target-slot-${row}-${col}`, `formation-cell-unit-${row}-${col}`, `formation-cell-empty-${row}-${col}`, `formation-cell-icon-slot-${row}-${col}`, `formation-cell-unit-name/job/stats/total-${row}-${col}`, `formation-cell-heart-${row}-${col}` |
-| **配置指定モーダル** | `formation-assign-btn-${row}-${col}`, `formation-assign-btn-self-mark-${row}-${col}`, `formation-assign-btn-occupant-${row}-${col}`, `formation-assign-btn-occupant-icon-slot-${row}-${col}` |
-| **V 字 squad ラッパー** | `formation-v-squad-${row}`, `formation-v-squad-label-${row}`, `formation-v-slot-row-${row}`, `unit-detail-mini-grid-slot-row-${row}`, `unit-detail-mini-grid-row-${row}`, `unit-detail-mini-grid-row-label-${row}` |
-| **戦闘ライブ陣形** | `battle-live-grid-cell-${row}-${col}`, `battle-live-grid-unit-${row}-${col}`, `battle-live-grid-icon-slot-${row}-${col}`, `battle-live-grid-name/job/hp-${row}-${col}`, `battle-live-grid-row-label-${row}`, `battle-live-v-squad-${row}`, `battle-live-v-slot-row-${row}`, `battle-live-v-squad-targeted-mark-${row}` |
-| **コマンドボタン** | `battle-turn-command-${NONE\|CW\|CCW}`, `battle-turn-command-label-${s}`, `battle-turn-command-desc-${s}`, `battle-turn-command-preview-${s}`, `battle-turn-command-preview-icon-${s}`, `battle-turn-command-preview-members-${s}` |
-| **ユニットカード（id ベース）** | `guild-candidate-card-${id}`, `guild-candidate-source/icon-slot/job/name/gender/age/stats/hp/atk/spd/total-${id}`, `guild-accept-button-${id}` |
-| 同上（引退候補） | `guild-retiree-card-${id}`, `guild-retiree-rank/icon-slot/job/name/gender/age/stats/hp/atk/spd/total/reasons/lineage-badge/descendant-badge-${id}`, `guild-dismiss-button-${id}` |
-| **ベンチカード** | `formation-bench-card-${id}`, `formation-bench-icon-slot/job/name/gender/age/stats/hp/atk/spd/total/married/heir/descendants/placed-badge-${id}` |
-| **ユニット詳細モーダル** | `unit-detail-icon-slot-${unit.id}`, `unit-detail-ability-${job}`, `unit-detail-stat-hp/attack/speed/base-strength/growth`, `unit-detail-married-badge`, `unit-detail-heir-badge`, `unit-detail-descendants-badge` |
-| **戦闘予報タイムライン** | `battle-preview-timeline-item-${i}`, `battle-preview-order/icon/label/speed-${i}` |
-| **戦闘ログ** | `battle-log-row-${idx}`, `battle-log-header/initiative/enemy-action/rotation-notice/victory-mark-${idx}`, `battle-log-ally-attack-${idx}-${i}`, `battle-log-heal-${idx}-${i}` |
-| **戦闘後生存者** | `battle-survivor-row-${i}`, `battle-survivor-icon-slot/name/job/hp-${i}` |
-| **敵ステータスカード** | `battle-enemy-status-header`, `battle-enemy-status-icon`, `battle-enemy-status-name`, `battle-enemy-status-turn-label`, `battle-enemy-hp-row`, `battle-enemy-hp-label`, `battle-enemy-hp-bar-wrap`, `battle-enemy-hp-bar-fill`, `battle-enemy-hp-text`, `battle-enemy-stats-row`, `battle-enemy-stat-front-attack`, `battle-enemy-stat-rear-attack`, `battle-enemy-stat-speed` |
-| **敵攻撃予告バナー** | `battle-enemy-intent-banner`, `battle-enemy-intent-header/icon/warning-text/body/skill-name/arrow/target-range/damage/affected-list/affected-units/affected-empty`, `battle-enemy-intent-affected-unit-${id}`, `battle-enemy-intent-affected-icon-slot/name-${id}` |
-| **年代記** | `chronicle-history-item-${i}`, `chronicle-history-year-${i}`, `chronicle-history-text-${i}`, `chronicle-history-empty` |
-| **ソート/フィルタ** | `roster-sort-option-${key}`, `roster-filter-job-option-${jobId}`, `roster-filter-job-option-all`, `roster-controls-count` |
-| **UnitIcon フォールバック** | `unit-icon-${suffix}-fallback` |
-| **フェーズインジケータ** | `phase-indicator-${phase}` |
+ポイントを払って血縁なしの傭兵を 1 名即採用。年齢 16〜28（`ScoutMinInitialAge`/`ScoutMaxInitialAge`）、
+寿命 55〜75（`ScoutMinLifespan`/`ScoutMaxLifespan`）、ジョブ/文化圏/名前は乱数、Lv1・装備なし・親なし。残高不足・負コストは null。
 
-### D-3. data-testid 凍結ポリシー（実態）
+### E-5. 装備 `Equipment` / 兵器廠 `ShopService`
 
-過去のリファクタ・刷新（V 字レイアウト化、ローテーション直感化、UnitIcon 親フィット化等）では一貫して以下が守られている：
-
-- **既存 testid は同名のまま class や HTML 要素のみ変更**（例: `battle-live-grid-table` の `<table>` → `<div>` 変換時も testid 保持）
-- **新規追加 testid は既存命名規約と一致させる**（kebab-case、phase/element/key の順）
-- **削除や名称変更は基本行わない**
+- アイテム `ItemId`（5 種）: `SwordKnight` / `BowSniper` / `StaffMage` / `RingPurelove` / `CoinGreed`。
+- レベル 1〜5（`MinEquipmentLevel`/`MaxEquipmentLevel`）。レベル倍率 `{1.2,1.3,1.4,1.5}`、`AffinityMultiplier = (1.0 + Level×0.1) × BaseAffinityMultiplier`。
+- 兵器廠: 購入 `BuyCost=5`（固定）、強化 `UpgradeCostFor(lv) = 2 × lv`（`BaseUpgradeCost=2`）。共通サイフを消費。
+- 編成段階の無償脱着 `EquipItem` / `UnequipItem` は経済・盤面に触れない（`RosterChanged` のみ）。
 
 ---
 
-## E. ゲームフェーズ状態機械
+## F. ゲームフェーズ状態機械 ＆「1 世代 = 時間軸 1 周」
 
-`packages/frontend/src/game/GamePhase.ts`：
+実体: `Core/GameFlow/`（GamePhase / PlannedAction / RestOutcome / ScreenVisibility）
 
-```ts
-export type GamePhase =
-  | "CHRONICLE"
-  | "GUILD_MANAGEMENT"
-  | "BATTALION_FORMATION"
-  | "BATTLE_SIMULATION";
+### F-1. フェーズ循環（一方通行・不可逆）
 
-export const PHASE_ORDER = [
-  "CHRONICLE", "GUILD_MANAGEMENT", "BATTALION_FORMATION", "BATTLE_SIMULATION"
-];
+```
+  Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──┐
+  (年代記/予言)  (拠点:婚姻  (大隊9名編成)  (ターン戦闘   │
+                /スカウト                  →とどめ→決算) │
+       ▲        /行動選択)                            │
+       └────────────（年送り：数年が一気に流れる）◀──────┘
 ```
 
-- 一方通行・不可逆遷移（自由遷移 API なし）
-- `nextPhase(current)` のみが正規の遷移手段
-- BATTLE_SIMULATION → CHRONICLE 遷移時は内部で年送り（`session.advanceYear`）
+- `GamePhase{Chronicle, Guild, Formation, Battle}`。`GamePhaseFlow.Next` で「次はただ 1 つ」、
+  後退・飛び越し・自己遷移は `CanTransition` がすべて false（絶対ガード）。
+- `Slug()` が ASCII スラッグ（"chronicle" 等）を払い出し、ローカライズキー組み立てと画面解決に使う。
+
+### F-2. 行動分岐 `PlannedAction`（出撃 March / 休息 Rest）
+
+- **行動の既定値は年代記の予言で決まる**: `SelectProphecyAndAdvance` が選択予言の Kind から
+  `ActionPhaseRouter.ActionForProphecyAtYear`（**Battle → March / それ以外 → Rest**）で `CurrentAction` を確定する。
+  これにより「戦闘以外の予言を選んだのに編成・戦闘へ進む」事故を構造的に封じる。
+- **章ボス年（25/50/75/100）は出撃必至**: 上記判定で、現在年が章ボス年なら予言が休息でも `March` へ強制上書き
+  （`IsEpochBossYear`）。年送りのボススナップ（暦が必ずボス年へ着地）と合わせ、4 体の章ボスは休息で素通りできない。
+- 拠点（Guild/MarriageUI）は確定済みの行動を**表示するだけ**（出撃/休息トグルは撤去・選び直し不可。
+  矛盾する選択肢を一切出さない）。`SetPlannedAction` は SoT API としては残るが UI からは呼ばれない。
+  離脱先は純粋ルータ `ActionPhaseRouter.PhaseAfterGuild`:
+  - **March** → Formation（その後 Battle）。
+  - **Rest** → Chronicle（**編成・戦闘の両フェーズを完全バイパス**する安全な年。`RestService` で休息決算）。
+- 決定を編成より上流（年代記の予言）へ置くことで、休息時は編成画面・戦闘画面が一度も描かれない（亡霊残存の根絶）。
+
+### F-3. 年送り（`AdvanceGenerationLocked`）
+
+予言の `SkipYears` は選択時に消費せず `_pendingGenerationSkipYears` へ保留し、ループ幕引き（Battle→Chronicle、
+または Rest の Guild→Chronicle）で一括適用する。適用年数 `years` は `SkipYears` を
+`ChronicleTimelineConfig.ClampSkipToNextBossYear` で **章ボス年（25/50/75/100）を踏み越さないようクランプ**した値で、
+加齢・収入・暦の前進すべてに同一の `years` を用いる（「○年経過」が暦にも効く・整合）:
+1. 全旅団員を `years` ぶん加齢 → 寿命到達・戦闘死を完全ロストとして仕分け（`RosterLifecycle.AdvanceGeneration`）
+2. 年代記ナレーション（損失・昇級）を `_chronicleLog` へ追記、去る者を英霊アーカイブ `_ancestralArchive` へ写し取り
+3. 盤面から完全ロスト者を掃き出し（`ReconcileFormationWithRoster`）
+4. 定期収入 `EarnFromTimeSkip(years)` を加算
+5. **暦の年（`Turn`）を `years` ぶん進めて**次世代の予言 3 つを再生成（`TimelineEngine.AdvanceToNextTurn(…, years)`）。
+   ボス接近周は暦がボス年へちょうど着地し、次の周回でその年の戦闘がボス戦になる（取りこぼし防止）。
+
+シグナル発火順は **Roster → Economy → Timeline →（必要時 Formation）→ Phase**（画面切替前にデータ確定を保証）。
 
 ---
 
-## F. API エンドポイント一覧
+## G. UI 層（`UI/` — 現役）
 
-`apps/api/src/server.ts` で 5 ルート群を `app.route()`：
+### G-1. 動的 B 型ライフサイクル（`UI/GameDirector.cs`）
 
-### Game
-- `POST /api/game/new` — 新規ゲーム開始（seed 指定可）
-- `GET  /api/game/state` — 現在年・旅団規模等を返す
+- `Main.tscn` がルート Control に `GameDirector` をアタッチ。`_Ready` でローカライズ読込 → ヘッダー/画面コンテナ構築
+  → タイトルゲート（`TitleScreen`）を最前面 overlay。新規/継続で `ChronicleGlobal.Initialize`/`LoadGame` を引く。
+- 新規ゲームの初期状態は純粋ファクトリ `Core/Bootstrap/NewGameFactory`（ロスター＋財布）が組み、Initialize へ流す。
+- **常駐 A 型は廃止**。`PhaseChanged` を受け、現在フェーズの画面だけを 1 つ `new` してマウントし、旧画面は `QueueFree`
+  （`MountScreenForCurrentPhase` / `FreeCurrentScreen`）。任意の瞬間に生きている画面はちょうど 1 つ（`ScreenVisibility` が形式仕様）。
 
-### Chronicle
-- `GET  /api/chronicle` — 100 年史サマリー + 履歴
-- `GET  /api/chronicle/preview` — 今年の敵プレビュー（±15% 予測レンジ）
+| GamePhase | マウントされる現役画面 |
+|---|---|
+| Chronicle | `UI/TimelineUI.cs`（年代記・予言 3 択・歴史進行） |
+| Guild | `UI/MarriageUI.cs`（拠点：婚姻・スカウト・今年の行動選択） |
+| Formation | `UI/FormationUI.cs`（大隊編成・▲ウェッジ配置。出撃時のみ到達） |
+| Battle | `UI/BattleUI.cs`（ターン戦闘 → とどめ → 決算。出撃時のみ） |
 
-### Guild
-- `GET  /api/guild/decisions` — 採用候補・引退候補（HumanDecisionService 経由）
-- `POST /api/guild/accept` — 志願者を採用 `{ unitId }`
-- `POST /api/guild/dismiss` — 旅団員を解雇 `{ unitId }`
+### G-2. オーバーレイ・演出（最前面に動的 overlay）
 
-### Formation
-- `GET  /api/formation/roster` — 全旅団員 + affinityMap
+`UI/` 配下: `JobManualOverlay`（📖 ジョブ説明）/ `UnitDetailOverlay` / `PedigreeOverlay`（家系図）/
+`ProphecyTimelineOverlay`（運命の帯）/ `RestResultOverlay`（休息報酬）/ `LastHitCeremonyScreen`（とどめ演出）/
+`BattleSpoilsScreen`（戦果決算）/ `JuiceDirector`（Flash/CountUp/Typewriter 等の演出）/ `JobDescriptionView`。
 
-### Battle
-- `POST /api/battle/preview` — 配置から行動順予報を返す `{ placements }`
-- `POST /api/battle/init` — 戦闘初期化 `{ placements }` → enemy + nextIntent 含む
-- `POST /api/battle/turn` — 1 ターン実行 `{ strategy: "NONE"|"CW"|"CCW" }`
-- `POST /api/battle/run` — 一括実行（互換用）`{ placements, rotation }`
-- `POST /api/battle/finish` — 戦闘後の年送り
+- testid は **`Node.SetMeta("data_testid", "...")`** で付与（kebab-case）。Godot の `Find` 系で参照可能。
+- 表示文字列はすべて `ChronicleGlobal.Resolve*`（`ResolveJobName`/`ResolveItemName`/`ResolveProphecyKindName`/
+  `ResolveDisplayName`/`ResolvePhaseName` 等）経由で localization から解決し、コード側に日本語・絵文字を持たない。
 
----
+### G-3. ⚠ 既知の問題 — 駐機中の第 2 UI（`UserInterface/`）
 
-## G. 主要ファイルマップ
-
-### core
-- `packages/core/src/models/Unit.ts` — Unit クラス本体
-- `packages/core/src/models/Squad.ts` — Squad クラス
-- `packages/core/src/models/Brigade.ts` — Brigade（旅団全体・血統 BirthRegistry 含む）
-- `packages/core/src/models/Enemy.ts` — Enemy 基底クラス
-- `packages/core/src/BattleManager.ts` — 1 ターンの戦闘解決ロジック
-- `packages/core/src/BattleSimulator.ts` — 戦闘全体の orchestrator（DynamicEnemy・ローテーション・予告・ターン単位 API を提供）
-- `packages/core/src/data/jobs.ts` — JOB_DEFAULTS / JOB_JP / JOB_ABILITY / totalRating の SoT
-- `packages/core/src/data/names.ts` — NameGenerator・3 文化圏（Japanese/European/Classical）
-- `packages/core/src/services/HumanDecisionService.ts` — 手動人事 API（純粋関数）
-- `packages/core/src/utils/age.ts` — `rollPeakAges`, `rollChildPeakAges`
-- `packages/core/src/utils/brigade.ts` — `enforceMaxBrigadeSize`
-- `packages/core/src/config/ChronicleConfig.ts` — 既定設定
-- `packages/core/src/config/ChronicleConfig.extreme.ts` — 本番ゲーム用設定（API が使用）
-- `packages/core/src/index.ts` — re-export 集約
-
-### apps/api
-- `apps/api/src/server.ts` — Hono アプリ立ち上げ
-- `apps/api/src/session.ts` — `GameSession`（インメモリ単一セッション）
-- `apps/api/src/routes/{game,chronicle,guild,formation,battle}.ts` — 5 ルート
-
-### packages/frontend
-- `packages/frontend/src/main.tsx` / `App.tsx` — エントリ
-- `packages/frontend/src/game/GameManager.tsx` — 4 フェーズの遷移制御
-- `packages/frontend/src/game/GamePhase.ts` — フェーズ型
-- `packages/frontend/src/phases/Chronicle/ChroniclePage.tsx`
-- `packages/frontend/src/phases/GuildManagement/GuildManagementPage.tsx`
-- `packages/frontend/src/phases/BattalionFormation/BattalionFormationPage.tsx`
-- `packages/frontend/src/phases/BattleSimulation/BattleSimulationPage.tsx`
-- `packages/frontend/src/components/UnitIcon.tsx` — 親要素フィット型のアイコン
-- `packages/frontend/src/components/UnitDetailModal.tsx` — ユニット詳細 + V 字ミニ配置 grid
-- `packages/frontend/src/components/RosterControls.tsx` — ソート・フィルタ
-- `packages/frontend/src/api/client.ts` — fetch ラッパー
-- `packages/frontend/src/api/types.ts` — API レスポンス型定義
-- `packages/frontend/src/utils/job.ts` — フロント側のジョブヘルパー
-- `packages/frontend/src/styles/global.css` — 全 CSS（V 字レイアウト・敵カード・unit-icon-slot 等を含む）
-
-### config
-- `config/jobs.json` — ジョブ能力値（コード側 `JOB_DEFAULTS` と一致を保つ）
-
-### 静的アセット
-- `image/{jobId}/{gender}.png` — 原本
-- `packages/frontend/public/image/{jobId}/{gender}.png` — 配信先
-- パス規約: `/image/{jobId}/{gender}.png`（`UnitIcon.getJobIconPath` が組み立てる）
-- CSS で `image-rendering: pixelated` を強制適用（ドット絵のシャープさを担保）
+`UserInterface/`（`UserInterfaceRoot` → `Title/TitleView` → `Hub/HubView` → `Battle/BattleView` →
+`Settlement/SettlementView` ＋ Hub のドラッグ部品など 約 10 ファイル）は、**`Main.tscn` からも `GameDirector` からも
+実行時に一度も参照されない**並走 UI（新 UI の試作）。コンパイルはされるが到達しないデッドコード。
+唯一 `UserInterface/JobTextureLibrary.cs` だけは現役 `UI/`（BattleUI/FormationUI 等）から共有利用されている。
+副作用として `ProphecyTimelineOverlay` が `UI/` と `UserInterface/Hub/` に**二重定義**されている。
+→ 整理（採用一本化 or 削除）を要する領域。誤って `UserInterface/` の View 群を「現役 UI」と見なさないこと。
 
 ---
 
-## H. 主要な絶対ルール（要約・instructions.md より）
+## H. テスト規約と検証
 
-詳細は `instructions.md` を一次情報源とする。本書ではコードと照合可能な要点だけ抜粋：
+実体: `generated_csharp/Tests/`（xUnit / **653 pass / 0 fail**）
 
-- 大隊規模: **9 名（3×3）**、`SCHEDULE.BATTALION_SIZE = 9`、`BATTLE.SQUAD_SIZE = 3`
-- 敵スピード成長率: `ENEMY_SCALING.SPEED_GAIN_PER_YEAR = 0.6`
-- 敵ステータス: HP / ATTACK / SPEED に `±15%` の乱数（`0.85 + rng() * 0.30`）
-- 新人入団・子供雇用・老兵引退は **すべて手動選択**（自動リストラ凍結）
-- ハードコード禁止、`CHRONICLE_CONFIG.<SECTION>.<KEY>` 参照必須
-- 全コンポーネントに `data-testid` 例外なく付与
-- コミットメッセージは日本語、英語の type prefix（`feat:` / `refactor:` / `fix:` 等）を付ける
-- フェーズ遷移は不可逆・一方通行
+### H-1. テスト方針
+
+- **対象は Core 純粋層のみ**（Godot 非依存）。Autoload `ChronicleGlobal` もシグナル発火を `SafeEmit`（IsInsideTree ガード
+  ＋ try/catch）で隔離しているため、`new ChronicleGlobal(); Initialize(...); 各 API; プロパティ assert` が Godot なしで動く。
+- テストは `Core/**/*.cs` を `<Compile Include>` で取り込み、Godot 本体アセンブリを参照しない（CI も Godot 不要）。
+- `Tests/ChronicleKnights.Tests.csproj` の `WarningsAsErrors` で 13 個の CS 警告コードをビルドエラーに昇格（構造的な品質ガード）。
+
+### H-2. テスト群（抜粋）
+
+`Core/Battle/`（AttackIntentRoller / BattleResolver / BattleProgressGate / BattleSeatingContract / BattleSpoils /
+EnemyScaler / EnemyState / EpochBossForecast）、`Core/Chronicle/`（100 年シミュレーション / メトリクス / 多元宇宙ランナー /
+UniverseEvaluator / EnemyScalingResolver）、`Core/GameFlow/`（GamePhaseFlow / ActionPhaseRouter / RestService /
+ScreenVisibilityIntegration）、`Core/Lifecycle/`（各画面の契約テスト＝Battle/Chronicle/Formation/Hub/Phase/Prophecy/
+RosterCard/Settlement）、`Core/Managers/`（BattlePassive / Marriage / PointsEconomy / RosterAdmin / RosterLifecycle /
+Scout / EquipmentStatCorrection）、`Core/Naming` / `Core/Pedigree` / `Core/Persistence` / `Core/Shop` / `Core/Units`。
+
+### H-3. CI
+
+`.github/workflows/dotnet-test.yml` — **手動トリガー（workflow_dispatch）専用**。ubuntu + .NET 8 SDK で
+Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため push/PR の自動実行は退役済み）。
+
+---
+
+## I. ローカライズ ＆ 永続化
+
+### I-1. ローカライズ（`Config/localization_ja.json`）
+
+- 全日本語テキストの唯一の辞書。トップレベルセクション: `phases / passives / squadRows / effectKinds /
+  effectScopes / jobs / items / prophecyKinds / enemySkills / epochs / enemyArchetypes / names / ui / marriage`。
+- 純粋層 `NameResolver`（キー→氏名。`@` 連結の称号付き複合キーを「称号＋名＋姓」へ自動連結）/ `PhaseNameResolver` /
+  `MasterDataNameResolver` が解決し、`ChronicleGlobal.LoadLocalization` が res:// から一度だけ読み込んで各リゾルバを構築。
+- **未知キーは例外を投げず生キーを返す**（画面が落ちず、未登録キーが一目で分かる）。
+
+### I-2. 命名 `NameGenerator`
+
+- 3 文化圏 `Origin{Japanese, European, Classical}` × `Gender` のプール（`NameCatalog`/`NameTaxonomy`）。
+- 歴史的重複を避けて未登場キーを払い出し、プール枯渇時は称号キーを `@` で前置した複合キーへフォールバック
+  （`Jr.`/`II 世`/`(2)` 式の記号方式は仕様で不採用）。
+
+### I-3. 永続化（`Core/Persistence/SaveSerializer`（純粋）＋ `SaveManager`（I/O））
+
+- `user://save_data.json` に **未暗号化の整形 JSON** で保存（可読性・デバッグ性優先）。
+- アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）でクラッシュ耐性。
+- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 1）。
+- **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog`。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数。
+- ロード時は新しい Random を再注入し、`CurrentPhase` は **常に Chronicle から再開**。
+
+---
+
+## J. 主要な絶対ルール（要約・詳細は `instructions.md`）
+
+- **開発憲法①（厳格 ASCII）**: `Core/` および UI 層の識別子・ノード名・testid・内部ログ・アセットパス・コメント記号は
+  ASCII のみ。プレイヤー向け表示文字列のみ日本語（人間向けドキュメントは日本語可）。略称（BDF/SDF/AB/HL/FA/RA）は完全未使用。
+- **開発憲法②（不変性）**: ドメインは `record` + `with` 式。リストは `ImmutableList`/`ImmutableArray`。破壊的変更禁止。
+- **開発憲法③（単一 SoT ＋ 単方向データフロー）**: 状態は `ChronicleGlobal` のみが握る。UI は API を呼びシグナルで読み直すだけ。
+  状態変更は `lock(_stateLock)` 内、`EmitSignal` はロック解放後（`SafeEmit`）。
+- **開発憲法④（完全決定論シード）**: 新規ゲームは 1 シード注入（`StartNewGame(seed)`）。同一シードは同一の歴史。Random は引数注入。
+- 大隊規模 **9 名（3×3）**、章ボス出現年 **25/50/75/100**、敵ステータス **±15%** 個体差。
+- 新人スカウト・婚姻・解雇・引退はすべて手動選択。フェーズ遷移は不可逆・一方通行。
+- 数値はハードコードせず Core の SoT 定数（`JobMaster` / `PointsEconomy` / `EnemyScaler` / `ChronicleTimelineConfig` 等）を参照。
+- コミットメッセージは日本語、type prefix（`feat:`/`fix:`/`refactor:`/`docs:` 等）のみ英語。
+
+---
+
+## K. 主要ファイルマップ（`generated_csharp/`）
+
+### Core（純粋ロジック・48 ファイル）
+- `Core/Unit/Unit.cs` `Equipment.cs` `EquipmentService.cs` — 旅団員・装備
+- `Core/Job/JobMaster.cs` `JobData.cs` `JobCodex.cs` — ジョブ数値 SoT・enum
+- `Core/GameFlow/GamePhase.cs` `PlannedAction.cs` `RestOutcome.cs` `ScreenVisibility.cs` — フェーズ・行動・休息・画面可視ルール
+- `Core/Formation/FormationBoard.cs` `DeploymentGate.cs` — V 字盤面・無人出撃封鎖
+- `Core/Battle/BattleResolver.cs` `BattleSnapshot.cs` `BattleManager.cs` `EnemyState.cs` `EnemyScaler.cs`
+  `AttackIntent.cs` `AttackIntentRoller.cs` `BattleEvent.cs` `BattleProgressGate.cs` `BattleSpoils.cs` `EpochBossForecast.cs`
+- `Core/Managers/PointsEconomy.cs` `TimelineEngine.cs` `RosterLifecycle.cs` `MarriageService.cs` `ScoutService.cs`
+  `RosterAdminService.cs`
+- `Core/Shop/ShopService.cs` / `Core/Timeline/Prophecy.cs` / `Core/Chronicle/ChronicleTimelineConfig.cs`
+  `EnemyScalingResolver.cs` `MetricsCollector.cs` `UniverseEvaluator.cs` `ChronicleLogEntry.cs`
+- `Core/Naming/` `Core/Localization/` `Core/Pedigree/PedigreeGraph.cs` `Core/Persistence/` `Core/Bootstrap/NewGameFactory.cs`
+
+### Autoload / UI / Config
+- `Autoload/ChronicleGlobal.cs` — 常駐 SoT・全 API・シグナル・セーブ/ロード（約 2060 行）
+- `UI/GameDirector.cs` `TimelineUI.cs` `MarriageUI.cs` `FormationUI.cs` `BattleUI.cs` ＋ 各オーバーレイ・`JuiceDirector.cs`
+- `UserInterface/JobTextureLibrary.cs`（現役・共有）／ `UserInterface/` のその他 View 群（⚠駐機中・G-3）
+- `Config/localization_ja.json` — 全日本語テキストの辞書
+- `Assets/Textures/Jobs/{job}/{male|female}.png` — ジョブ立ち絵（16 枚）。背景 4 / 敵 5 は要追加（`docs/ASSET_MANIFEST.md`）
+
+### ドキュメント
+- `ONBOARDING.md` — **統合ガイド（ゲーム仕様＋設計＋ルール＋手順を 1 枚に集約）**。他 AI／新規参加者に最初に渡す
+- `instructions.md` — 絶対ルール（C# 版憲法）
+- `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` — 移行戦略憲法（フェーズ 1〜3 はほぼ実現済み）
+- `docs/system_architecture.md` / `design_blueprint.md` / `job_definitions.md` / `simulation_guide.md` — C# 版各論
+- `docs/VISUAL_AND_JUICE_ROADMAP.md` / `ASSET_MANIFEST.md` — 見栄え強化ロードマップ・アセット必要物
+- `PROGRESS_REPORT.md` — 実装進捗レポート
