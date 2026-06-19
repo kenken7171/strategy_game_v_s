@@ -289,6 +289,10 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - レベル 1〜5（`MinEquipmentLevel`/`MaxEquipmentLevel`）。レベル倍率 `{1.2,1.3,1.4,1.5}`、`AffinityMultiplier = (1.0 + Level×0.1) × BaseAffinityMultiplier`。
 - 兵器廠: 購入 `BuyCost=5`（固定）、強化 `UpgradeCostFor(lv) = 2 × lv`（`BaseUpgradeCost=2`）。共通サイフを消費。
 - 編成段階の無償脱着 `EquipItem` / `UnequipItem` は経済・盤面に触れない（`RosterChanged` のみ）。
+- **Affix（接尾効果）**: `Equipment.AffixKeys`（個体ごとのランダム付加効果キー列）を `AffixMaster`（`Core/Unit/AffixMaster.cs`）が
+  戦闘ステへ解決する。`AffixKind{Sharp=+ATK3 / Sturdy=+DEF2 / Swift=+SPD2}` のフラット加算（レベル乗算は通さない）で、
+  `BattleManager.Equipment{Attack,Defense,Speed}Bonus` に合流して実戦に効く。ドロップ時に `RollAffixKeys` が
+  レベル別個数（Lv1〜2→1 / Lv3+→2、相異なる種別を決定論抽選）を付与。表示名は `affixes.{key}.name`（`ResolveAffixName`）。
 
 ---
 
@@ -420,7 +424,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ### I-1. ローカライズ（`Config/localization_ja.json`）
 
 - 全日本語テキストの唯一の辞書。トップレベルセクション: `phases / passives / squadRows / effectKinds /
-  effectScopes / jobs / items / prophecyKinds / enemySkills / epochs / enemyArchetypes / names / ui / marriage`。
+  effectScopes / jobs / items / affixes / prophecyKinds / enemySkills / epochs / enemyArchetypes / names / ui / marriage`。
 - 純粋層 `NameResolver`（キー→氏名。`@` 連結の称号付き複合キーを「称号＋名＋姓」へ自動連結）/ `PhaseNameResolver` /
   `MasterDataNameResolver` が解決し、`ChronicleGlobal.LoadLocalization` が res:// から一度だけ読み込んで各リゾルバを構築。
 - **未知キーは例外を投げず生キーを返す**（画面が落ちず、未登録キーが一目で分かる）。

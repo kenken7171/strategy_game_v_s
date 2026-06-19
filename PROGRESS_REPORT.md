@@ -111,7 +111,7 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 | 戦闘シミュレータ（`BattleResolver`・盤面・敵・攻撃予告・スケーリング） | 🟢（2026-06-10 版の「🔴 皆無」から実装完了） |
 | 予言の報酬適用（RewardPoints/ScoutReward/EquipmentDrop/Rest を年末決算で現金化） | 🟢 `RestService.Resolve` |
 | 予言生成マスター（`ProphecyMaster`） | 🟡 `DefaultGenerator` 暫定（均等巡回） |
-| Affix（接尾効果）システム | 🔴 |
+| Affix（接尾効果）システム | 🟢 MVP `AffixMaster`（Sharp/Sturdy/Swift の戦闘ステ強化・決定論ロール・ドロップ付与・UI表示） |
 
 ### 4-2. Autoload 層
 
@@ -151,7 +151,7 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 | コアロジック（脳） | 🟢 不変設計・ロック規律・単方向フロー・年送り・パッシブ厳密検証まで堅牢（681 テスト緑） |
 | Godot 外殻（身体） | 🟢 土台一式・起動スイッチ・実機起動・動的 B 型 UI が通電済み（旧版の最大ボトルネックは解消） |
 | 本物の戦闘 | 🟢 盤面・敵・スケーリング・攻撃予告・ターン進行・とどめ・戦果決算まで実装 |
-| 残課題 | ▶ `ProphecyMaster` 本実装 / Affix・ドロップ / 背景・敵アセット / 年送り反映後のバランス再検証 |
+| 残課題 | ▶ `ProphecyMaster` 本実装 / 戦闘後3択ドロップUI・Affix拡張 / 背景・敵アセット / 年送り反映後のバランス再検証 |
 
 「壊れない脳」と「それを宿す箱」は揃い、世代交代の循環を端から端まで手で回せる段階に到達した。
 並走 UI の死蔵コードは粛清済。次は中毒性の中核（ドロップ・配合・見栄え）の作り込みに進む。

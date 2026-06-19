@@ -51,8 +51,10 @@
 
 ### T-4. ハクスラ拡張（ドロップ・Affix）
 
-- [ ] `EquipmentDrop` 予言の効果ハンドラを実装（戦闘後 3 択ドロップ等）。
-- [ ] Affix（接尾効果）システム — 既存パッシブ命名を活用した付加価値の生成・解決マスター。
+- [x] Affix（接尾効果）システム MVP — `AffixMaster`（Sharp=+ATK / Sturdy=+DEF / Swift=+SPD）の生成・解決・
+      戦闘合流・ドロップ付与・localization・UnitDetailOverlay 表示まで実装（`CLAUDE.md` E-5）。
+- [ ] Affix 拡張 — 経済軸 Affix（婚姻ポイント倍率）・パッシブ付与型・レアリティ別個数の調整。
+- [ ] `EquipmentDrop` の戦闘後 3 択ドロップ UI（現状は生存者へ自動装着。Affix 付きで選択肢を提示する導線）。
 - [x] 敵撃破ポイント（`EarnFromKill`）は不採用に決定し削除（戦闘収入は戦果決算 `BattleSpoils` に一本化）。
 
 ### T-5. アセット ＆ 見栄え（`docs/VISUAL_AND_JUICE_ROADMAP.md`）
