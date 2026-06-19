@@ -175,9 +175,14 @@ UI 表示テキスト（ラベル・職名・アイテム名・予言名・絵�
 ## 6. ワークフロー規約
 
 - **コミットメッセージは日本語**、type prefix（`feat:` / `fix:` / `refactor:` / `docs:` / `test:` 等）のみ英語。
-- 仕様変更時は **本ファイルを先に更新**し、その差分と理由をコミット/PR に明記する。
-- 変更後は `dotnet test Tests/ChronicleKnights.Tests.csproj`（**653 pass を維持**）を必ず通す。
+  末尾に `Co-Authored-By: ...` 行を付ける。
+- **修正のたびに毎回 commit して push する**（恒久ルール）。1 つの修正（バグ修正・機能追加・ドキュメント更新）が
+  検収まで終わったら、その都度コミット＆プッシュする。本リポジトリは **main ブランチへ直接コミットする運用**。
+- **C# (`generated_csharp/`) を修正したら必ず clean build を通してからコミットする**（恒久ルール）:
+  `dotnet clean ChronicleKnights.sln` → `dotnet build ChronicleKnights.csproj --configuration Debug`
+  → `dotnet test Tests/ChronicleKnights.Tests.csproj`。本体は 0 警告 / 0 エラー、テストは **全 pass を維持**（現状 689）。
   実機確認が要る変更は `./play.command` で windowed 起動して確認する（`--headless` は不可）。
+- 仕様変更時は **本ファイルを先に更新**し、その差分と理由をコミット/PR に明記する。
 - 新ジョブ/新アイテム/新予言の追加は「Core の SoT（enum + 定義）追加 ＋ `localization_ja.json` にキー追加」で完結させる
   （データ駆動を崩さない）。
 

@@ -443,6 +443,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 - 新人スカウト・婚姻・解雇・引退はすべて手動選択。フェーズ遷移は不可逆・一方通行。
 - 数値はハードコードせず Core の SoT 定数（`JobMaster` / `PointsEconomy` / `EnemyScaler` / `ChronicleTimelineConfig` 等）を参照。
 - コミットメッセージは日本語、type prefix（`feat:`/`fix:`/`refactor:`/`docs:` 等）のみ英語。
+- **修正のたびに毎回 commit & push**（main 直）。**C# 修正は `dotnet clean` → build → test を通してからコミット**（詳細は `instructions.md` §6）。
 
 ---
 
