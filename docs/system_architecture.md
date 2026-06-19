@@ -148,7 +148,7 @@ Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──┐
 ## 7. テスト ＆ CI
 
 - xUnit。対象は **Core 純粋層のみ**（Godot 非依存）。`ChronicleGlobal` も `SafeEmit` 隔離により Godot なしで API を検証可能。
-- 現況 **653 pass / 0 fail**（`dotnet test Tests/ChronicleKnights.Tests.csproj`）。
+- 現況 **681 pass / 0 fail**（`dotnet test Tests/ChronicleKnights.Tests.csproj`）。
 - `Tests/ChronicleKnights.Tests.csproj` は `Core/**/*.cs` を `<Compile Include>` で取り込み、Godot 本体アセンブリを参照しない。
   `WarningsAsErrors` で 13 個の CS 警告コードをビルドエラー化（構造的品質ガード）。
 - CI: `.github/workflows/dotnet-test.yml`（**手動トリガー専用** / ubuntu / .NET 8 SDK / Tests のみ）。

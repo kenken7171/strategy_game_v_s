@@ -159,7 +159,7 @@ Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──▶（年�
 | 領域 | SoT |
 |---|---|
 | ジョブ能力値・パッシブ・Rating | `Core/Job/JobMaster.cs` |
-| 経済（年次収入・撃破報酬） | `Core/Managers/PointsEconomy.cs` |
+| 経済（年次収入 SoT・特殊収入 EarnDirect） | `Core/Managers/PointsEconomy.cs` |
 | 婚姻コスト・自然婚姻閾値 | `Core/Managers/MarriageService.cs` |
 | スカウト年齢・寿命 | `Core/Managers/ScoutService.cs` |
 | 兵器廠コスト | `Core/Shop/ShopService.cs` |
@@ -180,7 +180,7 @@ UI 表示テキスト（ラベル・職名・アイテム名・予言名・絵�
   検収まで終わったら、その都度コミット＆プッシュする。本リポジトリは **main ブランチへ直接コミットする運用**。
 - **C# (`generated_csharp/`) を修正したら必ず clean build を通してからコミットする**（恒久ルール）:
   `dotnet clean ChronicleKnights.sln` → `dotnet build ChronicleKnights.csproj --configuration Debug`
-  → `dotnet test Tests/ChronicleKnights.Tests.csproj`。本体は 0 警告 / 0 エラー、テストは **全 pass を維持**（現状 689）。
+  → `dotnet test Tests/ChronicleKnights.Tests.csproj`。本体は 0 警告 / 0 エラー、テストは **全 pass を維持**（現状 681）。
   実機確認が要る変更は `./play.command` で windowed 起動して確認する（`--headless` は不可）。
 - 仕様変更時は **本ファイルを先に更新**し、その差分と理由をコミット/PR に明記する。
 - 新ジョブ/新アイテム/新予言の追加は「Core の SoT（enum + 定義）追加 ＋ `localization_ja.json` にキー追加」で完結させる

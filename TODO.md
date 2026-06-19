@@ -53,7 +53,7 @@
 
 - [ ] `EquipmentDrop` 予言の効果ハンドラを実装（戦闘後 3 択ドロップ等）。
 - [ ] Affix（接尾効果）システム — 既存パッシブ命名を活用した付加価値の生成・解決マスター。
-- [ ] 敵撃破ポイント（`EarnFromKill`）の戦闘フローへの結線を最終化。
+- [x] 敵撃破ポイント（`EarnFromKill`）は不採用に決定し削除（戦闘収入は戦果決算 `BattleSpoils` に一本化）。
 
 ### T-5. アセット ＆ 見栄え（`docs/VISUAL_AND_JUICE_ROADMAP.md`）
 

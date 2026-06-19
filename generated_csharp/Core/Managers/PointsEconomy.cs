@@ -13,13 +13,15 @@
 //      - ユニット成長（任意レベルアップ等の将来拡張）
 //      - 装備強化（Lv1〜4 のレベルアップ強化等の将来拡張）
 //
-//  ★ 収入は 2 つの SoT 式のみで規定される（特殊効果は別経路）:
+//  ★ 収入は 1 つの SoT 式のみで規定される（戦果・特殊効果は別経路）:
 //      [SoT #1] EarnFromTimeSkip(years)  : 経過年数 × YearlyMinimumIncomePerYear
 //                                          (= 1 pt / 年)
-//      [SoT #2] EarnFromKill(enemyLevel) : floor(enemyLevel * KillRewardMultiplier)
-//                                          (= floor(Lv * 1.5))
-//      [Special] EarnDirect(delta)       : CoinGreed の Lv5 LH 強奪等、特殊効果
-//                                          の例外経路（SoT 式の外側）
+//      [Special] EarnDirect(delta)       : 戦果決算 (BattleSpoils 婚姻ポイント) /
+//                                          CoinGreed の Lv5 LH 強奪 / 予言報酬等、
+//                                          SoT 式の外側で確定する収入の共通入口
+//
+//  ※ 戦闘収入は「敵撃破ごとの報酬」ではなく、戦果決算 (BattleSpoils) を
+//    EarnDirect 経由で一括加算する設計（個別の撃破報酬路は持たない）。
 //
 //  消費は単一の汎用エントリで:
 //      SpendPoints(cost) : 残高不足なら InvalidOperationException、それ以外は
@@ -40,12 +42,6 @@ namespace ChronicleKnights.Core.Managers;
 public sealed record PointsEconomy
 {
     // ─── 収入系の SoT 定数 ────────────────────────────────────────────────
-
-    /// <summary>
-    /// [SoT #2] 敵撃破ポイントの倍率係数。
-    /// 計算式: delta = floor(enemyLevel * KillRewardMultiplier)
-    /// </summary>
-    public const double KillRewardMultiplier = 1.5;
 
     /// <summary>
     /// [SoT #1] 予言タイムスキップ時に保証される 1 年あたりの収入。
@@ -87,22 +83,6 @@ public sealed record PointsEconomy
             throw new ArgumentOutOfRangeException(
                 nameof(years), years, "years must be non-negative");
         var delta = years * YearlyMinimumIncomePerYear;
-        return AddToBalance(delta);
-    }
-
-    // ─── 収入: SoT #2（敵撃破報酬） ───────────────────────────────────────
-
-    /// <summary>
-    /// [SoT #2] 敵を撃破した際に、敵レベルから算出された撃破報酬を加算する。
-    /// 計算式: delta = floor(enemyLevel * KillRewardMultiplier) (= floor(Lv * 1.5))
-    /// </summary>
-    /// <param name="enemyLevel">撃破した敵のレベル（非負）</param>
-    public PointsEconomy EarnFromKill(int enemyLevel)
-    {
-        if (enemyLevel < 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(enemyLevel), enemyLevel, "enemy level must be non-negative");
-        var delta = (int)Math.Floor(enemyLevel * KillRewardMultiplier);
         return AddToBalance(delta);
     }
 

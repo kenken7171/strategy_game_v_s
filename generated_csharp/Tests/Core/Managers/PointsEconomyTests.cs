@@ -5,8 +5,7 @@
 //
 //  検証観点:
 //    - 収入 SoT #1 (EarnFromTimeSkip = years × 1)
-//    - 収入 SoT #2 (EarnFromKill = floor(level × 1.5))  ← floor の境界を重点検証
-//    - 特殊収入 (EarnDirect)
+//    - 特殊収入 (EarnDirect) ← 戦果決算 / 予言報酬 / CoinGreed 等の共通入口
 //    - 消費 (SpendPoints) の成功・残高不足例外・負コスト例外
 //    - 不変性（操作後も元インスタンスが変化しない）
 //
@@ -57,31 +56,6 @@ public class PointsEconomyTests
             () => PointsEconomy.CreateInitial().EarnFromTimeSkip(-1));
     }
 
-    // ─── 収入 SoT #2: 撃破報酬 floor(level × 1.5) ──────────────────────────
-
-    [Theory]
-    [InlineData(0, 0)]   // floor(0.0)  = 0
-    [InlineData(1, 1)]   // floor(1.5)  = 1
-    [InlineData(2, 3)]   // floor(3.0)  = 3
-    [InlineData(3, 4)]   // floor(4.5)  = 4  ← 端数切り捨ての境界
-    [InlineData(4, 6)]   // floor(6.0)  = 6
-    [InlineData(5, 7)]   // floor(7.5)  = 7  ← 端数切り捨ての境界
-    [InlineData(10, 15)] // floor(15.0) = 15
-    public void EarnFromKill_UsesFloorOfLevelTimesOnePointFive(int enemyLevel, int expectedDelta)
-    {
-        var economy = PointsEconomy.CreateInitial().EarnFromKill(enemyLevel);
-
-        Assert.Equal(expectedDelta, economy.CurrentBalance);
-        Assert.Equal(expectedDelta, economy.TotalEarned);
-    }
-
-    [Fact]
-    public void EarnFromKill_NegativeLevel_Throws()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => PointsEconomy.CreateInitial().EarnFromKill(-1));
-    }
-
     // ─── 特殊収入: EarnDirect ──────────────────────────────────────────────
 
     [Fact]
@@ -107,9 +81,8 @@ public class PointsEconomyTests
     public void Earnings_Accumulate_AcrossMultipleIncomeSources()
     {
         var economy = PointsEconomy.CreateInitial()
-            .EarnFromTimeSkip(3)   // +3
-            .EarnFromKill(4)       // +6  (floor(6.0))
-            .EarnDirect(1);        // +1
+            .EarnFromTimeSkip(3)   // +3  (SoT #1)
+            .EarnDirect(7);        // +7  (戦果決算 / 予言報酬等の特殊経路)
 
         Assert.Equal(10, economy.CurrentBalance);
         Assert.Equal(10, economy.TotalEarned);
@@ -175,7 +148,7 @@ public class PointsEconomyTests
         var original = PointsEconomy.CreateInitial().EarnDirect(10);
 
         _ = original.SpendPoints(4);
-        _ = original.EarnFromKill(3);
+        _ = original.EarnFromTimeSkip(3);
 
         // 元インスタンスは一切変化していない（完全イミュータブル）
         Assert.Equal(10, original.CurrentBalance);

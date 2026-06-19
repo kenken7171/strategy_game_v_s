@@ -34,7 +34,7 @@ dotnet build ChronicleKnights.csproj --configuration Debug
 dotnet test Tests/ChronicleKnights.Tests.csproj
 ```
 
-- 現況 **653 pass / 0 fail**。
+- 現況 **681 pass / 0 fail**。
 - Godot 非依存。`Tests` プロジェクトは `Core/**/*.cs` を `<Compile Include>` で取り込み、Godot 本体を参照しない。
 - `WarningsAsErrors` に 13 個の CS 警告コードを列挙しており、禁止警告が混入するとビルドが赤くなる（構造的品質ガード）。
 

@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠コミット: `abc249b`（休息トグルの宿主即 QueueFree）／ 検収: `dotnet test` 653 pass / 0 fail。
+> 最終更新の根拠: 死蔵コード掃除（`UserInterface/` 死蔵 View 粛清 ＋ `EarnFromKill` 削除）／ 検収: `dotnet test` 681 pass / 0 fail。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 区分 | 場所 | 実態 | 扱い |
 |---|---|---|---|
-| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・653 テスト緑 | **すべての新規実装はここ** |
+| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・681 テスト緑 | **すべての新規実装はここ** |
 | 凍結された旧本体 | `apps/`・`packages/`・`scripts/`・`config/jobs.json`・`tools/` | Bun + Hono + React + Vite の TypeScript 版。もうゲームには一切繋がっていない | **参照専用（変更禁止・原則放置）**。アーキタイプ検証の歴史的レファレンス |
 
 旧 TS 版は「先に TS で検証 → C# へ翻訳」というかつてのフローの名残で、今は完全に役目を終えている。
@@ -42,7 +42,7 @@ generated_csharp/
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
 ├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
-└── Tests/       xUnit 単体テスト（Core を対象。653 pass）
+└── Tests/       xUnit 単体テスト（Core を対象。681 pass）
 ```
 
 ### A-2. 技術スタック
@@ -77,7 +77,7 @@ generated_csharp/
 | コマンド | 内容 |
 |---|---|
 | `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
-| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**653 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**681 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
 | `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
 | `./play.command -e` | Godot エディタを開く |
 | `godot --path .` | （ビルド済み前提で）直接起動 |
@@ -248,9 +248,10 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 | 収入 | メソッド | 式 |
 |---|---|---|
-| タイムスキップ年次収入 | `EarnFromTimeSkip(years)` | `years × 1`（`YearlyMinimumIncomePerYear=1`） |
-| 敵撃破報酬 | `EarnFromKill(enemyLevel)` | `floor(enemyLevel × 1.5)`（`KillRewardMultiplier=1.5`） |
-| 特殊効果（強欲・戦果決算等） | `EarnDirect(delta)` | 任意の正数を直接加算 |
+| タイムスキップ年次収入（唯一の SoT 式） | `EarnFromTimeSkip(years)` | `years × 1`（`YearlyMinimumIncomePerYear=1`） |
+| 特殊効果（戦果決算・強欲・予言報酬等） | `EarnDirect(delta)` | 任意の正数を直接加算（SoT 式の外側の共通入口） |
+
+> 戦闘収入は「敵 1 体撃破ごとの報酬」ではなく、**戦果決算 `BattleSpoils`（婚姻ポイント）を `EarnDirect` で一括加算**する設計（個別の撃破報酬路 `EarnFromKill` は不採用・廃止済）。
 
 `CanAfford(cost)` で純粋判定、`SpendPoints(cost)` は残高不足なら `InvalidOperationException`（マイナス残高は構造的に発生しない）。
 
@@ -389,7 +390,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ## H. テスト規約と検証
 
-実体: `generated_csharp/Tests/`（xUnit / **653 pass / 0 fail**）
+実体: `generated_csharp/Tests/`（xUnit / **681 pass / 0 fail**）
 
 ### H-1. テスト方針
 

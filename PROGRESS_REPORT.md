@@ -3,7 +3,7 @@
 > **更新日時**: 2026-06-18
 > **対象コードベース**: `generated_csharp/`（Godot 4.3 mono / .NET 8 / C# 12）
 > **規模**: 約 123 C# ファイル（うち Core 48 / Tests 52）／ 約 32,000 行
-> **検収**: `dotnet test` → **653 pass / 0 fail**。`godot 4.3.stable.mono` ＋ `dotnet 10.0.301` で実機起動可能。
+> **検収**: `dotnet test` → **681 pass / 0 fail**。`godot 4.3.stable.mono` ＋ `dotnet 10.0.301` で実機起動可能。
 > **基準コミット**: `abc249b`
 >
 > ※ 旧 TypeScript 版（`apps/` `packages/` `scripts/`）は凍結された参照専用で本レポートの対象外。
@@ -42,7 +42,7 @@
 ### 3-1. 💰 経済（`PointsEconomy`）
 
 単一通貨「ポイント」を全消費（スカウト・婚姻・装備）が共有。状態は 3 値（残高/累計獲得/累計消費）。
-収入: `EarnFromTimeSkip(years)=years×1` ／ `EarnFromKill(lvl)=floor(lvl×1.5)` ／ `EarnDirect(delta)`。
+収入: `EarnFromTimeSkip(years)=years×1`（唯一の SoT 式）／ `EarnDirect(delta)`（戦果決算・予言報酬・強欲等の特殊経路）。
 `SpendPoints` は残高不足で `InvalidOperationException`（マイナス残高は構造的に発生しない）。
 
 ### 3-2. 🔮 予言タイムライン（`TimelineEngine` / `Prophecy`）
@@ -148,7 +148,7 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 
 | 観点 | 評価 |
 |---|---|
-| コアロジック（脳） | 🟢 不変設計・ロック規律・単方向フロー・年送り・パッシブ厳密検証まで堅牢（653 テスト緑） |
+| コアロジック（脳） | 🟢 不変設計・ロック規律・単方向フロー・年送り・パッシブ厳密検証まで堅牢（681 テスト緑） |
 | Godot 外殻（身体） | 🟢 土台一式・起動スイッチ・実機起動・動的 B 型 UI が通電済み（旧版の最大ボトルネックは解消） |
 | 本物の戦闘 | 🟢 盤面・敵・スケーリング・攻撃予告・ターン進行・とどめ・戦果決算まで実装 |
 | 残課題 | ▶ `ProphecyMaster` 本実装 / Affix・ドロップ / 背景・敵アセット / 年送り反映後のバランス再検証 |
@@ -158,5 +158,5 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 
 ---
 
-*— 本レポートは `generated_csharp/` のスキャンとグリーンビルド（653 pass）に基づき、コードの実態のみを記録した。
+*— 本レポートは `generated_csharp/` のスキャンとグリーンビルド（681 pass）に基づき、コードの実態のみを記録した。
 将来構想は `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` を参照。*

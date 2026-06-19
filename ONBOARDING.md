@@ -3,7 +3,7 @@
 > **このファイル 1 枚で、ゲーム内容・仕様・アーキテクチャ・ルール・ビルド手順・現状まで把握できる自己完結ドキュメント。**
 > 他の AI／開発者に渡すならまずこれ。詳細は各専門ドキュメント（`CLAUDE.md` / `instructions.md` / `docs/*`）へリンクする。
 >
-> 数値はすべてコード（`generated_csharp/Core/`）から採取。検収: `dotnet test` = **653 pass / 0 fail**。
+> 数値はすべてコード（`generated_csharp/Core/`）から採取。検収: `dotnet test` = **681 pass / 0 fail**。
 
 ---
 
@@ -141,10 +141,11 @@ Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──▶（年�
 | 収入 | 式 |
 |---|---|
 | タイムスキップ年次収入 | 経過年数 × 1pt |
-| 敵撃破報酬 | floor(敵レベル × 1.5) |
 | 戦果決算（婚姻ポイント） | 勝利時のみ: 基本 5 ＋ 昇級 2/人 ＋ 装備進化 1/件 − 完全ロスト 3/人 |
 | 休息ボーナス（Rest 予言） | +2pt |
 | 予言報酬（RewardPoints） | +カードの Value pt |
+
+> 戦闘収入は戦果決算（`BattleSpoils` 婚姻ポイント）に一本化されており、「敵 1 体撃破ごとの報酬」路は持たない。
 
 残高不足の消費は拒否される（マイナス残高は構造的に発生しない）。
 
@@ -230,7 +231,7 @@ Chronicle ──▶ Guild ──▶ Formation ──▶ Battle ──▶（年�
 
 ```sh
 dotnet build ChronicleKnights.csproj --configuration Debug   # 本体ビルド
-dotnet test  Tests/ChronicleKnights.Tests.csproj             # xUnit（653 pass / 0 fail）
+dotnet test  Tests/ChronicleKnights.Tests.csproj             # xUnit（681 pass / 0 fail）
 ./play.command                                               # C# ビルド → 実機起動
 ./play.command -e                                            # Godot エディタを開く
 ```
@@ -271,7 +272,7 @@ UI/{TimelineUI,MarriageUI,FormationUI,BattleUI}.cs   4 フェーズ画面
 UI/*Overlay.cs / *Screen.cs / JuiceDirector.cs       オーバーレイ・演出
 Config/localization_ja.json      全日本語テキストの辞書
 Assets/Textures/Jobs/{job}/{male|female}.png         ジョブ立ち絵（16 枚）
-Tests/                           xUnit（Core 対象・653 pass）
+Tests/                           xUnit（Core 対象・681 pass）
 ```
 
 ---
@@ -309,4 +310,4 @@ Tests/                           xUnit（Core 対象・653 pass）
 
 ---
 
-*— 本ガイドはコードの実態（`generated_csharp/`）から採取し、グリーンビルド（653 pass）で検収した。将来構想は移行憲法・ロードマップを参照。*
+*— 本ガイドはコードの実態（`generated_csharp/`）から採取し、グリーンビルド（681 pass）で検収した。将来構想は移行憲法・ロードマップを参照。*
