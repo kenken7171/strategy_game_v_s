@@ -255,6 +255,17 @@ public sealed record Equipment
     /// <summary>装備の現在実効突撃号令量（レベル補正後）。</summary>
     public double CurrentInitiativeBuff => ComputeScaledStat(BaseStats.InitiativeBuff);
 
+    // ─── Affix 由来のフラット補正（レベル乗算を通さない素の加算） ──────────
+
+    /// <summary>この個体の Affix が与える攻撃力 (ATK) フラット補正の総和。未知キーは 0。</summary>
+    public int AffixAttackBonus => AffixMaster.SumAttackBonus(AffixKeys);
+
+    /// <summary>この個体の Affix が与える分隊守護力 (DEF) フラット補正の総和。未知キーは 0。</summary>
+    public int AffixDefenseBonus => AffixMaster.SumDefenseBonus(AffixKeys);
+
+    /// <summary>この個体の Affix が与える行動速度 (SPD) フラット補正の総和。未知キーは 0。</summary>
+    public int AffixSpeedBonus => AffixMaster.SumSpeedBonus(AffixKeys);
+
     // ─── 自然婚姻ポイント倍率 ─────────────────────────────────────────────
 
     /// <summary>

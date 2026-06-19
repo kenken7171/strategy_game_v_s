@@ -124,43 +124,47 @@ public static class BattleManager
     //      DEF 補正 = floor(MainEquipment.CurrentSquadDefense)   … 分隊守護力（聖剣系が保有）
     //      SPD 補正 = floor(MainEquipment.CurrentInitiativeBuff) … 突撃号令＝行動初動（破滅杖が保有）
     //    未装備（MainEquipment == null）は全補正 0（ガード番兵）。
+    //
+    //  ★ Affix（付加効果）の合流: 装備個体が持つ Affix のフラット補正
+    //    （Equipment.Affix{Attack,Defense,Speed}Bonus、AffixMaster が解決）を
+    //    レベル乗算後の基礎値へ素で加算する。Affix なし装備は加算 0（無害）。
 
     /// <summary>
     /// 装着装備に由来する攻撃力（ATK）補正を返す純粋関数。未装備なら 0。
-    /// 既存 Equipment SoT の CurrentAttackPower を整数 floor して合流させる。
+    /// 既存 Equipment SoT の CurrentAttackPower を整数 floor し、Affix 分を加算合流させる。
     /// </summary>
     /// <param name="unit">補正を引くユニット（null 不可）。</param>
     public static int EquipmentAttackBonus(Unit unit)
     {
         ArgumentNullException.ThrowIfNull(unit);
         return unit.MainEquipment is { } equipment
-            ? (int)Math.Floor(equipment.CurrentAttackPower)
+            ? (int)Math.Floor(equipment.CurrentAttackPower) + equipment.AffixAttackBonus
             : 0;
     }
 
     /// <summary>
     /// 装着装備に由来する分隊守護力（DEF）補正を返す純粋関数。未装備なら 0。
-    /// 既存 Equipment SoT の CurrentSquadDefense を整数 floor して合流させる。
+    /// 既存 Equipment SoT の CurrentSquadDefense を整数 floor し、Affix 分を加算合流させる。
     /// </summary>
     /// <param name="unit">補正を引くユニット（null 不可）。</param>
     public static int EquipmentDefenseBonus(Unit unit)
     {
         ArgumentNullException.ThrowIfNull(unit);
         return unit.MainEquipment is { } equipment
-            ? (int)Math.Floor(equipment.CurrentSquadDefense)
+            ? (int)Math.Floor(equipment.CurrentSquadDefense) + equipment.AffixDefenseBonus
             : 0;
     }
 
     /// <summary>
     /// 装着装備に由来する速度（SPD）補正を返す純粋関数。未装備なら 0。
-    /// 既存 Equipment SoT の CurrentInitiativeBuff（突撃号令＝行動初動）を整数 floor して合流させる。
+    /// 既存 Equipment SoT の CurrentInitiativeBuff を整数 floor し、Affix 分を加算合流させる。
     /// </summary>
     /// <param name="unit">補正を引くユニット（null 不可）。</param>
     public static int EquipmentSpeedBonus(Unit unit)
     {
         ArgumentNullException.ThrowIfNull(unit);
         return unit.MainEquipment is { } equipment
-            ? (int)Math.Floor(equipment.CurrentInitiativeBuff)
+            ? (int)Math.Floor(equipment.CurrentInitiativeBuff) + equipment.AffixSpeedBonus
             : 0;
     }
 

@@ -201,7 +201,14 @@ public static class RestService
 
         var items = Enum.GetValues<ItemId>();
         var itemId = items[rng.Next(items.Length)];
-        var equipment = new Equipment { Id = Guid.NewGuid(), ItemId = itemId, Level = level };
+        var affixKeys = AffixMaster.RollAffixKeys(level, rng);
+        var equipment = new Equipment
+        {
+            Id = Guid.NewGuid(),
+            ItemId = itemId,
+            Level = level,
+            AffixKeys = affixKeys,
+        };
 
         return (roster.SetItem(idx, roster[idx].WithEquipment(equipment)), itemId);
     }
