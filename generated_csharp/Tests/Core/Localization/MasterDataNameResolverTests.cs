@@ -46,6 +46,10 @@ public class MasterDataNameResolverTests
     private const string EpochTwilightValue = "EPOCH-TWILIGHT";
     private const string EpochDawnKey      = "epoch-dawn";
     private const string EpochTwilightKey  = "epoch-twilight";
+    private const string AffixSharpValue   = "AFFIX-SHARP";
+    private const string AffixSwiftValue   = "AFFIX-SWIFT";
+    private const string AffixSharpKey     = "affix-sharp";
+    private const string AffixSwiftKey     = "affix-swift";
 
     // jobs / items / prophecyKinds を部分的に持つ最小フィクスチャ。
     //   - キーは enum.ToString()（PascalCase）に一致させる。
@@ -77,6 +81,11 @@ public class MasterDataNameResolverTests
         "{{EpochDawnKey}}":     { "name": "{{EpochDawnValue}}" },
         "{{EpochTwilightKey}}": { "name": "{{EpochTwilightValue}}" }
       },
+      "affixes": {
+        "_note": "Affix 名も平坦な ASCII キーで引く（enum 非依存）",
+        "{{AffixSharpKey}}": { "name": "{{AffixSharpValue}}" },
+        "{{AffixSwiftKey}}": { "name": "{{AffixSwiftValue}}" }
+      },
       "ui": { "ignored": "should-not-be-loaded" }
     }
     """;
@@ -98,6 +107,24 @@ public class MasterDataNameResolverTests
         Assert.Equal(2, resolver.ProphecyKindIconCount);
         Assert.Equal(2, resolver.SkillNameCount);
         Assert.Equal(2, resolver.EpochNameCount);
+        Assert.Equal(2, resolver.AffixNameCount);
+    }
+
+    // ─── Affix 名（平坦な ASCII キーで引く・enum 非依存） ────────────────────
+
+    [Theory]
+    [InlineData(AffixSharpKey, AffixSharpValue)]
+    [InlineData(AffixSwiftKey, AffixSwiftValue)]
+    public void ResolveAffixName_KnownKey_ReturnsDisplayString(string key, string expected)
+    {
+        Assert.Equal(expected, SampleResolver().ResolveAffixName(key));
+    }
+
+    [Fact]
+    public void ResolveAffixName_UnknownKey_FallsBackToRawKey()
+    {
+        // 未登録キーは生キー（ASCII）をそのまま返す（登録漏れを画面から判別可能に）。
+        Assert.Equal("affix-sturdy", SampleResolver().ResolveAffixName("affix-sturdy"));
     }
 
     // ─── 章（Epoch）名（平坦な ASCII キーで引く・enum 非依存） ───────────────

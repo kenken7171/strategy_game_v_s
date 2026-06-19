@@ -186,6 +186,13 @@
     }
   },
 
+  "affixes": {
+    "_note": "装備の付加効果 (Affix) の表示テキスト。AffixMaster (Core/Unit) が払い出す平坦な ASCII キー (affix-*) をそのままキーに引く。コード側に日本語は一切ハードコードしない。装備個体の AffixKeys に積まれ、戦闘ステ (ATK/DEF/SPD) を素のフラット値で底上げする。",
+    "affix-sharp":  { "name": "鋭利の", "description": "攻撃力 +3。装着者の与ダメージを底上げする。" },
+    "affix-sturdy": { "name": "堅牢の", "description": "分隊守護力 +2。所属分隊の被ダメージを軽減する。" },
+    "affix-swift":  { "name": "俊敏の", "description": "行動速度 +2。イニシアチブ（行動初動）を引き上げる。" }
+  },
+
   "prophecyKinds": {
     "_note": "予言タイムライン（TimelineEngine / TimelineUI）で 3 択提示される予言の種類 (ProphecyKind enum) の表示テキスト。icon（先頭の絵文字）と name（日本語ラベル）を分離して保持する。コード側 (TimelineUI.cs) には日本語も絵文字も一切ハードコードせず、enum 名 (ToString) をキーに本セクションから引く。MasterDataNameResolver (Core/Localization) が icon / name を解決し、未登録キーは生キーへフォールバックする。",
     "RewardPoints":  { "icon": "💰", "name": "報酬獲得" },

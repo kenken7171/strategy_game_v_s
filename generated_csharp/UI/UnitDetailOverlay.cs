@@ -207,6 +207,17 @@ public partial class UnitDetailOverlay : Godot.Control
         var equipText = equip is null ? "なし" : $"{ItemName(equip.ItemId)} Lv{equip.Level}";
         sb.Append("兵装: ").Append(equipText).Append('\n');
 
+        if (equip is not null && equip.HasAnyAffix)
+        {
+            sb.Append("付加効果: [color=").Append(GoldColor).Append("][b]");
+            for (var i = 0; i < equip.AffixKeys.Count; i++)
+            {
+                if (i > 0) sb.Append(" / ");
+                sb.Append(AffixName(equip.AffixKeys[i]));
+            }
+            sb.Append("[/b][/color]\n");
+        }
+
         var atk = BattleManager.EquipmentAttackBonus(unit);
         var dfn = BattleManager.EquipmentDefenseBonus(unit);
         var spd = BattleManager.EquipmentSpeedBonus(unit);
@@ -262,4 +273,7 @@ public partial class UnitDetailOverlay : Godot.Control
 
     private string ItemName(ItemId item)
         => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();
+
+    private string AffixName(string affixKey)
+        => _chronicleGlobal?.ResolveAffixName(affixKey) ?? affixKey;
 }

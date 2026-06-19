@@ -1834,6 +1834,13 @@ public partial class ChronicleGlobal : Godot.Node
     public string ResolveEpochName(string epochNameKey)
         => _masterDataNameResolver?.ResolveEpochName(epochNameKey) ?? epochNameKey;
 
+    /// <summary>
+    /// Affix（装備の付加効果）の表示用日本語名を localization 経由で解決する。Autoload
+    /// 未初期化や未登録キーのときは生キー（"affix-*"）へフォールバックして画面を落とさない。
+    /// </summary>
+    public string ResolveAffixName(string affixKey)
+        => _masterDataNameResolver?.ResolveAffixName(affixKey) ?? affixKey;
+
     // ════════════════════════════════════════════════════════════════════════
     //  読み取り専用クエリヘルパー（UI 利便用）
     // ════════════════════════════════════════════════════════════════════════
