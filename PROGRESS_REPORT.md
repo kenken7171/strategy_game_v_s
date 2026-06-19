@@ -132,10 +132,10 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 
 ### 4-4. ⚠ 既知の問題
 
-- **並走 UI `UserInterface/` がデッドコード**: `UserInterfaceRoot`/`TitleView`/`HubView`/`BattleView`/`SettlementView`
-  ＋ Hub 部品は `Main.tscn`・`GameDirector` から実行時に未参照。共有は `JobTextureLibrary.cs` のみ。
-  `ProphecyTimelineOverlay` が `UI/` と `UserInterface/Hub/` に二重定義。→ 採用一本化 or 削除を要する（`CLAUDE.md` G-3 / `TODO.md` T-1）。
-- ドキュメント微差: README / VISUAL ロードマップのテスト数「630」（現 653）。
+- ✅ **並走 UI `UserInterface/` のデッドコードは粛清済**: 死蔵 6 View（`UserInterfaceRoot`/`TitleView`/`HubView`/
+  `BattleView`/`SettlementView` ＋ 死蔵 `Hub/ProphecyTimelineOverlay`）を削除し `ProphecyTimelineOverlay` の二重定義を解消。
+  残るのは現役共有のみ（`JobTextureLibrary.cs` ＋ `Hub/` の D&D 部品 3 種）。詳細 `CLAUDE.md` G-3 / `TODO.md` T-1。
+- ドキュメント微差: 一部ドキュメントのテスト数表記が古い場合あり（正は `dotnet test` 実測値）。
 - `Tests/Core/Battle/BattleSeatingContractTests.cs:82` の xUnit2013 警告（`Assert.Single` 推奨。WarningsAsErrors 対象外で無害）。
 
 ### 4-5. アセット
@@ -151,10 +151,10 @@ ASCII キー → `localization_ja.json`。`NameGenerator`（3 文化圏 × 性�
 | コアロジック（脳） | 🟢 不変設計・ロック規律・単方向フロー・年送り・パッシブ厳密検証まで堅牢（653 テスト緑） |
 | Godot 外殻（身体） | 🟢 土台一式・起動スイッチ・実機起動・動的 B 型 UI が通電済み（旧版の最大ボトルネックは解消） |
 | 本物の戦闘 | 🟢 盤面・敵・スケーリング・攻撃予告・ターン進行・とどめ・戦果決算まで実装 |
-| 残課題 | ▶ 並走 UI の整理 / `ProphecyMaster` 本実装 / Affix・ドロップ / 背景・敵アセット |
+| 残課題 | ▶ `ProphecyMaster` 本実装 / Affix・ドロップ / 背景・敵アセット / 年送り反映後のバランス再検証 |
 
 「壊れない脳」と「それを宿す箱」は揃い、世代交代の循環を端から端まで手で回せる段階に到達した。
-次は中毒性の中核（ドロップ・配合・見栄え）の作り込みと、並走 UI の整理に進む。
+並走 UI の死蔵コードは粛清済。次は中毒性の中核（ドロップ・配合・見栄え）の作り込みに進む。
 
 ---
 

@@ -113,7 +113,7 @@ C# 版の `Unit` は HP・攻撃力・速度を **持たない**。保持する�
 
 - [ ] 予言生成の本実装（現状 `TimelineEngine.DefaultGenerator` は暫定の均等巡回。`ProphecyMaster` へ）
 - [ ] Affix（接尾効果）システムと装備ドロップ予言の効果ハンドラ
-- [ ] 並走 UI（`UserInterface/`）の整理 — 採用一本化 or 削除（`CLAUDE.md` G-3）
+- [x] 並走 UI（`UserInterface/`）の整理 — 死蔵 View 群を削除し現役共有部品のみ残した（`CLAUDE.md` G-3）
 - [ ] 背景 4 枚 / 敵 5 枚アセットと専用ローダ（`docs/ASSET_MANIFEST.md`）
 
 詳細なロードマップは `docs/MIGRATION_GODOT_HACK_AND_SLASH.md` §5 と `docs/VISUAL_AND_JUICE_ROADMAP.md`。

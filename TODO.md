@@ -28,12 +28,12 @@
 
 ## 🧹 直近の整理（負債解消・低リスク）
 
-### T-1. 並走 UI（`UserInterface/`）の整理 — 最優先の負債
+### T-1. 並走 UI（`UserInterface/`）の整理 — ✅ 完了
 
-- [ ] `UserInterface/`（`UserInterfaceRoot`/`TitleView`/`HubView`/`BattleView`/`SettlementView` ＋ Hub 部品）は
-      `Main.tscn`・`GameDirector` から実行時に未参照のデッドコード（→ [CLAUDE.md](CLAUDE.md) G-3）。**採用一本化 or 削除**を決める。
-- [ ] `ProphecyTimelineOverlay` の二重定義（`UI/` と `UserInterface/Hub/`）を解消。
-- [ ] 現役共有の `UserInterface/JobTextureLibrary.cs` は配置場所を見直す（`UI/` 直下 or `Assets` 系へ）。
+- [x] `UserInterface/` の死蔵 6 View（`UserInterfaceRoot`/`TitleView`/`HubView`/`BattleView`/`SettlementView` ＋
+      死蔵 `Hub/ProphecyTimelineOverlay`）を**削除**（→ [CLAUDE.md](CLAUDE.md) G-3）。
+- [x] `ProphecyTimelineOverlay` の二重定義（`UI/` と `UserInterface/Hub/`）を解消（現役 `UI/` のただ 1 定義に）。
+- [ ] 残る現役共有（`UserInterface/JobTextureLibrary.cs` ＋ `Hub/` の D&D 部品 3 種）の配置場所を見直す（`UI/` 直下 or `Assets` 系へ）。低優先。
 
 ### T-2. ドキュメント・警告の微修正
 

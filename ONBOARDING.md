@@ -280,16 +280,15 @@ Tests/                           xUnit（Core 対象・653 pass）
 
 **現状**: コアロジック・Godot 外殻・本物の戦闘まで実装・通電済みで、世代交代の循環を端から端まで手で回せる。
 
-**⚠ 既知の問題**
-- **並走 UI のデッドコード**: `UserInterface/`（UserInterfaceRoot→TitleView→HubView→BattleView→SettlementView ＋ Hub 部品）は
-  `Main.tscn`・`GameDirector` から実行時に未参照。共有は `JobTextureLibrary.cs` のみ。`ProphecyTimelineOverlay` が二重定義。
-  → 採用一本化 or 削除を要する。**`UserInterface/` の View 群を「現役 UI」と誤認しないこと。**
+**✅ 解消済み（旧・既知の問題）**
+- **並走 UI のデッドコード**: かつて `UserInterface/` に到達不能な並走 UI（UserInterfaceRoot/TitleView/HubView/BattleView/
+  SettlementView ＋ 死蔵 `Hub/ProphecyTimelineOverlay`）が同居していたが**削除済**。`ProphecyTimelineOverlay` の二重定義も解消。
+  残るのは現役共有のみ（`JobTextureLibrary.cs` ＋ `Hub/` の D&D 部品 3 種＝FormationUI が利用）。詳細 [CLAUDE.md](CLAUDE.md) G-3。
 
 **残課題（→ [TODO.md](TODO.md)）**
 - 予言生成の本実装（現状 `TimelineEngine.DefaultGenerator` は暫定の均等巡回）
 - Affix（接尾効果）／装備ドロップ予言の効果ハンドラ
 - 背景 4 枚・敵 5 枚アセットと専用ローダ（→ [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md)）
-- 並走 UI の整理
 
 ---
 

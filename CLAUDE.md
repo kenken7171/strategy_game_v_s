@@ -39,7 +39,7 @@ generated_csharp/
 ├── Core/        ★純粋ゲームロジック（Godot を一切知らない「脳」。xUnit で単体検証可）
 ├── Autoload/    ☆ChronicleGlobal.cs — 常駐 SoT（唯一の真実）。Godot 依存の中枢
 ├── UI/          ☆現役 UI（Godot Control をコードで動的構築。.tscn は Main 以外不使用）
-├── UserInterface/  ⚠駐機中の第 2 UI（後述 G-3。Main.tscn から未結線＝実行時に到達しない）
+├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
 ├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
 └── Tests/       xUnit 単体テスト（Core を対象。653 pass）
@@ -367,14 +367,23 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - 表示文字列はすべて `ChronicleGlobal.Resolve*`（`ResolveJobName`/`ResolveItemName`/`ResolveProphecyKindName`/
   `ResolveDisplayName`/`ResolvePhaseName` 等）経由で localization から解決し、コード側に日本語・絵文字を持たない。
 
-### G-3. ⚠ 既知の問題 — 駐機中の第 2 UI（`UserInterface/`）
+### G-3. `UserInterface/` — 死蔵 View 群を粛清し「現役共有部品」だけを残した
 
-`UserInterface/`（`UserInterfaceRoot` → `Title/TitleView` → `Hub/HubView` → `Battle/BattleView` →
-`Settlement/SettlementView` ＋ Hub のドラッグ部品など 約 10 ファイル）は、**`Main.tscn` からも `GameDirector` からも
-実行時に一度も参照されない**並走 UI（新 UI の試作）。コンパイルはされるが到達しないデッドコード。
-唯一 `UserInterface/JobTextureLibrary.cs` だけは現役 `UI/`（BattleUI/FormationUI 等）から共有利用されている。
-副作用として `ProphecyTimelineOverlay` が `UI/` と `UserInterface/Hub/` に**二重定義**されている。
-→ 整理（採用一本化 or 削除）を要する領域。誤って `UserInterface/` の View 群を「現役 UI」と見なさないこと。
+かつて `UserInterface/` には到達不能な並走 UI（`UserInterfaceRoot`/`Title/TitleView`/`Hub/HubView`/
+`Battle/BattleView`/`Settlement/SettlementView` ＋ 死蔵側 `Hub/ProphecyTimelineOverlay`）が同居し、
+`ProphecyTimelineOverlay` の二重定義の温床になっていた。コミット（本掃除）で **死蔵 6 View をすべて削除**し、
+二重定義を解消した。残っているのは **すべて現役** の以下のみ:
+
+| 残存ファイル | 利用元（現役） |
+|---|---|
+| `UserInterface/JobTextureLibrary.cs` | `UI/BattleUI` `UI/FormationUI` `UI/UnitDetailOverlay` `UI/JobDescriptionView`（ジョブ立ち絵の共有ライブラリ） |
+| `UserInterface/Hub/FormationDragPayload.cs` | `UI/FormationUI`（D&D 編成のドラッグ運搬体） |
+| `UserInterface/Hub/RosterDragCard.cs` | `UI/FormationUI`（ロスタ側ドラッグ元カード） |
+| `UserInterface/Hub/FormationSlotControl.cs` | `UI/FormationUI`（盤面スロットのドロップ先） |
+
+- これにより `ProphecyTimelineOverlay` は現役 `UI/ProphecyTimelineOverlay.cs` のただ 1 定義になった。
+- 注意: `Tests/Core/Lifecycle/` の `*ViewContractTests`（`BattleViewContractTests` 等）は**削除した View の名前を冠するが中身は生きている契約テスト**。
+  Core 純粋層のロジック（現役 `UI/` 画面が実装する契約）を固定するもので、削除済み View には一切コンパイル依存しない。名前は歴史的経緯。
 
 ---
 
@@ -465,7 +474,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ### Autoload / UI / Config
 - `Autoload/ChronicleGlobal.cs` — 常駐 SoT・全 API・シグナル・セーブ/ロード（約 2060 行）
 - `UI/GameDirector.cs` `TimelineUI.cs` `MarriageUI.cs` `FormationUI.cs` `BattleUI.cs` ＋ 各オーバーレイ・`JuiceDirector.cs`
-- `UserInterface/JobTextureLibrary.cs`（現役・共有）／ `UserInterface/` のその他 View 群（⚠駐機中・G-3）
+- `UserInterface/JobTextureLibrary.cs`（現役・共有）／ `UserInterface/Hub/` の D&D 部品 3 種（現役・FormationUI 利用。死蔵 View は粛清済・G-3）
 - `Config/localization_ja.json` — 全日本語テキストの辞書
 - `Assets/Textures/Jobs/{job}/{male|female}.png` — ジョブ立ち絵（16 枚）。背景 4 / 敵 5 は要追加（`docs/ASSET_MANIFEST.md`）
 

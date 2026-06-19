@@ -5,7 +5,8 @@
 //  formation screen (packages/frontend/src/phases/BattalionFormation/
 //  BattalionFormationPage.tsx): the wedge ("V") layout where the FRONT squad
 //  sits centered on top and the two REAR squads sit below, plus drag-and-drop
-//  placement (the dormant HubView delta behavior moved into the live screen).
+//  placement (the delta behavior now lives here in the live screen; the former
+//  dormant HubView prototype has been removed).
 //
 //  The Core board stays a 3x3 FormationBoard (Front / RearLeft / RearRight x
 //  col 0..2 = 9 slots). The wedge is purely a UI PRESENTATION over those 9

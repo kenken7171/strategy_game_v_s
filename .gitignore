@@ -4,6 +4,9 @@
 .DS_Store
 *.log
 
+# エディタ個人設定（共有しない）
+.vscode/
+
 # ルート直下に置かれたアセット原本（packages/frontend/public/image/ に複製済）
 # 配信用は public/image/{jobId}/{gender}.png として管理する
 /image/
