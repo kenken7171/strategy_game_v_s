@@ -77,6 +77,10 @@ public partial class MarriageUI : Godot.Control
     /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
     private const string TestIdMetaKey = "data_testid";
 
+    /// <summary>一覧・プルダウンに出すジョブ立ち絵アイコンの一辺サイズ（px）。立ち絵は縦長で
+    /// 巨大なため、小さく制限しないと文字が見えなくなる（OptionButton は icon_max_width で制限）。</summary>
+    private const int UnitIconSize = 28;
+
     // ─── 意思表示イベント（オーバーレイのマウントは購読側 = GameDirector が引く） ──
 
     /// <summary>
@@ -242,6 +246,9 @@ public partial class MarriageUI : Godot.Control
         pairRow.AddChild(fatherLabel);
         _fatherSelect = new OptionButton();
         _fatherSelect.SetMeta(TestIdMetaKey, "marriage-father-select");
+        // 立ち絵アイコンは縦長で巨大なため、ドロップダウンのアイコン幅を小さく制限する
+        // （これをしないと項目が立ち絵で埋まり文字が見えなくなる）。
+        _fatherSelect.AddThemeConstantOverride("icon_max_width", UnitIconSize);
         _fatherSelect.ItemSelected += OnFatherSelectionChanged;
         pairRow.AddChild(_fatherSelect);
 
@@ -250,6 +257,7 @@ public partial class MarriageUI : Godot.Control
         pairRow.AddChild(motherLabel);
         _motherSelect = new OptionButton();
         _motherSelect.SetMeta(TestIdMetaKey, "marriage-mother-select");
+        _motherSelect.AddThemeConstantOverride("icon_max_width", UnitIconSize);
         _motherSelect.ItemSelected += OnMotherSelectionChanged;
         pairRow.AddChild(_motherSelect);
 
@@ -705,7 +713,7 @@ public partial class MarriageUI : Godot.Control
 
             var name = new Label
             {
-                Text = $"🎖 {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
+                Text = $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
                        + _chronicleGlobal.ResolveDisplayName(unit),
             };
             name.SetMeta(TestIdMetaKey, $"shop-unit-name-{capturedId}");
@@ -907,6 +915,7 @@ public partial class MarriageUI : Godot.Control
                 // 横並びボタンだと 9 名で端が見切れたため OptionButton 化（端のユニットも選べる）。
                 var targetSelect = new OptionButton();
                 targetSelect.SetMeta(TestIdMetaKey, $"inventory-equip-target-select-{capturedItemId}");
+                targetSelect.AddThemeConstantOverride("icon_max_width", UnitIconSize);
                 var targetIds = new List<Guid>();
                 foreach (var unit in alive)
                 {
@@ -958,7 +967,7 @@ public partial class MarriageUI : Godot.Control
         return new TextureRect
         {
             Texture           = tex,
-            CustomMinimumSize  = new Vector2(36, 36),
+            CustomMinimumSize  = new Vector2(UnitIconSize, UnitIconSize),
             StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
             ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
         };
@@ -1043,7 +1052,7 @@ public partial class MarriageUI : Godot.Control
 
             var name = new Label
             {
-                Text = $"🎖 {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
+                Text = $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
                        + _chronicleGlobal.ResolveDisplayName(unit),
             };
             name.SetMeta(TestIdMetaKey, $"marriage-dismiss-name-{capturedId}");
@@ -1112,7 +1121,7 @@ public partial class MarriageUI : Godot.Control
 
             var name = new Label
             {
-                Text = $"🎖 {JobName(unit.Job)} (Age {unit.Age}) "
+                Text = $"{JobName(unit.Job)} (Age {unit.Age}) "
                        + _chronicleGlobal.ResolveDisplayName(unit),
             };
             name.SetMeta(TestIdMetaKey, $"marriage-pedigree-name-{capturedId}");
