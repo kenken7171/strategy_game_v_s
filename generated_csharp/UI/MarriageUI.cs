@@ -50,6 +50,7 @@ using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
 using ChronicleKnights.Core.Shop;
 using ChronicleKnights.Core.Units;
+using ChronicleKnights.UserInterface;        // JobTextureLibrary（ジョブ立ち絵アイコン）
 using Godot;
 
 namespace ChronicleKnights.UI;
@@ -841,9 +842,12 @@ public partial class MarriageUI : Godot.Control
             row.AddThemeConstantOverride("separation", 8);
             row.SetMeta(TestIdMetaKey, $"inventory-equipped-row-{capturedId}");
 
+            var icon = MakeUnitIcon(unit);
+            if (icon is not null) row.AddChild(icon);
+
             var label = new Label
             {
-                Text = $"🎖 {_chronicleGlobal.ResolveDisplayName(unit)} — {EquipmentSummary(equip)}",
+                Text = $"{JobName(unit.Job)} {_chronicleGlobal.ResolveDisplayName(unit)} — {EquipmentSummary(equip)}",
             };
             label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             row.AddChild(label);
@@ -889,15 +893,33 @@ public partial class MarriageUI : Godot.Control
 
             if (_pendingEquipItemId == capturedItemId)
             {
-                // 装備先選択状態: 生存者ユニットのボタン群＋[やめる]。
+                // 装備先選択状態: プルダウン（ジョブアイコン付き）で 1 名を選び [装備] で確定。
+                // 横並びボタンだと 9 名で端が見切れたため OptionButton 化（端のユニットも選べる）。
+                var targetSelect = new OptionButton();
+                targetSelect.SetMeta(TestIdMetaKey, $"inventory-equip-target-select-{capturedItemId}");
+                var targetIds = new List<Guid>();
                 foreach (var unit in alive)
                 {
-                    var capturedUnitId = unit.Id;
-                    var pick = new Button { Text = _chronicleGlobal.ResolveDisplayName(unit) };
-                    pick.SetMeta(TestIdMetaKey, $"inventory-equip-target-{capturedItemId}-{capturedUnitId}");
-                    pick.Pressed += () => OnEquipFromInventoryPressed(capturedItemId, capturedUnitId);
-                    row.AddChild(pick);
+                    var optLabel = $"{JobName(unit.Job)} {_chronicleGlobal.ResolveDisplayName(unit)}";
+                    var icon = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+                    if (icon is not null) targetSelect.AddIconItem(icon, optLabel);
+                    else targetSelect.AddItem(optLabel);
+                    targetIds.Add(unit.Id);
                 }
+                row.AddChild(targetSelect);
+
+                var confirm = new Button { Text = "装備" };
+                confirm.SetMeta(TestIdMetaKey, $"inventory-equip-confirm-{capturedItemId}");
+                confirm.Pressed += () =>
+                {
+                    var sel = targetSelect.Selected;
+                    if (sel >= 0 && sel < targetIds.Count)
+                    {
+                        OnEquipFromInventoryPressed(capturedItemId, targetIds[sel]);
+                    }
+                };
+                row.AddChild(confirm);
+
                 var cancel = new Button { Text = "やめる" };
                 cancel.SetMeta(TestIdMetaKey, $"inventory-equip-cancel-{capturedItemId}");
                 cancel.Pressed += OnEquipFromInventoryCancelPressed;
@@ -913,6 +935,23 @@ public partial class MarriageUI : Godot.Control
 
             _inventoryListContainer.AddChild(row);
         }
+    }
+
+    /// <summary>
+    /// ユニットのジョブ立ち絵を小さなアイコン（TextureRect）として作る。全ユニットは
+    /// ジョブ×性別の 16 アセットのいずれかへ対応するため必ず引ける（資産欠落時のみ null）。
+    /// </summary>
+    private static TextureRect? MakeUnitIcon(Unit unit)
+    {
+        var tex = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (tex is null) return null;
+        return new TextureRect
+        {
+            Texture           = tex,
+            CustomMinimumSize  = new Vector2(36, 36),
+            StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
+            ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
+        };
     }
 
     /// <summary>装備 1 個の表示文（種別名 Lv ＋ Affix 名の連結）。コード側に日本語は持たない。</summary>
