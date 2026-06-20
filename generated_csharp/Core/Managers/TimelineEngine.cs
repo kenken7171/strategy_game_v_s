@@ -180,11 +180,12 @@ public sealed record TimelineEngine
     // ─── デフォルト予言ジェネレータ ────────────────────────────────────────
 
     /// <summary>
-    /// 取りこぼし防止のデフォルト予言ジェネレータ。
+    /// 取りこぼし防止の最小構成ジェネレータ（均等ランダム巡回・全カード Bronze）。
     /// ターン番号 × 乱数で 3 種類の Prophecy を生成する。
     ///
-    /// 本実装は最小構成の例示で、ProphecyMaster が翻訳されたら本ジェネレータは
-    /// 「ProphecyMaster.Generate(turn, rng)」へ置き換える想定。
+    /// ★ 本番（ChronicleGlobal）はもう本ジェネレータを使わない。3 枚キュレーション・
+    ///   レア度（銅/銀/金）・効果量 SoT・暦連動を備えた <c>ProphecyMaster.Generate</c> に
+    ///   差し替え済み。本メソッドはテスト／SampleData 用の単純なフォールバックとして残す。
     /// </summary>
     public static ImmutableArray<Prophecy> DefaultGenerator(int turn, Random rng)
     {

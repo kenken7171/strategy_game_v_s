@@ -17,8 +17,10 @@ using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Managers;        // TimelineEngine
 using ChronicleKnights.Core.Naming;          // Gender
 using ChronicleKnights.Core.Persistence;
+using ChronicleKnights.Core.Timeline;        // Prophecy / ProphecyRarity
 using ChronicleKnights.Core.Units;
 using ChronicleKnights.Tests.TestSupport;
 using Xunit;
@@ -118,6 +120,51 @@ public class SaveSerializerTests
             // Prophecy はスカラー専用 record なので値等価で全フィールド照合できる
             Assert.Equal(b, a);
         }
+    }
+
+    [Fact]
+    public void Roundtrip_PreservesProphecyRarity()
+    {
+        // ProphecyMaster が払い出すレア度（銅/銀/金）が往復で保存されること（v7）。
+        var state = SampleData.BuildState();
+        var options = ImmutableArray.Create(
+            new Prophecy { Id = Guid.NewGuid(), Kind = ProphecyKind.RewardPoints,
+                Rarity = ProphecyRarity.Gold,   SkipYears = 3, Value = 14, DescriptionKey = "RewardPoints.Gold" },
+            new Prophecy { Id = Guid.NewGuid(), Kind = ProphecyKind.EquipmentDrop,
+                Rarity = ProphecyRarity.Silver, SkipYears = 2, Value = 3,  DescriptionKey = "EquipmentDrop.Silver" },
+            new Prophecy { Id = Guid.NewGuid(), Kind = ProphecyKind.Rest,
+                Rarity = ProphecyRarity.Bronze, SkipYears = 4, Value = 2,  DescriptionKey = "Rest.Bronze" });
+        var timeline = new TimelineEngine { Turn = 7, CurrentOptions = options };
+
+        var json = SaveSerializer.Serialize(state.Economy, timeline, state.Roster, state.ChronicleLog);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        var after = loaded!.Timeline.CurrentOptions;
+        Assert.Equal(ProphecyRarity.Gold,   after[0].Rarity);
+        Assert.Equal(ProphecyRarity.Silver, after[1].Rarity);
+        Assert.Equal(ProphecyRarity.Bronze, after[2].Rarity);
+        Assert.Equal("RewardPoints.Gold", after[0].DescriptionKey);
+    }
+
+    [Fact]
+    public void Deserialize_LegacyV6Save_WithoutProphecyRarity_DefaultsToBronze()
+    {
+        // Rarity フィールドを持たない旧 v6 セーブを模した JSON → 既定 Bronze で後方互換復元。
+        const string legacyJson =
+            "{\"Version\":6," +
+            "\"Economy\":{\"CurrentBalance\":7,\"TotalEarned\":7,\"TotalSpent\":0}," +
+            "\"Timeline\":{\"Turn\":3,\"CurrentOptions\":[" +
+            "{\"Id\":\"11111111-1111-1111-1111-111111111111\",\"Kind\":\"RewardPoints\"," +
+            "\"SkipYears\":2,\"Value\":3,\"DescriptionKey\":\"legacy\"}]}," +
+            "\"Roster\":[]}";
+
+        var loaded = SaveSerializer.Deserialize(legacyJson);
+
+        Assert.NotNull(loaded);
+        var p = Assert.Single(loaded!.Timeline.CurrentOptions);
+        Assert.Equal(ProphecyRarity.Bronze, p.Rarity);
+        Assert.Equal(ProphecyKind.RewardPoints, p.Kind);
     }
 
     // ─── ラウンドトリップ: ロスター（フィールド単位の厳密照合） ─────────────

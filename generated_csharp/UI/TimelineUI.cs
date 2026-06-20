@@ -290,15 +290,20 @@ public partial class TimelineUI : Godot.Control
             {
                 var p = options[i];
                 btn.Disabled = false;
+                // 上段＝レア度バッジ（銅/銀/金）、中段＝予言種別、下段＝効果量。
                 btn.Text =
-                    $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)}\n" +
-                    $"{_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
+                    $"{_chronicleGlobal.ResolveProphecyRarityIcon(p.Rarity)} {_chronicleGlobal.ResolveProphecyRarityName(p.Rarity)}\n" +
+                    $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)} {_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
                     $"値: {p.Value}";
-                detail.Text = $"⏳ {p.SkipYears} 年経過";
+                btn.Modulate = RarityColor(p.Rarity); // レア度で色味を変える
+                // 詳細：フレーバー文 ＋ タイムスキップ年数。
+                var flavor = _chronicleGlobal.ResolveProphecyDescription(p.DescriptionKey);
+                detail.Text = $"{flavor}\n⏳ {p.SkipYears} 年経過";
             }
             else
             {
                 btn.Disabled = true;
+                btn.Modulate = Colors.White;
                 btn.Text = "—";
                 detail.Text = "";
             }
@@ -387,6 +392,17 @@ public partial class TimelineUI : Godot.Control
             SizeFlagsVertical  = Control.SizeFlags.ShrinkCenter,
         };
     }
+
+    /// <summary>
+    /// 予言カードのレア度に応じた色味（Modulate）。ブロンズは無着色（標準）、シルバーは
+    /// 涼やかな白銀、ゴールドは黄金色。色は装飾でありゲームロジックには一切関与しない。
+    /// </summary>
+    private static Color RarityColor(ProphecyRarity rarity) => rarity switch
+    {
+        ProphecyRarity.Gold   => new Color(1.0f, 0.86f, 0.35f),
+        ProphecyRarity.Silver => new Color(0.82f, 0.88f, 1.0f),
+        _                     => Colors.White,
+    };
 
     /// <summary>
     /// 1 件の年代記イベントを 1 行のナレーション文へ整形する。ユニット名・ジョブ名は

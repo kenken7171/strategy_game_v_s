@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 死蔵コード掃除（`UserInterface/` 死蔵 View 粛清 ＋ `EarnFromKill` 削除）／ 検収: `dotnet test` 681 pass / 0 fail。
+> 最終更新の根拠: 予言生成の本実装（`ProphecyMaster`：3 枚キュレーション＋レア度 銅/銀/金＋効果量 SoT＋暦連動＋フレーバー辞書）／ 検収: `dotnet test` 732 pass / 0 fail。
 
 ---
 
@@ -42,7 +42,7 @@ generated_csharp/
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
 ├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
-└── Tests/       xUnit 単体テスト（Core を対象。681 pass）
+└── Tests/       xUnit 単体テスト（Core を対象。732 pass）
 ```
 
 ### A-2. 技術スタック
@@ -77,7 +77,7 @@ generated_csharp/
 | コマンド | 内容 |
 |---|---|
 | `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
-| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**681 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**732 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
 | `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
 | `./play.command -e` | Godot エディタを開く |
 | `godot --path .` | （ビルド済み前提で）直接起動 |
@@ -345,6 +345,10 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 4. 定期収入 `EarnFromTimeSkip(years)` を加算
 5. **暦の年（`Turn`）を `years` ぶん進めて**次世代の予言 3 つを再生成（`TimelineEngine.AdvanceToNextTurn(…, years)`）。
    ボス接近周は暦がボス年へちょうど着地し、次の周回でその年の戦闘がボス戦になる（取りこぼし防止）。
+   - 予言の中身は `ProphecyMaster.Generate(turn, rng)`（数値 SoT）が組む: **必ず相異なる 3 Kind**（「3 枚同じ」を構造排除）、
+     **レア度 `ProphecyRarity{Bronze/Silver/Gold}`**（基本ブロンズ・たまに銀・稀に金で効果量が跳ねる。戦闘は暦が強さを決めるため常に Bronze）、
+     **Kind×Rarity の効果量テーブル**（RewardPoints/ScoutReward/EquipmentDrop/Rest を単調に底上げ）、**暦連動**（章 Epoch とボス接近で Kind の出やすさを傾ける）。
+     表示は `DescriptionKey="Kind.Rarity"`→`prophecies` 辞書のフレーバー文＋`prophecyRarities` のバッジで解決。`TimelineEngine.DefaultGenerator` はテスト用フォールバックに降格。
 
 シグナル発火順は **Roster → Economy → Timeline →（必要時 Formation）→ Phase**（画面切替前にデータ確定を保証）。
 
@@ -399,7 +403,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ## H. テスト規約と検証
 
-実体: `generated_csharp/Tests/`（xUnit / **681 pass / 0 fail**）
+実体: `generated_csharp/Tests/`（xUnit / **732 pass / 0 fail**）
 
 ### H-1. テスト方針
 
@@ -429,7 +433,8 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ### I-1. ローカライズ（`Config/localization_ja.json`）
 
 - 全日本語テキストの唯一の辞書。トップレベルセクション: `phases / passives / squadRows / effectKinds /
-  effectScopes / jobs / items / affixes / prophecyKinds / enemySkills / epochs / enemyArchetypes / names / ui / marriage`。
+  effectScopes / jobs / items / affixes / prophecyKinds / prophecyRarities / prophecies / enemySkills / epochs / enemyArchetypes / names / ui / marriage`。
+  （`prophecyRarities`=銅/銀/金のバッジ name/icon、`prophecies`=予言フレーバー文を `"Kind.Rarity"` キーで引く flavor。）
 - 純粋層 `NameResolver`（キー→氏名。`@` 連結の称号付き複合キーを「称号＋名＋姓」へ自動連結）/ `PhaseNameResolver` /
   `MasterDataNameResolver` が解決し、`ChronicleGlobal.LoadLocalization` が res:// から一度だけ読み込んで各リゾルバを構築。
 - **未知キーは例外を投げず生キーを返す**（画面が落ちず、未登録キーが一目で分かる）。
@@ -444,7 +449,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 
 - `user://save_data.json` に **未暗号化の整形 JSON** で保存（可読性・デバッグ性優先）。
 - アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）でクラッシュ耐性。
-- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 6。v5=持ち物 Inventory / v6=旅団史の Gender 追加・旧版は既定値で後方互換）。
+- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 7。v5=持ち物 Inventory / v6=旅団史の Gender 追加 / v7=予言 Rarity 追加・旧版は既定値（Bronze 等）で後方互換）。
 - **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog` / 持ち物 `BrigadeInventory`（v5）。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数・選択待ちドロップ。
 - ロード時は新しい Random を再注入し、`CurrentPhase` は **常に Chronicle から再開**。
 
@@ -477,7 +482,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
   `AttackIntent.cs` `AttackIntentRoller.cs` `BattleEvent.cs` `BattleProgressGate.cs` `BattleSpoils.cs` `EpochBossForecast.cs`
 - `Core/Managers/PointsEconomy.cs` `TimelineEngine.cs` `RosterLifecycle.cs` `MarriageService.cs` `ScoutService.cs`
   `RosterAdminService.cs`
-- `Core/Shop/ShopService.cs` / `Core/Timeline/Prophecy.cs` / `Core/Chronicle/ChronicleTimelineConfig.cs`
+- `Core/Shop/ShopService.cs` / `Core/Timeline/Prophecy.cs` `ProphecyMaster.cs`（予言生成 SoT：3 枚キュレーション＋レア度＋効果量＋暦連動） / `Core/Chronicle/ChronicleTimelineConfig.cs`
   `EnemyScalingResolver.cs` `MetricsCollector.cs` `UniverseEvaluator.cs` `ChronicleLogEntry.cs`
 - `Core/Naming/` `Core/Localization/` `Core/Pedigree/PedigreeGraph.cs` `Core/Persistence/` `Core/Bootstrap/NewGameFactory.cs`
 

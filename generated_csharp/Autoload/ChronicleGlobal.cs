@@ -435,7 +435,7 @@ public partial class ChronicleGlobal : Godot.Node
             BrigadeInventory = ImmutableList<Equipment>.Empty; // 新規開始は持ち物なし
             PendingDropCandidates = ImmutableArray<Equipment>.Empty; // 選択待ちドロップなし
             CurrentTimeline = initialTimeline
-                ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
+                ?? TimelineEngine.CreateInitial(ProphecyMaster.Generate, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
             CurrentAction = PlannedAction.March;        // 新規開始時の既定行動は出撃
             CurrentFormation = FormationBoard.Empty();  // 新規開始は空盤面から
@@ -1228,7 +1228,7 @@ public partial class ChronicleGlobal : Godot.Node
         if (CurrentTimeline is not null)
         {
             CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
-                TimelineEngine.DefaultGenerator, _rng, years);
+                ProphecyMaster.Generate, _rng, years);
         }
 
         // 5. 保留年数・保留予言をリセット（次の Chronicle 選択で改めて設定される）。
@@ -1892,6 +1892,25 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     public string ResolveProphecyKindIcon(ProphecyKind kind)
         => _masterDataNameResolver?.ResolveProphecyKindIcon(kind) ?? kind.ToString();
+
+    /// <summary>
+    /// 予言レア度（Bronze/Silver/Gold）の表示用日本語名を解決する。未ロード時は enum 名へ。
+    /// </summary>
+    public string ResolveProphecyRarityName(ProphecyRarity rarity)
+        => _masterDataNameResolver?.ResolveProphecyRarityName(rarity) ?? rarity.ToString();
+
+    /// <summary>
+    /// 予言レア度のアイコン（🥉/🥈/🥇）を解決する。未ロード時は enum 名へフォールバック。
+    /// </summary>
+    public string ResolveProphecyRarityIcon(ProphecyRarity rarity)
+        => _masterDataNameResolver?.ResolveProphecyRarityIcon(rarity) ?? rarity.ToString();
+
+    /// <summary>
+    /// 予言のフレーバー文を DescriptionKey（"Kind.Rarity" 形式）から解決する。未ロード・
+    /// 未登録時は生キーへフォールバックして画面を落とさない。
+    /// </summary>
+    public string ResolveProphecyDescription(string descriptionKey)
+        => _masterDataNameResolver?.ResolveProphecyDescription(descriptionKey) ?? descriptionKey;
 
     /// <summary>
     /// 敵スキル（攻撃予告）の表示用日本語名を、AttackIntent.SkillNameKey（ASCII キー）

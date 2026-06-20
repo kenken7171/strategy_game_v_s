@@ -50,6 +50,10 @@ public class MasterDataNameResolverTests
     private const string AffixSwiftValue   = "AFFIX-SWIFT";
     private const string AffixSharpKey     = "affix-sharp";
     private const string AffixSwiftKey     = "affix-swift";
+    private const string RarityGoldName    = "RARITY-GOLD";
+    private const string RarityGoldIcon    = "RARITY-GOLD-ICON";
+    private const string ProphDescKey      = "RewardPoints.Gold";
+    private const string ProphDescValue    = "PROPHECY-DESC-REWARD-GOLD";
 
     // jobs / items / prophecyKinds を部分的に持つ最小フィクスチャ。
     //   - キーは enum.ToString()（PascalCase）に一致させる。
@@ -86,6 +90,16 @@ public class MasterDataNameResolverTests
         "{{AffixSharpKey}}": { "name": "{{AffixSharpValue}}" },
         "{{AffixSwiftKey}}": { "name": "{{AffixSwiftValue}}" }
       },
+      "prophecyRarities": {
+        "_note": "レア度は enum 名で引き name/icon を分離",
+        "Gold":   { "icon": "{{RarityGoldIcon}}", "name": "{{RarityGoldName}}" },
+        "Silver": { "icon": "x", "name": "y" }
+      },
+      "prophecies": {
+        "_note": "フレーバー文は \"Kind.Rarity\" キーで flavor を引く",
+        "{{ProphDescKey}}": { "flavor": "{{ProphDescValue}}" },
+        "Rest.Bronze":      { "flavor": "z" }
+      },
       "ui": { "ignored": "should-not-be-loaded" }
     }
     """;
@@ -108,6 +122,45 @@ public class MasterDataNameResolverTests
         Assert.Equal(2, resolver.SkillNameCount);
         Assert.Equal(2, resolver.EpochNameCount);
         Assert.Equal(2, resolver.AffixNameCount);
+        Assert.Equal(2, resolver.ProphecyRarityNameCount);
+        Assert.Equal(2, resolver.ProphecyRarityIconCount);
+        Assert.Equal(2, resolver.ProphecyDescriptionCount);
+    }
+
+    // ─── 予言レア度（enum で引く name / icon）＋ フレーバー文（Kind.Rarity で引く） ──
+
+    [Fact]
+    public void ResolveProphecyRarity_KnownEnum_ReturnsNameAndIcon()
+    {
+        var resolver = SampleResolver();
+
+        Assert.Equal(RarityGoldName, resolver.ResolveProphecyRarityName(ProphecyRarity.Gold));
+        Assert.Equal(RarityGoldIcon, resolver.ResolveProphecyRarityIcon(ProphecyRarity.Gold));
+    }
+
+    [Fact]
+    public void ResolveProphecyRarity_UnregisteredEnum_FallsBackToEnumName()
+    {
+        var resolver = SampleResolver();
+
+        // Bronze は未登録 → enum 名へフォールバック（登録漏れが画面で分かる）。
+        Assert.Equal(nameof(ProphecyRarity.Bronze), resolver.ResolveProphecyRarityName(ProphecyRarity.Bronze));
+    }
+
+    [Fact]
+    public void ResolveProphecyDescription_KnownKey_ReturnsFlavor()
+    {
+        var resolver = SampleResolver();
+
+        Assert.Equal(ProphDescValue, resolver.ResolveProphecyDescription(ProphDescKey));
+    }
+
+    [Fact]
+    public void ResolveProphecyDescription_UnknownKey_FallsBackToRawKey()
+    {
+        var resolver = SampleResolver();
+
+        Assert.Equal("Battle.Gold", resolver.ResolveProphecyDescription("Battle.Gold"));
     }
 
     // ─── Affix 名（平坦な ASCII キーで引く・enum 非依存） ────────────────────

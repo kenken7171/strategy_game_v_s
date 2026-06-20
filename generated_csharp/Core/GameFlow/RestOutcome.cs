@@ -160,7 +160,13 @@ public static class RestService
                 // Battle prophecy is therefore a no-op (used as a safe guard on the battle path).
                 break;
 
-            default: // Rest or null (a plain rest year) -> the fixed rest bonus.
+            case ProphecyKind.Rest:
+                // A Rest prophecy cashes in its (rarity-scaled) Value; never below the fixed
+                // floor so a plain Bronze rest still grants at least RestPointsReward.
+                pointsReward = Math.Max(RestPointsReward, prophecy.Value);
+                break;
+
+            default: // null (a plain rest year, no prophecy) -> the fixed rest bonus.
                 pointsReward = RestPointsReward;
                 break;
         }

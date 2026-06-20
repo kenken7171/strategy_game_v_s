@@ -77,10 +77,34 @@ public enum ProphecyKind
 
     /// <summary>
     /// 休息の予言（戦闘も報酬もなくタイムスキップのみ）。
-    /// Value = 休息効果の強度（HP 回復量倍率や経験値減衰の緩和等、
-    /// 解釈は TimelineEngine 側に委ねる）。
+    /// Value = 休息効果の強度（休息年に獲得する追加ポイント等、RestService が解釈する）。
     /// </summary>
     Rest,
+}
+
+// ─── 予言のレア度 ───────────────────────────────────────────────────────────
+
+/// <summary>
+/// 予言カードのレア度。「基本はブロンズ、たまにシルバー、稀にゴールド」という
+/// ハクスラのドロップ感を予言タイムラインへ持ち込むための希少度。
+///
+/// レア度が上がるほど同じ <see cref="ProphecyKind"/> でも効果量（Value）が大きくなる
+/// （＝内容の効率が良い）。出現率・効果量テーブルは <c>ProphecyMaster</c> が SoT として
+/// 集中管理する。戦闘 (Battle) は暦が強さを決めるため常に Bronze 固定（レア度の概念外）。
+///
+/// 表示ラベル・アイコンは Config/localization_ja.json の prophecyRarities セクションから
+/// enum 名をキーに引く（コード側に日本語・絵文字を一切持たない）。
+/// </summary>
+public enum ProphecyRarity
+{
+    /// <summary>標準（最も出やすい）。基準どおりの効果量。</summary>
+    Bronze,
+
+    /// <summary>上位（たまに出る）。効果量がブロンズより一段高い。</summary>
+    Silver,
+
+    /// <summary>最上位（稀に出る）。効果量が大きく跳ね上がる脳汁カード。</summary>
+    Gold,
 }
 
 // ─── 予言レコード ───────────────────────────────────────────────────────────
@@ -110,6 +134,13 @@ public sealed record Prophecy
     /// 予言の種類。タイムスキップ後の効果解決を一意に決定する。
     /// </summary>
     public required ProphecyKind Kind { get; init; }
+
+    /// <summary>
+    /// 予言のレア度（既定 <see cref="ProphecyRarity.Bronze"/>）。同じ Kind でもレア度が
+    /// 高いほど Value（効果量）が大きい。生成・出現率は ProphecyMaster が司る。
+    /// 旧セーブデータ（v6 以前）はこのフィールドを持たないため、復元時は既定の Bronze になる。
+    /// </summary>
+    public ProphecyRarity Rarity { get; init; } = ProphecyRarity.Bronze;
 
     /// <summary>
     /// この予言を選択した際に一瞬で経過するタイムスキップ年数。

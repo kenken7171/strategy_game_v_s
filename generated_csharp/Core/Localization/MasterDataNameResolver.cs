@@ -51,11 +51,14 @@ public sealed class MasterDataNameResolver
     private const string JobsSectionName          = "jobs";
     private const string ItemsSectionName         = "items";
     private const string ProphecyKindsSectionName = "prophecyKinds";
+    private const string ProphecyRaritiesSectionName = "prophecyRarities";
+    private const string PropheciesSectionName    = "prophecies";
     private const string EnemySkillsSectionName   = "enemySkills";
     private const string EpochsSectionName        = "epochs";
     private const string AffixesSectionName       = "affixes";
     private const string NameFieldName            = "name";
     private const string IconFieldName            = "icon";
+    private const string FlavorFieldName          = "flavor";
 
     // ─── 解決辞書（enum 名 → 表示テキスト、Ordinal 比較で厳密一致） ─────────
 
@@ -63,6 +66,15 @@ public sealed class MasterDataNameResolver
     private readonly Dictionary<string, string> _itemNames;
     private readonly Dictionary<string, string> _prophecyKindNames;
     private readonly Dictionary<string, string> _prophecyKindIcons;
+
+    // ─── 予言レア度（ProphecyRarity enum 名 → 表示テキスト / アイコン） ──────────
+    //  銅/銀/金のバッジ表示に使う。prophecyKinds と同じ name / icon 分離形。
+    private readonly Dictionary<string, string> _prophecyRarityNames;
+    private readonly Dictionary<string, string> _prophecyRarityIcons;
+
+    // ─── 予言フレーバー文（"Kind.Rarity" キー → 日本語の説明文） ─────────────────
+    //  ProphecyMaster が払い出す DescriptionKey（例 "RewardPoints.Gold"）をそのままキーに引く。
+    private readonly Dictionary<string, string> _prophecyDescriptions;
 
     // ─── 敵スキル名（敵の攻撃予告 AttackIntent.SkillNameKey → 表示テキスト） ──
     //  ジョブ/アイテムが enum 名をキーに引くのに対し、敵スキルだけは AttackIntentRoller
@@ -91,12 +103,24 @@ public sealed class MasterDataNameResolver
         IReadOnlyDictionary<string, string> prophecyKindIcons,
         IReadOnlyDictionary<string, string>? skillNames = null,
         IReadOnlyDictionary<string, string>? epochNames = null,
-        IReadOnlyDictionary<string, string>? affixNames = null)
+        IReadOnlyDictionary<string, string>? affixNames = null,
+        IReadOnlyDictionary<string, string>? prophecyRarityNames = null,
+        IReadOnlyDictionary<string, string>? prophecyRarityIcons = null,
+        IReadOnlyDictionary<string, string>? prophecyDescriptions = null)
     {
         _jobNames          = Sanitize(jobNames);
         _itemNames         = Sanitize(itemNames);
         _prophecyKindNames = Sanitize(prophecyKindNames);
         _prophecyKindIcons = Sanitize(prophecyKindIcons);
+        _prophecyRarityNames = prophecyRarityNames is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : Sanitize(prophecyRarityNames);
+        _prophecyRarityIcons = prophecyRarityIcons is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : Sanitize(prophecyRarityIcons);
+        _prophecyDescriptions = prophecyDescriptions is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : Sanitize(prophecyDescriptions);
         _skillNames        = skillNames is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : Sanitize(skillNames);
@@ -147,6 +171,15 @@ public sealed class MasterDataNameResolver
     /// <summary>登録済み Affix 名エントリ数。</summary>
     public int AffixNameCount => _affixNames.Count;
 
+    /// <summary>登録済み予言レア度名エントリ数。</summary>
+    public int ProphecyRarityNameCount => _prophecyRarityNames.Count;
+
+    /// <summary>登録済み予言レア度アイコンエントリ数。</summary>
+    public int ProphecyRarityIconCount => _prophecyRarityIcons.Count;
+
+    /// <summary>登録済み予言フレーバー文エントリ数。</summary>
+    public int ProphecyDescriptionCount => _prophecyDescriptions.Count;
+
     // ─── 構築（localization JSON 文字列から） ─────────────────────────────
 
     /// <summary>
@@ -174,12 +207,16 @@ public sealed class MasterDataNameResolver
         var itemNames         = ExtractField(root, ItemsSectionName,         NameFieldName);
         var prophecyKindNames = ExtractField(root, ProphecyKindsSectionName, NameFieldName);
         var prophecyKindIcons = ExtractField(root, ProphecyKindsSectionName, IconFieldName);
+        var prophecyRarityNames = ExtractField(root, ProphecyRaritiesSectionName, NameFieldName);
+        var prophecyRarityIcons = ExtractField(root, ProphecyRaritiesSectionName, IconFieldName);
+        var prophecyDescriptions = ExtractField(root, PropheciesSectionName, FlavorFieldName);
         var skillNames        = ExtractField(root, EnemySkillsSectionName,   NameFieldName);
         var epochNames        = ExtractField(root, EpochsSectionName,        NameFieldName);
         var affixNames        = ExtractField(root, AffixesSectionName,       NameFieldName);
 
         return new MasterDataNameResolver(
-            jobNames, itemNames, prophecyKindNames, prophecyKindIcons, skillNames, epochNames, affixNames);
+            jobNames, itemNames, prophecyKindNames, prophecyKindIcons, skillNames, epochNames, affixNames,
+            prophecyRarityNames, prophecyRarityIcons, prophecyDescriptions);
     }
 
     /// <summary>
@@ -236,6 +273,23 @@ public sealed class MasterDataNameResolver
     /// フォールバック（登録漏れを画面から判別できるようにするため）。
     /// </summary>
     public string ResolveProphecyKindIcon(ProphecyKind kind) => Lookup(_prophecyKindIcons, kind.ToString());
+
+    /// <summary>
+    /// 予言レア度（Bronze/Silver/Gold）の表示用日本語名を解決する。未登録・未知 enum 値は
+    /// enum 名へフォールバック。
+    /// </summary>
+    public string ResolveProphecyRarityName(ProphecyRarity rarity) => Lookup(_prophecyRarityNames, rarity.ToString());
+
+    /// <summary>
+    /// 予言レア度のアイコン（🥉/🥈/🥇）を解決する。未登録・未知 enum 値は enum 名へフォールバック。
+    /// </summary>
+    public string ResolveProphecyRarityIcon(ProphecyRarity rarity) => Lookup(_prophecyRarityIcons, rarity.ToString());
+
+    /// <summary>
+    /// 予言のフレーバー文を、ProphecyMaster が払い出す DescriptionKey（"Kind.Rarity" 形式、
+    /// 例 "EquipmentDrop.Gold"）から解決する。未登録キー・null/空は生キーへフォールバック。
+    /// </summary>
+    public string ResolveProphecyDescription(string descriptionKey) => Lookup(_prophecyDescriptions, descriptionKey);
 
     /// <summary>
     /// 敵スキル（攻撃予告）の表示用日本語名を、AttackIntent.SkillNameKey（平坦な ASCII

@@ -3,7 +3,7 @@
 > 対象は現役本体 `generated_csharp/`。仕様の根拠は [instructions.md](instructions.md)、実態は [CLAUDE.md](CLAUDE.md)、
 > 将来戦略は [docs/MIGRATION_GODOT_HACK_AND_SLASH.md](docs/MIGRATION_GODOT_HACK_AND_SLASH.md)。
 > 旧 TypeScript 版のタスク（旧 M1/M2/M3）はすべて役目を終えたため破棄した。
-> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 653 pass を維持。
+> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 732 pass を維持。
 
 ---
 
@@ -22,7 +22,7 @@
 - [x] ローカライズ結線（`MasterDataNameResolver` 等で job/item/prophecy/敵スキル/章名を辞書解決）
 - [x] 動的 B 型 UI（現在フェーズ画面のみ new/QueueFree・リークフリー・各種オーバーレイ・JuiceDirector）
 - [x] セーブ/ロード（アトミック書き込み・DTO・スキーマ Version 1）
-- [x] xUnit 653 pass（Core 全域）＋ 手動トリガー CI
+- [x] xUnit 732 pass（Core 全域）＋ 手動トリガー CI
 
 ---
 
@@ -37,17 +37,20 @@
 
 ### T-2. ドキュメント・警告の微修正
 
-- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 653）。
+- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 732）。
 - [ ] `Tests/Core/Battle/BattleSeatingContractTests.cs:82` の xUnit2013 警告（`Assert.Equal(1, …)` → `Assert.Single`）を解消。
 
 ---
 
 ## 🎮 ゲーム拡張（中核体験の作り込み）
 
-### T-3. 予言生成の本実装
+### T-3. 予言生成の本実装 — ✅ 完了
 
-- [ ] `TimelineEngine.DefaultGenerator`（暫定の均等巡回）を `ProphecyMaster` 相当へ置換し、種別・SkipYears・Value をバランス設計。
-- [ ] 予言の `DescriptionKey` を `localization_ja.json` に登録（説明文の辞書化）。
+- [x] `TimelineEngine.DefaultGenerator`（暫定の均等巡回）を `ProphecyMaster.Generate` へ置換（本番結線 2 箇所）。3 枚キュレーション（相異なる Kind）・
+      レア度（`ProphecyRarity{Bronze/Silver/Gold}`・戦闘は常に Bronze）・Kind×Rarity の効果量 SoT・暦/章連動でバランス設計（`CLAUDE.md` F-3 / `Core/Timeline/ProphecyMaster.cs`）。
+- [x] 予言の `DescriptionKey`（"Kind.Rarity" 形式）を `localization_ja.json` の `prophecies` セクションへ登録（フレーバー文の辞書化）＋ `prophecyRarities`（銅/銀/金バッジ）。
+      レア度は永続化 v7 で保存（旧版は既定 Bronze で後方互換）。`TimelineUI` がレア度バッジ＋フレーバー＋カード色味を表示。
+- [ ] 残: レア度出現率の年次スケール（後半ほど金が出やすい等）。経済軸/パッシブ付与型 Affix との連携は T-4 側で継続。
 
 ### T-4. ハクスラ拡張（ドロップ・Affix）
 

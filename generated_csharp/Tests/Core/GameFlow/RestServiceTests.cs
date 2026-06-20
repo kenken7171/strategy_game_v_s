@@ -38,6 +38,16 @@ public class RestServiceTests
         TotalSpent     = 0,
     };
 
+    private static Prophecy RestProphecy(ProphecyRarity rarity, int value) => new()
+    {
+        Id             = Guid.NewGuid(),
+        Kind           = ProphecyKind.Rest,
+        Rarity         = rarity,
+        SkipYears      = 3,
+        Value          = value,
+        DescriptionKey = $"Rest.{rarity}",
+    };
+
     [Fact]
     public void Resolve_GrantsTheRestReward_AndMirrorsBalance()
     {
@@ -49,6 +59,31 @@ public class RestServiceTests
         Assert.Equal(5 + RestService.RestPointsReward, result.NextEconomy.CurrentBalance);
         // The outcome summary mirrors the post-reward balance (UI reads it directly).
         Assert.Equal(result.NextEconomy.CurrentBalance, result.Outcome.BalanceAfter);
+    }
+
+    [Fact]
+    public void Resolve_GoldRestProphecy_CashesInItsHigherValue()
+    {
+        var roster = ImmutableList.Create(MakeUnit(isDead: false));
+        // ProphecyMaster.RestValue(Gold) = 10（基本ブロンズ 2 より大きい＝レア度の効率）。
+        var prophecy = RestProphecy(ProphecyRarity.Gold, ProphecyMaster.RestValue(ProphecyRarity.Gold));
+
+        var result = RestService.Resolve(roster, EconomyWith(0), prophecy, new Random(0));
+
+        Assert.Equal(10, result.Outcome.PointsReward);
+        Assert.Equal(10, result.NextEconomy.CurrentBalance);
+    }
+
+    [Fact]
+    public void Resolve_RestProphecyBelowFloor_StillGrantsRestPointsReward()
+    {
+        var roster = ImmutableList.Create(MakeUnit(isDead: false));
+        // Value=0 のような床割れでも固定ボーナス RestPointsReward を下回らない。
+        var prophecy = RestProphecy(ProphecyRarity.Bronze, 0);
+
+        var result = RestService.Resolve(roster, EconomyWith(0), prophecy, new Random(0));
+
+        Assert.Equal(RestService.RestPointsReward, result.Outcome.PointsReward);
     }
 
     [Fact]

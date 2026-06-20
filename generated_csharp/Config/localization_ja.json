@@ -202,6 +202,32 @@
     "Rest":          { "icon": "💤", "name": "休息" }
   },
 
+  "prophecyRarities": {
+    "_note": "予言カードのレア度 (ProphecyRarity enum)。基本ブロンズ・たまにシルバー・稀にゴールドで、上位ほど効果量が大きい。icon（メダル絵文字）と name（日本語ラベル）を分離。コード側 (TimelineUI.cs) に日本語・絵文字を持たず、enum 名をキーに引く。出現率・効果量は Core/Timeline/ProphecyMaster が SoT。",
+    "Bronze": { "icon": "🥉", "name": "ブロンズ" },
+    "Silver": { "icon": "🥈", "name": "シルバー" },
+    "Gold":   { "icon": "🥇", "name": "ゴールド" }
+  },
+
+  "prophecies": {
+    "_note": "予言カードのフレーバー文。ProphecyMaster が払い出す DescriptionKey（\"Kind.Rarity\" 形式、例 \"EquipmentDrop.Gold\"）をそのままキーに、flavor フィールドの日本語説明文を引く。Battle は暦が強さを決めるため常に Bronze（Silver/Gold は通常出現しない保険）。未登録キーは生キーへフォールバック。",
+    "RewardPoints.Bronze":  { "flavor": "わずかな路銀が転がり込む小さな吉兆。" },
+    "RewardPoints.Silver":  { "flavor": "隊の金庫を潤す確かな朗報。" },
+    "RewardPoints.Gold":    { "flavor": "国庫を揺るがすほどの莫大な財貨の予感。" },
+    "Battle.Bronze":        { "flavor": "戦火の匂いが近づく。剣を取る年。" },
+    "Battle.Silver":        { "flavor": "戦火の匂いが近づく。剣を取る年。" },
+    "Battle.Gold":          { "flavor": "戦火の匂いが近づく。剣を取る年。" },
+    "ScoutReward.Bronze":   { "flavor": "一人の流れ者が旗の下に集う。" },
+    "ScoutReward.Silver":   { "flavor": "二人の手練れが入隊を申し出る。" },
+    "ScoutReward.Gold":     { "flavor": "名だたる三人が一斉に馳せ参じる。" },
+    "EquipmentDrop.Bronze": { "flavor": "ありふれた装具が手に入る。" },
+    "EquipmentDrop.Silver": { "flavor": "業物の気配。質の良い装備が眠る。" },
+    "EquipmentDrop.Gold":   { "flavor": "伝説級の遺物が静かに光を放つ。" },
+    "Rest.Bronze":          { "flavor": "穏やかな休息の年。英気を養う。" },
+    "Rest.Silver":          { "flavor": "実り多き休息。蓄えも増える。" },
+    "Rest.Gold":            { "flavor": "黄金の休息。隊は大いに潤い力を蓄える。" }
+  },
+
   "enemySkills": {
     "_note": "敵の攻撃予告（AttackIntent）の表示用スキル名。AttackIntentRoller が払い出す平坦な ASCII キー（enemy-skill-*）をそのままキーに引く。ジョブ/アイテムが enum 名で引くのに対し、敵スキルは enum を持たないためキー＝文字列。コード側（AttackIntentRoller.cs / BattleUI.cs）に日本語は一切ハードコードせず、MasterDataNameResolver.ResolveSkillName が本セクションから解決し、未登録キーは生キーへフォールバックする。",
     "enemy-skill-single-strike": { "name": "単一分隊強襲" },

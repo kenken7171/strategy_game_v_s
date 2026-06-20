@@ -102,8 +102,10 @@ public static class SaveSerializer
     ///     空リストで後方互換復元。Affix 付きドロップ等を外して保管しても消えない土台）。
     /// v6: 旅団史 ChronicleLogEntry に Gender を追加（旧 v1〜v5 セーブは欠落 → 既定 Male で
     ///     後方互換復元。年代記ログに性別別のジョブ立ち絵アイコンを出すため）。
+    /// v7: 予言 Prophecy に Rarity（Bronze/Silver/Gold）を追加（旧 v1〜v6 セーブは欠落 →
+    ///     既定 Bronze で後方互換復元。ProphecyMaster のレア度カードを保存するため）。
     /// </summary>
-    public const int CurrentSaveVersion = 6;
+    public const int CurrentSaveVersion = 7;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -215,6 +217,7 @@ public static class SaveSerializer
     {
         Id             = p.Id,
         Kind           = p.Kind,
+        Rarity         = p.Rarity,
         SkipYears      = p.SkipYears,
         Value          = p.Value,
         DescriptionKey = p.DescriptionKey,
@@ -296,6 +299,7 @@ public static class SaveSerializer
     {
         Id             = d.Id,
         Kind           = d.Kind,
+        Rarity         = d.Rarity, // 旧 v6 以前のセーブは欠落 → 既定 Bronze
         SkipYears      = d.SkipYears,
         Value          = d.Value,
         DescriptionKey = d.DescriptionKey ?? string.Empty,
@@ -417,6 +421,7 @@ public static class SaveSerializer
     {
         public Guid Id { get; set; }
         public ProphecyKind Kind { get; set; }
+        public ProphecyRarity Rarity { get; set; } = ProphecyRarity.Bronze; // v7: 欠落セーブは Bronze
         public int SkipYears { get; set; }
         public int Value { get; set; }
         public string DescriptionKey { get; set; } = string.Empty;
