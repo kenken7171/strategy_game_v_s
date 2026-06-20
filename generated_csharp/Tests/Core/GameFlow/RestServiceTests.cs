@@ -132,38 +132,42 @@ public class RestServiceTests
     }
 
     [Fact]
-    public void Resolve_EquipmentDropProphecy_DropsEquipmentOntoLivingMember()
+    public void Resolve_EquipmentDropProphecy_GeneratesThreeCandidates_WithoutTouchingRoster()
     {
         var roster = ImmutableList.Create(MakeUnit(isDead: false));
 
         var result = RestService.Resolve(
             roster, EconomyWith(0), MakeProphecy(ProphecyKind.EquipmentDrop, 3), new Random(1));
 
-        Assert.NotNull(result.Outcome.DroppedItemId);
-        Assert.Equal(3, result.Outcome.DroppedItemLevel);
-        Assert.True(result.NextRoster[0].HasEquipment);            // the member now carries it
-        Assert.Equal(3, result.NextRoster[0].MainEquipment!.Level);
+        // 自動装着はしない（claim は対話ステップ）。3 択候補だけを報告する。
+        Assert.Equal(EquipmentDropService.DropCandidateCount, result.Outcome.DropCandidates.Length);
+        Assert.Null(result.Outcome.DroppedItemId);
+        Assert.False(result.NextRoster[0].HasEquipment);          // roster is untouched by the drop
+        Assert.All(result.Outcome.DropCandidates, c => Assert.Equal(3, c.Level));
     }
 
     [Fact]
-    public void Resolve_EquipmentDrop_ClampsLevelToValidRange()
+    public void Resolve_EquipmentDrop_ClampsCandidateLevelToValidRange()
     {
         var roster = ImmutableList.Create(MakeUnit(isDead: false));
 
         var result = RestService.Resolve(
             roster, EconomyWith(0), MakeProphecy(ProphecyKind.EquipmentDrop, 99), new Random(1));
 
-        Assert.Equal(Equipment.MaxEquipmentLevel, result.Outcome.DroppedItemLevel);
+        Assert.All(
+            result.Outcome.DropCandidates,
+            c => Assert.Equal(Equipment.MaxEquipmentLevel, c.Level));
     }
 
     [Fact]
-    public void Resolve_EquipmentDrop_NoLivingRecipient_ForgoesDrop()
+    public void Resolve_EquipmentDrop_GeneratesCandidates_EvenWithNoLivingMember()
     {
         var roster = ImmutableList.Create(MakeUnit(isDead: true)); // only a fallen member
 
         var result = RestService.Resolve(
             roster, EconomyWith(0), MakeProphecy(ProphecyKind.EquipmentDrop, 2), new Random(1));
 
-        Assert.Null(result.Outcome.DroppedItemId);                 // nobody to receive it
+        // 候補生成は受け取り手に依存しない（claim 時に生存者へ装着する）。
+        Assert.Equal(EquipmentDropService.DropCandidateCount, result.Outcome.DropCandidates.Length);
     }
 }

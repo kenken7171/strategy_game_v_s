@@ -83,6 +83,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalFormationChanged  = "FormationChanged";
     public const string SignalBattleChanged     = "BattleChanged";
     public const string SignalInventoryChanged  = "InventoryChanged";
+    public const string SignalDropChoicePending = "DropChoicePending";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -126,6 +127,12 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     [Signal] public delegate void InventoryChangedEventHandler();
 
+    /// <summary>
+    /// EquipmentDrop の 3 択候補（PendingDropCandidates）が発生した時に発火するシグナル。
+    /// GameDirector がこれを受け、現フェーズに関わらず 3 択ドロップ overlay を最前面へ立ち上げる。
+    /// </summary>
+    [Signal] public delegate void DropChoicePendingEventHandler();
+
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
     // ════════════════════════════════════════════════════════════════════════
@@ -154,6 +161,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// 装備は持ち物⇄ユニットを個体保持のまま往復し、複製も消滅もしない（保存則）。
     /// </summary>
     public ImmutableList<Equipment> BrigadeInventory { get; private set; } = ImmutableList<Equipment>.Empty;
+
+    /// <summary>
+    /// 取得待ちの 3 択ドロップ候補（EquipmentDrop 予言で生成）。空＝選択待ちなし。プレイヤーが
+    /// <see cref="ChooseDroppedEquipment"/> で 1 つ選ぶと、それが持ち物へ入り本配列は空へ戻る（残りは破棄）。
+    /// 永続化しない（claim 前にセーブ・終了した場合は失われる＝その年の運）。
+    /// </summary>
+    public ImmutableArray<Equipment> PendingDropCandidates { get; private set; } = ImmutableArray<Equipment>.Empty;
 
     /// <summary>Initialize が呼ばれて状態が有効化されているか。</summary>
     public bool IsInitialized { get; private set; } = false;
@@ -419,6 +433,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentEconomy = initialEconomy ?? PointsEconomy.CreateInitial();
             BattalionRoster = initialRoster?.ToImmutableList() ?? ImmutableList<Unit>.Empty;
             BrigadeInventory = ImmutableList<Equipment>.Empty; // 新規開始は持ち物なし
+            PendingDropCandidates = ImmutableArray<Equipment>.Empty; // 選択待ちドロップなし
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
@@ -466,6 +481,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentEconomy           = PointsEconomy.CreateInitial();
             BattalionRoster          = ImmutableList<Unit>.Empty;
             BrigadeInventory         = ImmutableList<Equipment>.Empty;
+            PendingDropCandidates    = ImmutableArray<Equipment>.Empty;
             CurrentTimeline          = null;
             CurrentPhase             = GamePhaseFlow.InitialPhase;
             CurrentAction            = PlannedAction.March;
@@ -1215,6 +1231,9 @@ public partial class ChronicleGlobal : Godot.Node
             if (formationChanged) SafeEmit(SignalFormationChanged);
         }
 
+        // 出撃経路で EquipmentDrop 報酬が残っていた場合の 3 択ドロップ overlay を立ち上げる。
+        if (!PendingDropCandidates.IsDefaultOrEmpty) SafeEmit(SignalDropChoicePending);
+
         SafeEmit(SignalPhaseChanged);
         return next;
     }
@@ -1249,6 +1268,12 @@ public partial class ChronicleGlobal : Godot.Node
             var rewardRes = RestService.Resolve(BattalionRoster, CurrentEconomy, pendingReward, _rng);
             CurrentEconomy  = rewardRes.NextEconomy;
             BattalionRoster = rewardRes.NextRoster;
+            // 章ボス年で EquipmentDrop 予言を選び強制出撃になった等、出撃後に残ったドロップ報酬。
+            // 3 択候補を選択待ちへ（年代記復帰後に overlay が立ち上がる。呼び出し側がシグナル発火）。
+            if (!rewardRes.Outcome.DropCandidates.IsDefaultOrEmpty)
+            {
+                PendingDropCandidates = rewardRes.Outcome.DropCandidates;
+            }
         }
 
         // 予言が告げた飛ばし年数。ただし章ボス年（25/50/75/100）を踏み越さないよう、現在の暦年から
@@ -1735,12 +1760,13 @@ public partial class ChronicleGlobal : Godot.Node
     {
         RestOutcome outcome;
         bool rosterChanged;
+        bool dropPending;
         lock (_stateLock)
         {
             if (!IsInitialized) return RestOutcome.None;
 
             // 保留中の予言（この年に選んだカード）の報酬を、休息決算と同時に確定する。
-            //   RewardPoints → ポイント加算 / ScoutReward → 新人加入 / EquipmentDrop → 装備ドロップ /
+            //   RewardPoints → ポイント加算 / ScoutReward → 新人加入 / EquipmentDrop → 3 択ドロップ候補 /
             //   Rest（または予言なし）→ 固定の休息ボーナス。純粋層 RestService が算術・生成を担う。
             var resolution = RestService.Resolve(
                 BattalionRoster, CurrentEconomy, _pendingProphecy, _rng);
@@ -1751,13 +1777,51 @@ public partial class ChronicleGlobal : Godot.Node
             LastRestOutcome = resolution.Outcome;
             outcome = resolution.Outcome;
 
+            // EquipmentDrop の 3 択候補を選択待ちへ。プレイヤーが ChooseDroppedEquipment で 1 つ選ぶ。
+            PendingDropCandidates = resolution.Outcome.DropCandidates;
+            dropPending = !PendingDropCandidates.IsDefaultOrEmpty;
+
             // 予言報酬はここで消費済み。年送り（AdvanceGenerationLocked）で二重適用しないようクリア。
             _pendingProphecy = null;
         }
 
         SafeEmit(SignalEconomyChanged);
-        if (rosterChanged) SafeEmit(SignalRosterChanged); // 新人加入・装備ドロップで名簿が動いた時
+        if (rosterChanged) SafeEmit(SignalRosterChanged); // 新人加入で名簿が動いた時
+        if (dropPending) SafeEmit(SignalDropChoicePending); // 3 択ドロップ overlay を立ち上げる
         return outcome;
+    }
+
+    /// <summary>
+    /// 選択待ちの 3 択ドロップ（<see cref="PendingDropCandidates"/>）から 1 つを選び、持ち物
+    /// （<see cref="BrigadeInventory"/>）へ加える。残りの候補は破棄され、選択待ちは空へ戻る。
+    ///
+    /// 戻り値:
+    ///   - Equipment: 取得して持ち物へ入った装備。
+    ///   - null: 未初期化 / 指定 Id が候補に無い（no-op）。
+    /// </summary>
+    /// <param name="equipmentId">取得する候補装備の Id。</param>
+    public Equipment? ChooseDroppedEquipment(Guid equipmentId)
+    {
+        Equipment? chosen;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+            if (PendingDropCandidates.IsDefaultOrEmpty) return null;
+
+            chosen = null;
+            foreach (var candidate in PendingDropCandidates)
+            {
+                if (candidate.Id == equipmentId) { chosen = candidate; break; }
+            }
+            if (chosen is null) return null; // 候補に無い Id は no-op。
+
+            BrigadeInventory = BrigadeInventory.Add(chosen);
+            PendingDropCandidates = ImmutableArray<Equipment>.Empty; // 残りは破棄・選択完了。
+        }
+
+        SafeEmit(SignalInventoryChanged);
+        return chosen;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -2159,6 +2223,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
             BrigadeInventory = loaded.Inventory; // ★ 持ち物を永続化セーブから復元（v1〜v4 は空）
+            PendingDropCandidates = ImmutableArray<Equipment>.Empty; // 選択待ちは永続化しない
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
             CurrentAction   = PlannedAction.March;         // ロード再開時の既定行動は出撃
             CurrentFormation = FormationBoard.Empty();     // 盤面は永続化せずロードは空盤面から

@@ -120,6 +120,12 @@ public partial class GameDirector : Godot.Control
     /// </summary>
     private RestResultOverlay? _restResultOverlay;
 
+    /// <summary>
+    /// 現在前面に展開中の 3 択ドロップオーバーレイ。EquipmentDrop 予言で候補が発生した
+    /// （DropChoicePending）ときにマウントし、1 つ選んで取得（Chosen）すると自身を QueueFree する。
+    /// </summary>
+    private EquipmentDropOverlay? _equipmentDropOverlay;
+
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
     public override void _Ready()
@@ -163,6 +169,7 @@ public partial class GameDirector : Godot.Control
         DismissJobManualOverlay();
         DismissUnitDetailOverlay();
         DismissRestResultOverlay();
+        DismissEquipmentDropOverlay();
 
         // 現在生きているフェーズ画面（最大1枚）の従属イベント購読を解いて完全消滅させる。
         FreeCurrentScreen();
@@ -504,6 +511,47 @@ public partial class GameDirector : Godot.Control
         _restResultOverlay = null;
     }
 
+    // ─── 3 択ドロップ overlay（EquipmentDrop 予言の戦利品選択） ────────────────
+
+    /// <summary>
+    /// DropChoicePending を受け、3 択ドロップオーバーレイを最前面へ立ち上げる。候補データは
+    /// オーバーレイ自身が _Ready で ChronicleGlobal.PendingDropCandidates を読むため注入しない。
+    /// </summary>
+    private void OnDropChoicePending()
+    {
+        MountEquipmentDropOverlay();
+    }
+
+    /// <summary>取得（Chosen）後の後始末。前面のドロップオーバーレイを確実に解放する。</summary>
+    private void OnDropChosen()
+    {
+        DismissEquipmentDropOverlay();
+    }
+
+    private void MountEquipmentDropOverlay()
+    {
+        DismissEquipmentDropOverlay();
+
+        var overlay = new EquipmentDropOverlay();
+        overlay.Chosen += OnDropChosen;
+        overlay.SetMeta(TestIdMetaKey, "game-director-equipment-drop-overlay");
+        _equipmentDropOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    private void DismissEquipmentDropOverlay()
+    {
+        if (_equipmentDropOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_equipmentDropOverlay))
+        {
+            _equipmentDropOverlay.Chosen -= OnDropChosen;
+            _equipmentDropOverlay.QueueFree();
+        }
+        _equipmentDropOverlay = null;
+    }
+
     // ─── レイアウト構築（ヘッダー + 画面コンテナ） ─────────────────────────
 
     private void BuildLayout()
@@ -640,6 +688,8 @@ public partial class GameDirector : Godot.Control
         _chronicleGlobal.FormationChanged += OnFormationChanged;
         // 戦闘の進行/決着でヘッダ「次へ」のラベル（1ターン進める ⇄ 次へ）を即時に切り替える。
         _chronicleGlobal.BattleChanged    += OnBattleChanged;
+        // EquipmentDrop の 3 択候補が発生したら、現フェーズに関わらず最前面へ overlay を立ち上げる。
+        _chronicleGlobal.DropChoicePending += OnDropChoicePending;
     }
 
     private void UnsubscribeSignals()
@@ -651,6 +701,7 @@ public partial class GameDirector : Godot.Control
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.BattleChanged    -= OnBattleChanged;
+            _chronicleGlobal.DropChoicePending -= OnDropChoicePending;
         }
         catch
         {

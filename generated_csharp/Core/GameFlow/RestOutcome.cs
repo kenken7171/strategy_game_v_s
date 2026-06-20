@@ -61,6 +61,13 @@ public sealed record RestOutcome
     /// <summary>The level of the dropped item (only meaningful when <see cref="DroppedItemId"/> is set).</summary>
     public int DroppedItemLevel { get; init; }
 
+    /// <summary>
+    /// The 3-choice drop candidates generated this year (EquipmentDrop prophecy), empty otherwise.
+    /// The player picks ONE (it goes to the brigade inventory); the rest are discarded. The roster is
+    /// NOT touched by the drop anymore — claiming is an interactive step (ChronicleGlobal.ChooseDroppedEquipment).
+    /// </summary>
+    public ImmutableArray<Equipment> DropCandidates { get; init; } = ImmutableArray<Equipment>.Empty;
+
     /// <summary>The inert "nothing rested" outcome (uninitialized / no-op default).</summary>
     public static readonly RestOutcome None = new()
     {
@@ -123,8 +130,8 @@ public static class RestService
         var working = ImmutableList.CreateRange(roster);
         var pointsReward = 0;
         var recruitedCount = 0;
-        ItemId? droppedItemId = null;
         var droppedItemLevel = 0;
+        var dropCandidates = ImmutableArray<Equipment>.Empty;
 
         // Kind-specific reward. A plain rest (Rest / null / any non-reward kind) grants the
         // fixed rest bonus; the reward kinds cash in their card value instead.
@@ -142,7 +149,9 @@ public static class RestService
             case ProphecyKind.EquipmentDrop:
                 droppedItemLevel = Math.Clamp(
                     prophecy.Value, Equipment.MinEquipmentLevel, Equipment.MaxEquipmentLevel);
-                (working, droppedItemId) = DropEquipment(working, droppedItemLevel, rng);
+                // 自動装着はやめ、3 択候補を生成する。プレイヤーが 1 つ選び持ち物へ入れる
+                // （残りは破棄）。ロスタはここでは動かさない（claim は別の対話ステップ）。
+                dropCandidates = EquipmentDropService.RollCandidates(droppedItemLevel, rng);
                 break;
 
             case ProphecyKind.Battle:
@@ -164,8 +173,10 @@ public static class RestService
             PointsReward = pointsReward,
             BalanceAfter = nextEconomy.CurrentBalance,
             RecruitedCount = recruitedCount,
-            DroppedItemId = droppedItemId,
-            DroppedItemLevel = droppedItemId.HasValue ? droppedItemLevel : 0,
+            // 装着はせず、選択前の 3 択候補だけを報告する（DroppedItem* は旧自動装着の名残で常に空）。
+            DroppedItemId = null,
+            DroppedItemLevel = dropCandidates.IsDefaultOrEmpty ? 0 : droppedItemLevel,
+            DropCandidates = dropCandidates,
         };
 
         return new RestResolution(nextEconomy, working, outcome);
@@ -185,31 +196,5 @@ public static class RestService
             next = next.Add(recruit);
         }
         return next;
-    }
-
-    /// <summary>
-    /// Drop one equipment of <paramref name="level"/> onto a recipient: the first living member
-    /// without equipment, else the first living member. Returns the new roster and the dropped
-    /// item id (null if there was no living recipient — the drop is then forgone).
-    /// </summary>
-    private static (ImmutableList<Unit> roster, ItemId? dropped) DropEquipment(
-        ImmutableList<Unit> roster, int level, Random rng)
-    {
-        var idx = roster.FindIndex(u => u.IsAlive && !u.HasEquipment);
-        if (idx < 0) idx = roster.FindIndex(u => u.IsAlive);
-        if (idx < 0) return (roster, null); // no living recipient -> drop is forgone.
-
-        var items = Enum.GetValues<ItemId>();
-        var itemId = items[rng.Next(items.Length)];
-        var affixKeys = AffixMaster.RollAffixKeys(level, rng);
-        var equipment = new Equipment
-        {
-            Id = Guid.NewGuid(),
-            ItemId = itemId,
-            Level = level,
-            AffixKeys = affixKeys,
-        };
-
-        return (roster.SetItem(idx, roster[idx].WithEquipment(equipment)), itemId);
     }
 }
