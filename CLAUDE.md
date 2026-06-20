@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 予言生成の本実装（`ProphecyMaster`：3 枚キュレーション＋レア度 銅/銀/金＋効果量 SoT＋暦連動＋フレーバー辞書）／ 検収: `dotnet test` 732 pass / 0 fail。
+> 最終更新の根拠: 初期パーティーの役割保証（`NewGameFactory`：前衛≥2・回復≥1・支援≥1／同職≤2 でリセマラ抑止）＋ 予言生成の本実装（`ProphecyMaster`：3 枚キュレーション＋レア度 銅/銀/金＋効果量 SoT＋暦連動＋フレーバー辞書）／ 検収: `dotnet test` 744 pass / 0 fail。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 区分 | 場所 | 実態 | 扱い |
 |---|---|---|---|
-| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・681 テスト緑 | **すべての新規実装はここ** |
+| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・744 テスト緑 | **すべての新規実装はここ** |
 | 凍結された旧本体 | `apps/`・`packages/`・`scripts/`・`config/jobs.json`・`tools/` | Bun + Hono + React + Vite の TypeScript 版。もうゲームには一切繋がっていない | **参照専用（変更禁止・原則放置）**。アーキタイプ検証の歴史的レファレンス |
 
 旧 TS 版は「先に TS で検証 → C# へ翻訳」というかつてのフローの名残で、今は完全に役目を終えている。
@@ -42,7 +42,7 @@ generated_csharp/
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
 ├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
-└── Tests/       xUnit 単体テスト（Core を対象。732 pass）
+└── Tests/       xUnit 単体テスト（Core を対象。744 pass）
 ```
 
 ### A-2. 技術スタック
@@ -77,7 +77,7 @@ generated_csharp/
 | コマンド | 内容 |
 |---|---|
 | `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
-| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**732 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**744 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
 | `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
 | `./play.command -e` | Godot エディタを開く |
 | `godot --path .` | （ビルド済み前提で）直接起動 |
@@ -361,6 +361,9 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - `Main.tscn` がルート Control に `GameDirector` をアタッチ。`_Ready` でローカライズ読込 → ヘッダー/画面コンテナ構築
   → タイトルゲート（`TitleScreen`）を最前面 overlay。新規/継続で `ChronicleGlobal.Initialize`/`LoadGame` を引く。
 - 新規ゲームの初期状態は純粋ファクトリ `Core/Bootstrap/NewGameFactory`（ロスター＋財布）が組み、Initialize へ流す。
+  初期 9 名は**完全一様ランダムではなく役割保証付き**: 前衛≥2・回復≥1・支援≥1 を確保し、同職は最大 2（`MaxSameJob`）。
+  「前衛ゼロ／回復ゼロ／同職 3 ダブり」の詰み開幕＝リセマラを構造排除する（職の中身・性別・名前・年齢は乱数のまま）。
+  役割判定は職名ハードコードではなく `JobMaster` のデータ（推奨 row／パッシブ `TurnEndSquadHeal`・`InitiativeBuff`）から導出。
 - **常駐 A 型は廃止**。`PhaseChanged` を受け、現在フェーズの画面だけを 1 つ `new` してマウントし、旧画面は `QueueFree`
   （`MountScreenForCurrentPhase` / `FreeCurrentScreen`）。任意の瞬間に生きている画面はちょうど 1 つ（`ScreenVisibility` が形式仕様）。
 
@@ -403,7 +406,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ## H. テスト規約と検証
 
-実体: `generated_csharp/Tests/`（xUnit / **732 pass / 0 fail**）
+実体: `generated_csharp/Tests/`（xUnit / **744 pass / 0 fail**）
 
 ### H-1. テスト方針
 

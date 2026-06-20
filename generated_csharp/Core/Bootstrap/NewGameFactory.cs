@@ -25,6 +25,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Units;
 
@@ -68,6 +69,24 @@ public static class NewGameFactory
     /// </summary>
     public const int InitialPointsBalance = 20;
 
+    // ─── 初期パーティーの役割保証（リセマラ抑止のバランス制約） ─────────────────
+    //  完全一様ランダム 9 名は「前衛ゼロ」「回復ゼロ」「同職 3 ダブり」を高頻度で生み、
+    //  詰み開幕＝引き直しを誘発する。そこで詰み盤面だけを構造的に排除する最低保証を置く。
+    //  ★ 役割の判定は職名ハードコードではなく JobMaster のデータ（推奨 row / パッシブ）から
+    //    導出する（職定義が変わっても保証ロジックが追従する・憲法①/データ駆動）。
+
+    /// <summary>必ず確保する前衛（最前列専任）の最低人数。</summary>
+    public const int GuaranteedFrontLine = 2;
+
+    /// <summary>必ず確保する回復役（ターン末分隊治癒）の最低人数。</summary>
+    public const int GuaranteedHealer = 1;
+
+    /// <summary>必ず確保する支援役（突撃号令＝InitiativeBuff）の最低人数。</summary>
+    public const int GuaranteedSupport = 1;
+
+    /// <summary>同一ジョブの上限（偏り＝同職ダブり過多を防ぐ）。</summary>
+    public const int MaxSameJob = 2;
+
     // ─── 初期状態の生成 ───────────────────────────────────────────────────
 
     /// <summary>
@@ -90,13 +109,19 @@ public static class NewGameFactory
         ArgumentNullException.ThrowIfNull(rng);
 
         var usedFirstNameKeys = new HashSet<string>(StringComparer.Ordinal);
+        var jobCounts = new Dictionary<JobId, int>();
         var roster = ImmutableList.CreateBuilder<Unit>();
 
-        for (var i = 0; i < InitialRosterSize; i++)
+        // 1. 役割の背骨を保証する（職の中身・性別・名前・年齢は引き続き乱数。同職は MaxSameJob まで）。
+        AddGuaranteed(roster, jobCounts, usedFirstNameKeys, rng, IsFrontLineJob, GuaranteedFrontLine);
+        AddGuaranteed(roster, jobCounts, usedFirstNameKeys, rng, IsSupportJob,   GuaranteedSupport);
+        AddGuaranteed(roster, jobCounts, usedFirstNameKeys, rng, IsHealerJob,    GuaranteedHealer);
+
+        // 2. 残りスロットは全職からランダムに埋める（同職上限のみ尊重 = 偏り過多を防ぐ）。
+        while (roster.Count < InitialRosterSize)
         {
-            var recruit = ScoutService.CreateOutsiderUnit(rng, usedFirstNameKeys);
-            usedFirstNameKeys.Add(recruit.FirstNameKey);
-            roster.Add(recruit);
+            var job = PickJob(rng, jobCounts, static _ => true) ?? JobMaster.DisplayOrder[0];
+            AddRecruit(roster, jobCounts, usedFirstNameKeys, rng, job);
         }
 
         // 創設時の元手を与える。残高 0 の初期状態へ EarnDirect で加算する
@@ -108,5 +133,77 @@ public static class NewGameFactory
             Roster  = roster.ToImmutable(),
             Economy = economy,
         };
+    }
+
+    // ─── 役割判定（JobMaster のデータから導出・職名ハードコードなし） ─────────────
+
+    /// <summary>最前列専任の前衛か（推奨 row が Front ただ 1 つ＝鉄壁騎士・重装歩兵）。</summary>
+    public static bool IsFrontLineJob(JobId job)
+    {
+        var rows = JobMaster.All[job].FormationGuide.RecommendedRows;
+        return rows.Length == 1 && rows[0] == SquadRow.Front;
+    }
+
+    /// <summary>回復役か（ターン末分隊治癒パッシブを持つ＝衛生兵）。</summary>
+    public static bool IsHealerJob(JobId job) => JobMaster.HasPassive(job, PassiveKind.TurnEndSquadHeal);
+
+    /// <summary>支援役か（突撃号令＝InitiativeBuff パッシブを持つ＝旗手・戦術官）。</summary>
+    public static bool IsSupportJob(JobId job) => JobMaster.HasPassive(job, PassiveKind.InitiativeBuff);
+
+    // ─── 生成補助 ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <paramref name="predicate"/> を満たす職を <paramref name="count"/> 名、同職上限を守りつつ
+    /// ロスターへ加える。役割枠が同職上限で埋まり切った異常時は「上限内の任意職」へ退避する
+    /// （保証は満たせなくとも頭数だけは必ず確保し、無限ループを防ぐ）。
+    /// </summary>
+    private static void AddGuaranteed(
+        ImmutableList<Unit>.Builder roster,
+        Dictionary<JobId, int> jobCounts,
+        HashSet<string> usedFirstNameKeys,
+        Random rng,
+        Func<JobId, bool> predicate,
+        int count)
+    {
+        for (var i = 0; i < count && roster.Count < InitialRosterSize; i++)
+        {
+            var job = PickJob(rng, jobCounts, predicate)
+                   ?? PickJob(rng, jobCounts, static _ => true)
+                   ?? JobMaster.DisplayOrder[0];
+            AddRecruit(roster, jobCounts, usedFirstNameKeys, rng, job);
+        }
+    }
+
+    /// <summary>指定職の外様 1 名を生成してロスターへ加え、使用済み名・同職カウントを更新する。</summary>
+    private static void AddRecruit(
+        ImmutableList<Unit>.Builder roster,
+        Dictionary<JobId, int> jobCounts,
+        HashSet<string> usedFirstNameKeys,
+        Random rng,
+        JobId job)
+    {
+        var recruit = ScoutService.CreateOutsiderUnit(rng, usedFirstNameKeys, job);
+        usedFirstNameKeys.Add(recruit.FirstNameKey);
+        jobCounts[job] = jobCounts.GetValueOrDefault(job) + 1;
+        roster.Add(recruit);
+    }
+
+    /// <summary>
+    /// <paramref name="predicate"/> を満たし、かつ同職上限 <see cref="MaxSameJob"/> 未満の職から
+    /// 1 つを均等乱択する。候補が無ければ null（呼び出し側が退避する）。
+    /// </summary>
+    private static JobId? PickJob(
+        Random rng, IReadOnlyDictionary<JobId, int> jobCounts, Func<JobId, bool> predicate)
+    {
+        var eligible = new List<JobId>();
+        foreach (var job in JobMaster.DisplayOrder)
+        {
+            if (predicate(job) && jobCounts.GetValueOrDefault(job) < MaxSameJob)
+            {
+                eligible.Add(job);
+            }
+        }
+        if (eligible.Count == 0) return null;
+        return eligible[rng.Next(eligible.Count)];
     }
 }

@@ -156,10 +156,28 @@ public static class ScoutService
     public static Unit CreateOutsiderUnit(Random rng, IReadOnlySet<string> usedFirstNameKeys)
     {
         ArgumentNullException.ThrowIfNull(rng);
-        ArgumentNullException.ThrowIfNull(usedFirstNameKeys);
 
+        // ジョブを先に均等乱択してからジョブ指定版へ委譲する（乱数消費順は従来どおり：
+        // job → age → lifespan → name。seeded Random の再現性を壊さない）。
         var jobs = JobMaster.DisplayOrder;
         var job = jobs[rng.Next(jobs.Length)];
+        return CreateOutsiderUnit(rng, usedFirstNameKeys, job);
+    }
+
+    /// <summary>
+    /// ジョブを指定して外様ユニット 1 名を生成する純粋ヘルパー。年齢・寿命・性別・名前・
+    /// 文化圏は乱数のまま、ジョブだけを呼び出し側が固定する。初期パーティーの役割保証
+    /// （<see cref="ChronicleKnights.Core.Bootstrap.NewGameFactory"/>）のように「職だけ制御し
+    /// たい」用途のための入口。職一様乱択版（2 引数）も内部で本メソッドへ委譲する。
+    /// </summary>
+    /// <param name="rng">外様生成に使う乱数発生器。</param>
+    /// <param name="usedFirstNameKeys">名前重複回避用の使用済みキー集合。</param>
+    /// <param name="job">付与するジョブ（呼び出し側が決定）。</param>
+    public static Unit CreateOutsiderUnit(Random rng, IReadOnlySet<string> usedFirstNameKeys, JobId job)
+    {
+        ArgumentNullException.ThrowIfNull(rng);
+        ArgumentNullException.ThrowIfNull(usedFirstNameKeys);
+
         var initialAge = rng.Next(ScoutMinInitialAge, ScoutMaxInitialAge + 1);
         var lifespan = rng.Next(ScoutMinLifespan, ScoutMaxLifespan + 1);
 

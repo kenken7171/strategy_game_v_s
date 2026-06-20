@@ -3,7 +3,7 @@
 > 対象は現役本体 `generated_csharp/`。仕様の根拠は [instructions.md](instructions.md)、実態は [CLAUDE.md](CLAUDE.md)、
 > 将来戦略は [docs/MIGRATION_GODOT_HACK_AND_SLASH.md](docs/MIGRATION_GODOT_HACK_AND_SLASH.md)。
 > 旧 TypeScript 版のタスク（旧 M1/M2/M3）はすべて役目を終えたため破棄した。
-> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 732 pass を維持。
+> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 744 pass を維持。
 
 ---
 
@@ -22,7 +22,7 @@
 - [x] ローカライズ結線（`MasterDataNameResolver` 等で job/item/prophecy/敵スキル/章名を辞書解決）
 - [x] 動的 B 型 UI（現在フェーズ画面のみ new/QueueFree・リークフリー・各種オーバーレイ・JuiceDirector）
 - [x] セーブ/ロード（アトミック書き込み・DTO・スキーマ Version 1）
-- [x] xUnit 732 pass（Core 全域）＋ 手動トリガー CI
+- [x] xUnit 744 pass（Core 全域）＋ 手動トリガー CI
 
 ---
 
@@ -37,7 +37,7 @@
 
 ### T-2. ドキュメント・警告の微修正
 
-- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 732）。
+- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 744）。
 - [ ] `Tests/Core/Battle/BattleSeatingContractTests.cs:82` の xUnit2013 警告（`Assert.Equal(1, …)` → `Assert.Single`）を解消。
 
 ---
@@ -51,6 +51,13 @@
 - [x] 予言の `DescriptionKey`（"Kind.Rarity" 形式）を `localization_ja.json` の `prophecies` セクションへ登録（フレーバー文の辞書化）＋ `prophecyRarities`（銅/銀/金バッジ）。
       レア度は永続化 v7 で保存（旧版は既定 Bronze で後方互換）。`TimelineUI` がレア度バッジ＋フレーバー＋カード色味を表示。
 - [ ] 残: レア度出現率の年次スケール（後半ほど金が出やすい等）。経済軸/パッシブ付与型 Affix との連携は T-4 側で継続。
+
+### T-3b. 初期パーティーの役割保証（リセマラ抑止）— ✅ 完了
+
+- [x] `NewGameFactory` の完全一様ランダム 9 名を「制約付きランダム」へ。前衛≥2・回復≥1・支援≥1 を保証し、同職は最大 2（`MaxSameJob`）。
+      役割判定は `JobMaster` のデータ（推奨 row／パッシブ）から導出（職名ハードコードなし）。`ScoutService.CreateOutsiderUnit` にジョブ指定版オーバーロードを追加。
+      `NewGameFactoryTests` が全 600 シードで保証成立を固定。決定論・名前一意性は維持。
+- [ ] 残: 保証の強弱（前衛2/回復1/支援1）はプレイ感を見て調整可。引き直しボタン路線は不採用（保証で詰みを消す方針）。
 
 ### T-4. ハクスラ拡張（ドロップ・Affix）
 
