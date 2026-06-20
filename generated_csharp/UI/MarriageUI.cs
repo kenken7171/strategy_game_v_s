@@ -113,6 +113,9 @@ public partial class MarriageUI : Godot.Control
     // 旅団兵器廠（商店・強化）セクション
     private VBoxContainer? _shopListContainer;
 
+    // 持ち物（装備の付け替え）セクション
+    private VBoxContainer? _inventoryListContainer;
+
     // 人事（戦力外通告）セクション
     private VBoxContainer? _dismissListContainer;
 
@@ -151,6 +154,13 @@ public partial class MarriageUI : Godot.Control
     /// （[購入] → [剣]/[弓]/…/[やめる]）。null なら確認待ちなし。強化と相互排他に保つ。
     /// </summary>
     private Guid? _pendingBuyId;
+
+    /// <summary>
+    /// 持ち物からの装備で、装備先ユニットを選ぶ確認待ち対象の装備個体 ID。武装すると当該
+    /// 持ち物行に生存者ユニットのボタン群（[装備先] → [○○]/…/[やめる]）が展開される。
+    /// null なら確認待ちなし。Inventory/Roster 再描画をまたいでも保持する。
+    /// </summary>
+    private Guid? _pendingEquipItemId;
 
     // ─── ライフサイクル ───────────────────────────────────────────────────
 
@@ -313,6 +323,26 @@ public partial class MarriageUI : Godot.Control
         _shopListContainer.SetMeta(TestIdMetaKey, "shop-list");
         shopSection.AddChild(_shopListContainer);
 
+        // ─ 持ち物（装備の付け替え）セクション ───────────────────
+        // 旅団共有の持ち物（未装着の装備）とユニット装備の間で、無償・非破壊に付け替える。
+        var inventorySection = new VBoxContainer();
+        inventorySection.SetMeta(TestIdMetaKey, "inventory-section");
+        root.AddChild(inventorySection);
+        var inventoryTitle = new Label { Text = "── 🎒 持ち物（装備の付け替え） ──" };
+        inventoryTitle.SetMeta(TestIdMetaKey, "inventory-title");
+        inventorySection.AddChild(inventoryTitle);
+
+        var inventoryHint = new Label
+        {
+            Text = "ドロップ等で得た装備は持ち物に貯まる。外しても消えず持ち物へ戻る（無償・付け替え自由）。",
+        };
+        inventoryHint.SetMeta(TestIdMetaKey, "inventory-hint");
+        inventorySection.AddChild(inventoryHint);
+
+        _inventoryListContainer = new VBoxContainer();
+        _inventoryListContainer.SetMeta(TestIdMetaKey, "inventory-list");
+        inventorySection.AddChild(_inventoryListContainer);
+
         // ─ 人事（戦力外通告）セクション ─────────────────────────
         // 旅団の新陳代謝をプレイヤーの手に戻す。寿命前の現役を任意に外す手動解雇。
         var dismissSection = new VBoxContainer();
@@ -366,6 +396,8 @@ public partial class MarriageUI : Godot.Control
         _chronicleGlobal.StateInitialized += OnStateInitialized;
         // 今年の行動トグルの選択強調を SoT 同期で再描画する（SetPlannedAction は FormationChanged を発火）。
         _chronicleGlobal.FormationChanged += OnFormationChanged;
+        // 持ち物の増減（ドロップ取得・付け替え）で持ち物パネルを再描画する。
+        _chronicleGlobal.InventoryChanged += OnInventoryChanged;
     }
 
     private void UnsubscribeSignals()
@@ -377,6 +409,7 @@ public partial class MarriageUI : Godot.Control
             _chronicleGlobal.RosterChanged    -= OnRosterChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
+            _chronicleGlobal.InventoryChanged -= OnInventoryChanged;
         }
         catch
         {
@@ -400,11 +433,15 @@ public partial class MarriageUI : Godot.Control
         RenderQuote();
         RenderChildrenLists();
         RenderShop();
+        RenderInventory();
         RenderDismissList();
         RenderPedigreeList();
     }
 
     private void OnStateInitialized() => RenderAll();
+
+    /// <summary>持ち物が増減した（ドロップ取得・付け替え）ときのハンドラ。持ち物パネルだけを狙い撃ち再描画。</summary>
+    private void OnInventoryChanged() => RenderInventory();
 
     /// <summary>
     /// 今年の行動が変わった（SetPlannedAction が FormationChanged を発火）ときのハンドラ。
@@ -423,6 +460,7 @@ public partial class MarriageUI : Godot.Control
         RenderScoutButton();
         RenderChildrenLists();
         RenderShop();
+        RenderInventory();
         RenderDismissList();
         RenderPedigreeList();
     }
@@ -768,6 +806,157 @@ public partial class MarriageUI : Godot.Control
             upgradeBtn.Pressed += () => OnUpgradeArmPressed(unitId);
             row.AddChild(upgradeBtn);
         }
+    }
+
+    // ─── 持ち物（装備の付け替え）の描画 ───────────────────────────────────
+
+    /// <summary>
+    /// 持ち物セクションを、現在の生存者と旅団の持ち物から無状態に再構築する。
+    /// 上段「装備中（外す）」: 装備持ちの生存者を [外す] で持ち物へ戻す。
+    /// 下段「持ち物」: 各装備を [装備する] → 装備先ユニットを選んで装着（2 段階）。
+    /// すべて無償・非破壊（外した装備は消えず持ち物へ）。SoT をキャッシュせず毎回読み直す。
+    /// </summary>
+    private void RenderInventory()
+    {
+        if (_chronicleGlobal is null || _inventoryListContainer is null) return;
+
+        foreach (var c in _inventoryListContainer.GetChildren()) c.QueueFree();
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        var inventory = _chronicleGlobal.BrigadeInventory;
+
+        // ── 上段: 装備中の生存者（外して持ち物へ） ──
+        var equippedHeader = new Label { Text = "装備中（外して持ち物へ）:" };
+        equippedHeader.SetMeta(TestIdMetaKey, "inventory-equipped-header");
+        _inventoryListContainer.AddChild(equippedHeader);
+
+        var anyEquipped = false;
+        foreach (var unit in alive)
+        {
+            if (unit.MainEquipment is not { } equip) continue;
+            anyEquipped = true;
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"inventory-equipped-row-{capturedId}");
+
+            var label = new Label
+            {
+                Text = $"🎖 {_chronicleGlobal.ResolveDisplayName(unit)} — {EquipmentSummary(equip)}",
+            };
+            label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.AddChild(label);
+
+            var unequipBtn = new Button { Text = "外す → 持ち物" };
+            unequipBtn.SetMeta(TestIdMetaKey, $"inventory-unequip-button-{capturedId}");
+            unequipBtn.Pressed += () => OnUnequipToInventoryPressed(capturedId);
+            row.AddChild(unequipBtn);
+
+            _inventoryListContainer.AddChild(row);
+        }
+        if (!anyEquipped)
+        {
+            var none = new Label { Text = "（装備中の隊員はいません）" };
+            none.SetMeta(TestIdMetaKey, "inventory-equipped-empty");
+            _inventoryListContainer.AddChild(none);
+        }
+
+        // ── 下段: 持ち物（装備先を選んで装着） ──
+        var stockHeader = new Label { Text = "持ち物（選んで装備）:" };
+        stockHeader.SetMeta(TestIdMetaKey, "inventory-stock-header");
+        _inventoryListContainer.AddChild(stockHeader);
+
+        if (inventory.Count == 0)
+        {
+            var empty = new Label { Text = "（持ち物は空。ドロップや取り外しで貯まります）" };
+            empty.SetMeta(TestIdMetaKey, "inventory-stock-empty");
+            _inventoryListContainer.AddChild(empty);
+            return;
+        }
+
+        foreach (var item in inventory)
+        {
+            var capturedItemId = item.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SetMeta(TestIdMetaKey, $"inventory-stock-row-{capturedItemId}");
+
+            var label = new Label { Text = EquipmentSummary(item) };
+            label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.AddChild(label);
+
+            if (_pendingEquipItemId == capturedItemId)
+            {
+                // 装備先選択状態: 生存者ユニットのボタン群＋[やめる]。
+                foreach (var unit in alive)
+                {
+                    var capturedUnitId = unit.Id;
+                    var pick = new Button { Text = _chronicleGlobal.ResolveDisplayName(unit) };
+                    pick.SetMeta(TestIdMetaKey, $"inventory-equip-target-{capturedItemId}-{capturedUnitId}");
+                    pick.Pressed += () => OnEquipFromInventoryPressed(capturedItemId, capturedUnitId);
+                    row.AddChild(pick);
+                }
+                var cancel = new Button { Text = "やめる" };
+                cancel.SetMeta(TestIdMetaKey, $"inventory-equip-cancel-{capturedItemId}");
+                cancel.Pressed += OnEquipFromInventoryCancelPressed;
+                row.AddChild(cancel);
+            }
+            else
+            {
+                var equipBtn = new Button { Text = "装備する", Disabled = alive.Count == 0 };
+                equipBtn.SetMeta(TestIdMetaKey, $"inventory-equip-button-{capturedItemId}");
+                equipBtn.Pressed += () => OnEquipArmPressed(capturedItemId);
+                row.AddChild(equipBtn);
+            }
+
+            _inventoryListContainer.AddChild(row);
+        }
+    }
+
+    /// <summary>装備 1 個の表示文（種別名 Lv ＋ Affix 名の連結）。コード側に日本語は持たない。</summary>
+    private string EquipmentSummary(Equipment equip)
+    {
+        var text = $"{ItemName(equip.ItemId)} Lv{equip.Level}";
+        if (equip.HasAnyAffix)
+        {
+            var affixes = new List<string>();
+            foreach (var key in equip.AffixKeys)
+            {
+                affixes.Add(_chronicleGlobal?.ResolveAffixName(key) ?? key);
+            }
+            text += $" 〈{string.Join(" / ", affixes)}〉";
+        }
+        return text;
+    }
+
+    private void OnUnequipToInventoryPressed(Guid unitId)
+    {
+        // 取り外しは InventoryChanged / RosterChanged を発火 → 自動で持ち物・商店が再描画される。
+        _chronicleGlobal?.UnequipToInventory(unitId);
+    }
+
+    private void OnEquipArmPressed(Guid equipmentId)
+    {
+        _pendingEquipItemId = (_pendingEquipItemId == equipmentId) ? null : equipmentId;
+        RenderInventory();
+    }
+
+    private void OnEquipFromInventoryPressed(Guid equipmentId, Guid unitId)
+    {
+        _pendingEquipItemId = null;
+        // 装着は InventoryChanged / RosterChanged を発火 → 自動再描画。失敗時は手動で持ち物を戻す。
+        if (_chronicleGlobal?.EquipFromInventory(unitId, equipmentId) is null)
+        {
+            RenderInventory();
+        }
+    }
+
+    private void OnEquipFromInventoryCancelPressed()
+    {
+        _pendingEquipItemId = null;
+        RenderInventory();
     }
 
     /// <summary>
