@@ -3,7 +3,7 @@
 > 対象は現役本体 `generated_csharp/`。仕様の根拠は [instructions.md](instructions.md)、実態は [CLAUDE.md](CLAUDE.md)、
 > 将来戦略は [docs/MIGRATION_GODOT_HACK_AND_SLASH.md](docs/MIGRATION_GODOT_HACK_AND_SLASH.md)。
 > 旧 TypeScript 版のタスク（旧 M1/M2/M3）はすべて役目を終えたため破棄した。
-> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 744 pass を維持。
+> 完了時は PR/コミットで本ファイルも更新すること。検収基準: `dotnet test` 756 pass を維持。
 
 ---
 
@@ -22,7 +22,7 @@
 - [x] ローカライズ結線（`MasterDataNameResolver` 等で job/item/prophecy/敵スキル/章名を辞書解決）
 - [x] 動的 B 型 UI（現在フェーズ画面のみ new/QueueFree・リークフリー・各種オーバーレイ・JuiceDirector）
 - [x] セーブ/ロード（アトミック書き込み・DTO・スキーマ Version 1）
-- [x] xUnit 744 pass（Core 全域）＋ 手動トリガー CI
+- [x] xUnit 756 pass（Core 全域）＋ 手動トリガー CI
 
 ---
 
@@ -37,7 +37,7 @@
 
 ### T-2. ドキュメント・警告の微修正
 
-- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 744）。
+- [ ] `generated_csharp/README.md` / `docs/VISUAL_AND_JUICE_ROADMAP.md` のテスト数「630」を実数へ追従（現 756）。
 - [ ] `Tests/Core/Battle/BattleSeatingContractTests.cs:82` の xUnit2013 警告（`Assert.Equal(1, …)` → `Assert.Single`）を解消。
 
 ---
@@ -71,8 +71,10 @@
 
 ### T-5. アセット ＆ 見栄え（`docs/VISUAL_AND_JUICE_ROADMAP.md`）
 
-- [ ] 背景 4 枚（dawn/upheaval/decline/twilight）＋ 敵 5 枚（archetype 別）の追加と専用ローダ
-      （`BackgroundTextureLibrary` / `EnemyTextureLibrary`）。詳細 [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md)。
+- [x] 背景／敵のアセット**基盤を通電**: 専用ローダ `BackgroundTextureLibrary` / `EnemyTextureLibrary`（JobTextureLibrary と同一の2段ロード）＋
+      slug 写像 SoT `Core/Assets/AssetSlugs` ＋ `BattleUI` 結線（背景=最背面 `KeepAspectCovered` / 敵=敵カード上部）。
+      動作確認用の**原色プレースホルダ9枚**（背景4・敵5）を配置。`AssetSlugsTests` が「全 Epoch/Archetype のパスに実ファイルあり」を固定。
+- [ ] 背景 4 枚・敵 5 枚を**本番アートへ差し替え**（同名上書きで即反映・コード変更不要）。詳細 [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md)。
 - [ ] ヒットエフェクト・効果音などの Juice 強化。
 
 ---

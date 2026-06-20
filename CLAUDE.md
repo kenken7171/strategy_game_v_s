@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 初期パーティーの役割保証（`NewGameFactory`：前衛≥2・回復≥1・支援≥1／同職≤2 でリセマラ抑止）＋ 予言生成の本実装（`ProphecyMaster`：3 枚キュレーション＋レア度 銅/銀/金＋効果量 SoT＋暦連動＋フレーバー辞書）／ 検収: `dotnet test` 744 pass / 0 fail。
+> 最終更新の根拠: 戦場アセット基盤の通電（`BackgroundTextureLibrary`/`EnemyTextureLibrary`＋slug 写像 SoT `Core/Assets/AssetSlugs`＋`BattleUI` 結線。背景4・敵5は原色プレースホルダ配置・本番差し替え待ち）＋ 初期パーティーの役割保証（`NewGameFactory`）＋ 予言生成の本実装（`ProphecyMaster`）／ 検収: `dotnet test` 756 pass / 0 fail。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 区分 | 場所 | 実態 | 扱い |
 |---|---|---|---|
-| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・744 テスト緑 | **すべての新規実装はここ** |
+| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・756 テスト緑 | **すべての新規実装はここ** |
 | 凍結された旧本体 | `apps/`・`packages/`・`scripts/`・`config/jobs.json`・`tools/` | Bun + Hono + React + Vite の TypeScript 版。もうゲームには一切繋がっていない | **参照専用（変更禁止・原則放置）**。アーキタイプ検証の歴史的レファレンス |
 
 旧 TS 版は「先に TS で検証 → C# へ翻訳」というかつてのフローの名残で、今は完全に役目を終えている。
@@ -41,8 +41,8 @@ generated_csharp/
 ├── UI/          ☆現役 UI（Godot Control をコードで動的構築。.tscn は Main 以外不使用）
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
-├── Assets/Textures/Jobs/{job}/{male|female}.png  ジョブ立ち絵（16 枚配置済み）
-└── Tests/       xUnit 単体テスト（Core を対象。744 pass）
+├── Assets/Textures/{Jobs|Backgrounds|Enemies}/  ジョブ立ち絵16枚＋背景4・敵5（背景/敵は原色プレースホルダ）
+└── Tests/       xUnit 単体テスト（Core を対象。756 pass）
 ```
 
 ### A-2. 技術スタック
@@ -77,7 +77,7 @@ generated_csharp/
 | コマンド | 内容 |
 |---|---|
 | `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
-| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**744 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**756 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
 | `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
 | `./play.command -e` | Godot エディタを開く |
 | `godot --path .` | （ビルド済み前提で）直接起動 |
@@ -394,6 +394,8 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 | 残存ファイル | 利用元（現役） |
 |---|---|
 | `UserInterface/JobTextureLibrary.cs` | `UI/BattleUI` `UI/FormationUI` `UI/UnitDetailOverlay` `UI/JobDescriptionView`（ジョブ立ち絵の共有ライブラリ） |
+| `UserInterface/BackgroundTextureLibrary.cs` | `UI/BattleUI`（章 Epoch ごとの戦場背景を最背面へ。`Core/Assets/AssetSlugs` で slug 解決） |
+| `UserInterface/EnemyTextureLibrary.cs` | `UI/BattleUI`（敵原型 Archetype ごとのイラストを敵カードへ。同上 slug 解決） |
 | `UserInterface/Hub/FormationDragPayload.cs` | `UI/FormationUI`（D&D 編成のドラッグ運搬体） |
 | `UserInterface/Hub/RosterDragCard.cs` | `UI/FormationUI`（ロスタ側ドラッグ元カード） |
 | `UserInterface/Hub/FormationSlotControl.cs` | `UI/FormationUI`（盤面スロットのドロップ先） |
@@ -406,7 +408,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ## H. テスト規約と検証
 
-実体: `generated_csharp/Tests/`（xUnit / **744 pass / 0 fail**）
+実体: `generated_csharp/Tests/`（xUnit / **756 pass / 0 fail**）
 
 ### H-1. テスト方針
 
@@ -492,9 +494,10 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ### Autoload / UI / Config
 - `Autoload/ChronicleGlobal.cs` — 常駐 SoT・全 API・シグナル・セーブ/ロード（約 2060 行）
 - `UI/GameDirector.cs` `TimelineUI.cs` `MarriageUI.cs` `FormationUI.cs` `BattleUI.cs` ＋ 各オーバーレイ・`JuiceDirector.cs`
-- `UserInterface/JobTextureLibrary.cs`（現役・共有）／ `UserInterface/Hub/` の D&D 部品 3 種（現役・FormationUI 利用。死蔵 View は粛清済・G-3）
+- `UserInterface/JobTextureLibrary.cs` `BackgroundTextureLibrary.cs` `EnemyTextureLibrary.cs`（現役・共有・画像ローダ）／ `UserInterface/Hub/` の D&D 部品 3 種（現役・FormationUI 利用。死蔵 View は粛清済・G-3）
+- `Core/Assets/AssetSlugs.cs` — 画像ファイル名スラッグ（章/敵→snake_case）の純粋写像 SoT（ローダが引くパスの核）
 - `Config/localization_ja.json` — 全日本語テキストの辞書
-- `Assets/Textures/Jobs/{job}/{male|female}.png` — ジョブ立ち絵（16 枚）。背景 4 / 敵 5 は要追加（`docs/ASSET_MANIFEST.md`）
+- `Assets/Textures/Jobs/{job}/{male|female}.png` — ジョブ立ち絵（16 枚）。`Backgrounds/{epoch}.png`（4）・`Enemies/{archetype}.png`（5）は**原色プレースホルダ配置済**（ローダ実装済・本番アート差し替え待ち。`docs/ASSET_MANIFEST.md`）
 
 ### ドキュメント
 - `ONBOARDING.md` — **統合ガイド（ゲーム仕様＋設計＋ルール＋手順を 1 枚に集約）**。他 AI／新規参加者に最初に渡す

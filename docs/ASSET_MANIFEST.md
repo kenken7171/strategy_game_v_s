@@ -32,11 +32,12 @@
 
 ---
 
-## 2. 戦場背景 ⬜ 要追加（4枚）
+## 2. 戦場背景 🟡 原色プレースホルダ配置済（4枚・要差し替え）
 
 `res://Assets/Textures/Backgrounds/{epoch}.png`。1時代（年代の章）につき1枚。
 全画面に `KeepAspectCovered` で敷く想定なので、横長（例 1280x720 以上、16:9）推奨。
-ローダ（新設予定）: `UserInterface/BackgroundTextureLibrary.cs`。
+ローダ: `UserInterface/BackgroundTextureLibrary.cs`（**実装済**）。`BattleUI` が最背面へ全画面で敷く。
+現状は動作確認用の**原色べた塗り**（dawn=黒 / upheaval=白 / decline=青 / twilight=緑）を配置済。本番アートで上書きするだけでよい。
 
 | epoch (slug) | 時代 | 該当年 | 必要ファイル |
 |---|---|---|---|
@@ -49,10 +50,10 @@
 
 ---
 
-## 3. 敵イラスト ⬜ 要追加（5枚）
+## 3. 敵イラスト 🟡 原色プレースホルダ配置済（5枚・要差し替え）
 
-`res://Assets/Textures/Enemies/{archetype}.png`。敵カードに表示。縦長〜正方（例 256–512px）推奨。
-ローダ（新設予定）: `UserInterface/EnemyTextureLibrary.cs`。
+`res://Assets/Textures/Enemies/{archetype}.png`。敵カード上部に表示（`BattleUI` の `battle-enemy-portrait`）。縦長〜正方（例 256–512px）推奨。
+ローダ: `UserInterface/EnemyTextureLibrary.cs`（**実装済**）。現状は動作確認用の原色べた塗りを配置済（本番アートで上書きするだけでよい）。
 
 `EnemyArchetype` は5種。`TrialGuardian` は全時代の通常敵、残り4種は各章ボス（出現年 25/50/75/100）。
 
@@ -81,19 +82,23 @@
 
 - 形式: PNG / RGBA。ドット絵なら拡大時は `TextureFilter = Nearest`（呼び出し側で指定）。
 - 命名: 小文字 ASCII の snake_case（= enum 名の snake_case）。日本語ファイル名は不可。
-- 配置すれば即反映（コード変更不要）。ただし背景・敵の**ローダ2クラスはまだ未実装**（ロードマップ §1.3 で新設予定）。
-  画像だけ先に置いても、ローダ実装までは画面には出ない点に注意。
+- 配置すれば即反映（コード変更不要）。背景・敵の**ローダ2クラス（`BackgroundTextureLibrary` / `EnemyTextureLibrary`）は実装済**で、
+  `BattleUI` へ結線済み（背景=最背面 `KeepAspectCovered` / 敵=敵カード上部）。slug 写像は純粋層 `Core/Assets/AssetSlugs` が SoT で、
+  `Tests/Core/Assets/AssetSlugsTests` が「全 Epoch / Archetype についてローダが引くパスに実ファイルがある」ことを固定する。
 
 ---
 
-## 6. まとめ（追加が必要なのは合計9枚）
+## 6. まとめ（基盤は通電済み・残りは本番アートの差し替えのみ）
 
 | 種別 | 枚数 | 状態 |
 |---|---|---|
-| ジョブ | 16 | ✅ 配置済み |
-| 背景   | 4  | ⬜ 要追加 |
-| 敵     | 5  | ⬜ 要追加 |
-| **合計（要追加）** | **9** | ⬜ |
+| ジョブ | 16 | ✅ 本番配置済み |
+| 背景   | 4  | 🟡 原色プレースホルダ配置済（ローダ実装済・要差し替え） |
+| 敵     | 5  | 🟡 原色プレースホルダ配置済（ローダ実装済・要差し替え） |
+| **本番アート差し替え待ち** | **9** | 🟡 |
+
+→ ローダ（`BackgroundTextureLibrary` / `EnemyTextureLibrary`）と `BattleUI` 結線は実装済み。
+   **同名ファイルを本番アートで上書きするだけで即反映**（コード変更不要・差し替え式）。
 
 詳しい結線箇所（どの画面のどのノードへ載せるか）は `docs/VISUAL_AND_JUICE_ROADMAP.md` の
 §1.4 / §7 を参照。
