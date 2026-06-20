@@ -36,7 +36,8 @@
 
 `res://Assets/Textures/Backgrounds/{epoch}.png`。1時代（年代の章）につき1枚。
 全画面に `KeepAspectCovered` で敷く想定なので、横長（例 1280x720 以上、16:9）推奨。
-ローダ: `UserInterface/BackgroundTextureLibrary.cs`（**実装済**）。`BattleUI` が最背面へ全画面で敷く。
+ローダ: `UserInterface/BackgroundTextureLibrary.cs`（**実装済**）。`GameDirector` が**全フェーズ共通**で最背面へ全画面に敷く
+（年代記/拠点/編成/戦闘すべての背後。各画面は透明コンテナなので 1 枚が共通で透ける）。暦が進んで章をまたぐと張り替わる。
 現状は動作確認用の**原色べた塗り**（dawn=黒 / upheaval=白 / decline=青 / twilight=緑）を配置済。本番アートで上書きするだけでよい。
 
 | epoch (slug) | 時代 | 該当年 | 必要ファイル |
@@ -83,7 +84,7 @@
 - 形式: PNG / RGBA。ドット絵なら拡大時は `TextureFilter = Nearest`（呼び出し側で指定）。
 - 命名: 小文字 ASCII の snake_case（= enum 名の snake_case）。日本語ファイル名は不可。
 - 配置すれば即反映（コード変更不要）。背景・敵の**ローダ2クラス（`BackgroundTextureLibrary` / `EnemyTextureLibrary`）は実装済**で、
-  `BattleUI` へ結線済み（背景=最背面 `KeepAspectCovered` / 敵=敵カード上部）。slug 写像は純粋層 `Core/Assets/AssetSlugs` が SoT で、
+  結線済み（背景=`GameDirector` が**全フェーズ共通**で最背面に `KeepAspectCovered` / 敵=`BattleUI` の敵カード上部）。slug 写像は純粋層 `Core/Assets/AssetSlugs` が SoT で、
   `Tests/Core/Assets/AssetSlugsTests` が「全 Epoch / Archetype についてローダが引くパスに実ファイルがある」ことを固定する。
 
 ---

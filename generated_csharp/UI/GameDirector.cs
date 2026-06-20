@@ -40,8 +40,10 @@ using System;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Bootstrap;
+using ChronicleKnights.Core.Chronicle;        // EpochForYear / EpochId (shared background)
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
+using ChronicleKnights.UserInterface;          // BackgroundTextureLibrary
 using Godot;
 
 namespace ChronicleKnights.UI;
@@ -71,6 +73,13 @@ public partial class GameDirector : Godot.Control
     private Label? _phaseIndicatorLabel;
     private Button? _advanceButton;
     private Control? _screenContainer;
+
+    /// <summary>
+    /// 全フェーズ共通の戦場背景（章 Epoch ごとの画像）。root より背面に全画面で敷き、
+    /// すべての画面（年代記/拠点/編成/戦闘）の背後に共通で表示する。年（暦）が変わって
+    /// 章をまたいだら張り替える。未配置の章は Texture=null（従来どおり背景なし）。
+    /// </summary>
+    private TextureRect? _backgroundRect;
 
     /// <summary>
     /// ★ 動的B型ライフサイクルの心臓: 「今そこに生きている」唯一のフェーズ画面ノード。
@@ -558,6 +567,21 @@ public partial class GameDirector : Godot.Control
     {
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
+        // ── 全フェーズ共通の戦場背景（最背面・全画面） ───────────────
+        //  root より先に AddChild して最背面へ敷く。各フェーズ画面は透明コンテナなので、
+        //  この 1 枚が全画面（年代記/拠点/編成/戦闘）の背後に共通で透けて見える。
+        _backgroundRect = new TextureRect
+        {
+            Name        = "SharedBackground",
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            ExpandMode  = TextureRect.ExpandModeEnum.IgnoreSize,
+            MouseFilter = MouseFilterEnum.Ignore, // 背景はクリックを食わない
+        };
+        _backgroundRect.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        _backgroundRect.SetMeta(TestIdMetaKey, "game-director-background");
+        AddChild(_backgroundRect);
+        RefreshBackground();
+
         var root = new VBoxContainer { Name = "DirectorRoot" };
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 8);
@@ -684,6 +708,8 @@ public partial class GameDirector : Godot.Control
         if (_chronicleGlobal is null) return;
         _chronicleGlobal.PhaseChanged     += OnPhaseChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
+        // 暦が進んで章をまたいだら共通背景を張り替える（全フェーズに効く戦場背景の更新）。
+        _chronicleGlobal.TimelineChanged  += OnTimelineChanged;
         // 編成変化で「次へ（出撃）」ボタンの可否を即時に再評価する（無人出撃の提示層ガード）。
         _chronicleGlobal.FormationChanged += OnFormationChanged;
         // 戦闘の進行/決着でヘッダ「次へ」のラベル（1ターン進める ⇄ 次へ）を即時に切り替える。
@@ -699,6 +725,7 @@ public partial class GameDirector : Godot.Control
         {
             _chronicleGlobal.PhaseChanged     -= OnPhaseChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
+            _chronicleGlobal.TimelineChanged  -= OnTimelineChanged;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.BattleChanged    -= OnBattleChanged;
             _chronicleGlobal.DropChoicePending -= OnDropChoicePending;
@@ -724,6 +751,9 @@ public partial class GameDirector : Godot.Control
     private void OnFormationChanged() => RenderHeader();
     private void OnBattleChanged() => RenderHeader();
 
+    // 暦の前進（世代交代で年が進む）で章が変わりうるため、共通背景を張り替える。
+    private void OnTimelineChanged() => RefreshBackground();
+
     /// <summary>
     /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
     /// まずタイトルゲートを退場（QueueFree）させ、その後に現在フェーズ画面を【動的生成】して
@@ -734,6 +764,27 @@ public partial class GameDirector : Godot.Control
         DismissTitleScreen();
         MountScreenForCurrentPhase();
         RenderHeader();
+        RefreshBackground(); // 新規/継続で世界が確定した瞬間に章背景を反映
+    }
+
+    /// <summary>
+    /// 現在年の章（Epoch）に対応する共通背景を最背面へ張り替える。年は SoT
+    /// （CurrentTimeline.Turn）から読み、未配置の章・未初期化時は Texture=null
+    /// （従来どおり背景なし）へフォールバックする。全フェーズで共通の 1 枚を更新する。
+    /// </summary>
+    private void RefreshBackground()
+    {
+        if (_backgroundRect is null) return;
+
+        var turn = _chronicleGlobal?.CurrentTimeline?.Turn ?? 0;
+        if (turn <= 0)
+        {
+            _backgroundRect.Texture = null;
+            return;
+        }
+
+        var epoch = ChronicleTimelineConfig.EpochForYear(turn).Id;
+        _backgroundRect.Texture = BackgroundTextureLibrary.TryLoad(epoch);
     }
 
     // ─── ヘッダ描画（インジケータ + 次へボタンのみ。画面はマウント側が司る） ──────

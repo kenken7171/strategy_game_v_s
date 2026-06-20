@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 戦場アセット基盤の通電（`BackgroundTextureLibrary`/`EnemyTextureLibrary`＋slug 写像 SoT `Core/Assets/AssetSlugs`＋`BattleUI` 結線。背景4・敵5は原色プレースホルダ配置・本番差し替え待ち）＋ 初期パーティーの役割保証（`NewGameFactory`）＋ 予言生成の本実装（`ProphecyMaster`）／ 検収: `dotnet test` 756 pass / 0 fail。
+> 最終更新の根拠: 戦場アセット基盤の通電（`BackgroundTextureLibrary`/`EnemyTextureLibrary`＋slug 写像 SoT `Core/Assets/AssetSlugs`。背景は `GameDirector` が**全フェーズ共通**で最背面に敷き、敵は `BattleUI` の敵カードへ。背景4・敵5は原色プレースホルダ配置・本番差し替え待ち）＋ 初期パーティーの役割保証（`NewGameFactory`）＋ 予言生成の本実装（`ProphecyMaster`）／ 検収: `dotnet test` 756 pass / 0 fail。
 
 ---
 
@@ -394,7 +394,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 | 残存ファイル | 利用元（現役） |
 |---|---|
 | `UserInterface/JobTextureLibrary.cs` | `UI/BattleUI` `UI/FormationUI` `UI/UnitDetailOverlay` `UI/JobDescriptionView`（ジョブ立ち絵の共有ライブラリ） |
-| `UserInterface/BackgroundTextureLibrary.cs` | `UI/BattleUI`（章 Epoch ごとの戦場背景を最背面へ。`Core/Assets/AssetSlugs` で slug 解決） |
+| `UserInterface/BackgroundTextureLibrary.cs` | `UI/GameDirector`（章 Epoch ごとの戦場背景を**全フェーズ共通**で最背面へ。`Core/Assets/AssetSlugs` で slug 解決。`TimelineChanged`/`StateInitialized` で張替） |
 | `UserInterface/EnemyTextureLibrary.cs` | `UI/BattleUI`（敵原型 Archetype ごとのイラストを敵カードへ。同上 slug 解決） |
 | `UserInterface/Hub/FormationDragPayload.cs` | `UI/FormationUI`（D&D 編成のドラッグ運搬体） |
 | `UserInterface/Hub/RosterDragCard.cs` | `UI/FormationUI`（ロスタ側ドラッグ元カード） |

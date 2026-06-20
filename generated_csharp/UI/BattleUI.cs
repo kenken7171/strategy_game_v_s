@@ -55,7 +55,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Battle;
-using ChronicleKnights.Core.Chronicle;        // EpochForYear / EpochId (background art)
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
 using ChronicleKnights.Core.Job;
@@ -199,10 +198,6 @@ public partial class BattleUI : Godot.Control
     // ─── UI 要素（_Ready でプログラマティック生成） ──────────────────────
 
     private Label? _statusLabel;
-
-    /// <summary>戦場背景（章 Epoch ごとの画像）。最背面に全画面で敷く。未配置なら空（従来の見た目）。</summary>
-    private TextureRect? _backgroundRect;
-
     private VBoxContainer? _enemyCard;
     private Label? _enemyNameLabel;
 
@@ -336,19 +331,8 @@ public partial class BattleUI : Godot.Control
         // 内容が画面高を超えると縦スクロールが効く。横スクロールは無効化し子幅を画面幅へ伸張する。
         // ※ カメラシェイク（root.Position の一過性 Tween）は、ScrollContainer が子位置を
         //   再ソート時のみ書き戻す性質上、被弾シェイク中（数フレーム）には干渉しない。
-        // ── 戦場背景（最背面・全画面） ───────────────────────────────
-        //  scroll より先に AddChild して最背面へ敷く。章 Epoch ごとの画像を
-        //  KeepAspectCovered で全面に広げる。未配置なら Texture=null のまま（従来の見た目）。
-        _backgroundRect = new TextureRect
-        {
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
-            ExpandMode  = TextureRect.ExpandModeEnum.IgnoreSize,
-            MouseFilter = MouseFilterEnum.Ignore, // 背景はクリックを食わない
-        };
-        _backgroundRect.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        _backgroundRect.SetMeta(TestIdMetaKey, "battle-background");
-        AddChild(_backgroundRect);
-
+        // 戦場背景は GameDirector が全フェーズ共通の 1 枚として最背面に敷くため、ここでは持たない
+        // （BattleUI は透明コンテナなので共通背景がそのまま透けて見える）。敵イラストのみ本画面が担う。
         var scroll = new ScrollContainer();
         scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
@@ -591,7 +575,6 @@ public partial class BattleUI : Godot.Control
         //   この後の RenderBoard が新しい予告に基づく脈動 Tween を生成し直す。
         KillDangerPulses();
 
-        RenderBackground();
         RenderStatus();
         RenderEnemy();
         RenderEnemyIntent();
@@ -617,25 +600,6 @@ public partial class BattleUI : Godot.Control
             _                              => "交戦中",
         };
         _statusLabel.Text = $"ターン {battle.TurnNumber}  /  状態: {outcomeText}";
-    }
-
-    /// <summary>
-    /// 現在年の章（Epoch）に対応する戦場背景を最背面へ敷く。年は SoT（CurrentTimeline.Turn）
-    /// から読み、未配置の章は Texture=null（従来どおり背景なし）にフォールバックする。
-    /// </summary>
-    private void RenderBackground()
-    {
-        if (_backgroundRect is null) return;
-
-        var turn = _chronicleGlobal?.CurrentTimeline?.Turn ?? 0;
-        if (turn <= 0)
-        {
-            _backgroundRect.Texture = null;
-            return;
-        }
-
-        var epoch = ChronicleTimelineConfig.EpochForYear(turn).Id;
-        _backgroundRect.Texture = BackgroundTextureLibrary.TryLoad(epoch);
     }
 
     private void RenderEnemy()
