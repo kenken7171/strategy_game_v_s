@@ -72,6 +72,13 @@ public sealed record LoadedGameState
     /// </summary>
     public ImmutableArray<ChronicleLogEntry> ChronicleLog { get; init; }
         = ImmutableArray<ChronicleLogEntry>.Empty;
+
+    /// <summary>
+    /// 復元された旅団共有の持ち物（未装着の装備個体）。旧 v1〜v4 セーブには無いため既定は空
+    /// （required を付けず、欠落セーブでも安全に空で復元できるようにする＝後方互換）。
+    /// </summary>
+    public ImmutableList<Equipment> Inventory { get; init; }
+        = ImmutableList<Equipment>.Empty;
 }
 
 // ─── 純粋変換ユーティリティ（Godot 非依存・テスト可能） ──────────────────────
@@ -91,8 +98,10 @@ public static class SaveSerializer
     ///     後方互換復元。生者同士の親子・婚姻の縦横軸を永続化し、家系図をロード後も再構築可能にする）。
     /// v4: 性別（Unit.Gender）を追加（旧 v1〜v3 セーブは欠落 → 既定 Male で後方互換復元。
     ///     婚姻の男女ペア制約をロード後も維持する）。
+    /// v5: 旅団共有の持ち物（Inventory: 未装着の装備個体）を追加（旧 v1〜v4 セーブは欠落 →
+    ///     空リストで後方互換復元。Affix 付きドロップ等を外して保管しても消えない土台）。
     /// </summary>
-    public const int CurrentSaveVersion = 4;
+    public const int CurrentSaveVersion = 5;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -123,7 +132,8 @@ public static class SaveSerializer
         PointsEconomy economy,
         TimelineEngine timeline,
         IReadOnlyList<Unit> roster,
-        IReadOnlyList<ChronicleLogEntry> chronicleLog)
+        IReadOnlyList<ChronicleLogEntry> chronicleLog,
+        IReadOnlyList<Equipment>? inventory = null)
     {
         ArgumentNullException.ThrowIfNull(economy);
         ArgumentNullException.ThrowIfNull(timeline);
@@ -138,6 +148,8 @@ public static class SaveSerializer
             Timeline     = ToDto(timeline),
             Roster       = roster.Select(ToDto).ToList(),
             ChronicleLog = chronicleLog.Select(ToDto).ToList(),
+            // 持ち物（v5）。未指定（旧シグネチャ呼び出し）は空として保存する。
+            Inventory    = (inventory ?? Enumerable.Empty<Equipment>()).Select(ToDto).ToList(),
         };
         return JsonSerializer.Serialize(dto, JsonOptions);
     }
@@ -173,6 +185,10 @@ public static class SaveSerializer
             ChronicleLog = (dto.ChronicleLog ?? new List<ChronicleLogEntryDto>())
                            .Select(FromDto)
                            .ToImmutableArray(),
+            // 旧 v1〜v4 セーブには Inventory が無い → null → 空リストで後方互換復元。
+            Inventory = (dto.Inventory ?? new List<EquipmentDto>())
+                        .Select(FromDto)
+                        .ToImmutableList(),
         };
     }
 
@@ -369,6 +385,12 @@ public static class SaveSerializer
         /// nullable とし、Deserialize 側で null → 空配列に正規化する（後方互換）。
         /// </summary>
         public List<ChronicleLogEntryDto>? ChronicleLog { get; set; }
+
+        /// <summary>
+        /// 旅団共有の持ち物（未装着の装備個体）。v5 で追加。旧 v1〜v4 セーブには無く JSON 上で
+        /// 欠落するため nullable とし、Deserialize 側で null → 空リストに正規化する（後方互換）。
+        /// </summary>
+        public List<EquipmentDto>? Inventory { get; set; }
     }
 
     /// <summary>PointsEconomy の保存形。</summary>

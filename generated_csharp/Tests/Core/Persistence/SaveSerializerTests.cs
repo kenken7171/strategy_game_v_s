@@ -42,6 +42,56 @@ public class SaveSerializerTests
         Assert.Equal(state.Economy, loaded!.Economy);
     }
 
+    // ─── ラウンドトリップ: 持ち物（インベントリ・v5） ──────────────────────
+
+    [Fact]
+    public void Roundtrip_PreservesInventory_WithAffixes()
+    {
+        var state = SampleData.BuildState();
+        var inventory = ImmutableList.Create(
+            new Equipment
+            {
+                Id = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                ItemId = ItemId.BowSniper,
+                Level = 4,
+                AffixKeys = ImmutableArray.Create("affix-sharp", "affix-swift"),
+            },
+            new Equipment
+            {
+                Id = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                ItemId = ItemId.StaffMage,
+                Level = 1,
+            });
+
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog, inventory);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(inventory.Count, loaded!.Inventory.Count);
+        for (var i = 0; i < inventory.Count; i++)
+        {
+            Assert.Equal(inventory[i].Id, loaded.Inventory[i].Id);
+            Assert.Equal(inventory[i].ItemId, loaded.Inventory[i].ItemId);
+            Assert.Equal(inventory[i].Level, loaded.Inventory[i].Level);
+            Assert.Equal(inventory[i].AffixKeys.ToArray(), loaded.Inventory[i].AffixKeys.ToArray());
+        }
+    }
+
+    [Fact]
+    public void Roundtrip_DefaultInventory_IsEmpty_BackwardCompatible()
+    {
+        var state = SampleData.BuildState();
+
+        // 旧シグネチャ（inventory 省略）で保存 → 持ち物欠落セーブ相当。
+        var json = SaveSerializer.Serialize(
+            state.Economy, state.Timeline, state.Roster, state.ChronicleLog);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        Assert.Empty(loaded!.Inventory); // 欠落は空リストで後方互換復元。
+    }
+
     // ─── ラウンドトリップ: タイムライン ────────────────────────────────────
 
     [Fact]

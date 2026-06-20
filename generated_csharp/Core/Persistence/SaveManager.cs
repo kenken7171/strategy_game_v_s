@@ -68,11 +68,12 @@ public static class SaveManager
         PointsEconomy economy,
         TimelineEngine timeline,
         IReadOnlyList<Unit> roster,
-        IReadOnlyList<ChronicleLogEntry> chronicleLog)
+        IReadOnlyList<ChronicleLogEntry> chronicleLog,
+        IReadOnlyList<Equipment>? inventory = null)
     {
         try
         {
-            var json = SaveSerializer.Serialize(economy, timeline, roster, chronicleLog);
+            var json = SaveSerializer.Serialize(economy, timeline, roster, chronicleLog, inventory);
             return WriteTextAtomic(path, json);
         }
         catch

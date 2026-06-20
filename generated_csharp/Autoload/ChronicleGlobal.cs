@@ -82,6 +82,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalPhaseChanged      = "PhaseChanged";
     public const string SignalFormationChanged  = "FormationChanged";
     public const string SignalBattleChanged     = "BattleChanged";
+    public const string SignalInventoryChanged  = "InventoryChanged";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -119,6 +120,12 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     [Signal] public delegate void BattleChangedEventHandler();
 
+    /// <summary>
+    /// BrigadeInventory（旅団共有の持ち物＝未装着の装備個体）が更新された時に発火するシグナル。
+    /// 装備の付け外し（持ち物⇄ユニット）やドロップの取得で流れ、拠点の持ち物 UI が読み直して再描画する。
+    /// </summary>
+    [Signal] public delegate void InventoryChangedEventHandler();
+
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
     // ════════════════════════════════════════════════════════════════════════
@@ -140,6 +147,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// 更新は ResolveLastHit / SelectProphecyAndAdvance / ExecuteMarriage 経由のみ。
     /// </summary>
     public ImmutableList<Unit> BattalionRoster { get; private set; } = ImmutableList<Unit>.Empty;
+
+    /// <summary>
+    /// 旅団共有の持ち物（未装着の装備個体）。外部からは読み取りのみ。更新は
+    /// EquipFromInventory / UnequipToInventory / ChooseDroppedEquipment 経由のみ。
+    /// 装備は持ち物⇄ユニットを個体保持のまま往復し、複製も消滅もしない（保存則）。
+    /// </summary>
+    public ImmutableList<Equipment> BrigadeInventory { get; private set; } = ImmutableList<Equipment>.Empty;
 
     /// <summary>Initialize が呼ばれて状態が有効化されているか。</summary>
     public bool IsInitialized { get; private set; } = false;
@@ -404,6 +418,7 @@ public partial class ChronicleGlobal : Godot.Node
             _rng = rng ?? new Random();
             CurrentEconomy = initialEconomy ?? PointsEconomy.CreateInitial();
             BattalionRoster = initialRoster?.ToImmutableList() ?? ImmutableList<Unit>.Empty;
+            BrigadeInventory = ImmutableList<Equipment>.Empty; // 新規開始は持ち物なし
             CurrentTimeline = initialTimeline
                 ?? TimelineEngine.CreateInitial(TimelineEngine.DefaultGenerator, _rng);
             CurrentPhase = GamePhaseFlow.InitialPhase; // 新規 1 周は常に Chronicle から
@@ -427,6 +442,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalInventoryChanged);
         SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
     }
@@ -449,6 +465,7 @@ public partial class ChronicleGlobal : Godot.Node
             _rng                     = new Random();
             CurrentEconomy           = PointsEconomy.CreateInitial();
             BattalionRoster          = ImmutableList<Unit>.Empty;
+            BrigadeInventory         = ImmutableList<Equipment>.Empty;
             CurrentTimeline          = null;
             CurrentPhase             = GamePhaseFlow.InitialPhase;
             CurrentAction            = PlannedAction.March;
@@ -470,6 +487,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalInventoryChanged);
         SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
     }
@@ -987,6 +1005,81 @@ public partial class ChronicleGlobal : Godot.Node
         if (rosterMutated)
         {
             SafeEmit(SignalRosterChanged);
+        }
+
+        return affected;
+    }
+
+    /// <summary>
+    /// 持ち物（<see cref="BrigadeInventory"/>）の中の指定装備を、指定ユニットへ装着する。
+    /// ユニットが既に装備していれば旧装備は持ち物へ戻る（個体は消えない＝保存則）。純粋層
+    /// <see cref="InventoryService.EquipFromInventory"/> へ委譲し、成功時のみ SoT を差し替える。
+    ///
+    /// 戻り値:
+    ///   - Unit: 装着後のユニット（UI 演出に使う）。
+    ///   - null: 未初期化 / 対象ユニット不在 / 指定装備が持ち物に無い（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を装着する対象ユニット Id。</param>
+    /// <param name="equipmentId">持ち物から装着する装備個体の Id。</param>
+    public Unit? EquipFromInventory(Guid unitId, Guid equipmentId)
+    {
+        Unit? affected;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            var result = InventoryService.EquipFromInventory(
+                BattalionRoster, BrigadeInventory, unitId, equipmentId);
+            if (result is null) return null;
+
+            BattalionRoster  = result.NewRoster;
+            BrigadeInventory = result.NewInventory;
+            affected = result.AffectedUnit;
+        }
+
+        SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalInventoryChanged);
+
+        return affected;
+    }
+
+    /// <summary>
+    /// 指定ユニットの現装備を取り外し、持ち物（<see cref="BrigadeInventory"/>）へ戻す
+    /// （外しても消えない＝保存則）。純粋層 <see cref="InventoryService.UnequipToInventory"/> へ
+    /// 委譲し、実際に外れた場合（Mutated=true）のみ SoT を差し替えてシグナルを発火する。
+    ///
+    /// 戻り値:
+    ///   - Unit: 取り外し後（または元から未装備）のユニット。
+    ///   - null: 未初期化 / 対象ユニット不在（no-op）。
+    /// </summary>
+    /// <param name="unitId">装備を取り外す対象ユニット Id。</param>
+    public Unit? UnequipToInventory(Guid unitId)
+    {
+        Unit? affected;
+        bool mutated;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            var result = InventoryService.UnequipToInventory(
+                BattalionRoster, BrigadeInventory, unitId);
+            if (result is null) return null;
+
+            mutated = result.Mutated;
+            if (mutated)
+            {
+                BattalionRoster  = result.NewRoster;
+                BrigadeInventory = result.NewInventory;
+            }
+            affected = result.AffectedUnit;
+        }
+
+        if (mutated)
+        {
+            SafeEmit(SignalRosterChanged);
+            SafeEmit(SignalInventoryChanged);
         }
 
         return affected;
@@ -2018,6 +2111,7 @@ public partial class ChronicleGlobal : Godot.Node
         TimelineEngine timeline;
         ImmutableList<Unit> roster;
         ImmutableArray<ChronicleLogEntry> chronicleLog;
+        ImmutableList<Equipment> inventory;
 
         lock (_stateLock)
         {
@@ -2026,9 +2120,10 @@ public partial class ChronicleGlobal : Godot.Node
             timeline     = CurrentTimeline;
             roster       = BattalionRoster;
             chronicleLog = _chronicleLog;
+            inventory    = BrigadeInventory;
         }
 
-        return SaveManager.SaveToFile(targetPath, economy, timeline, roster, chronicleLog);
+        return SaveManager.SaveToFile(targetPath, economy, timeline, roster, chronicleLog, inventory);
     }
 
     /// <summary>
@@ -2063,6 +2158,7 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentEconomy  = loaded.Economy;
             CurrentTimeline = loaded.Timeline;
             BattalionRoster = loaded.Roster;
+            BrigadeInventory = loaded.Inventory; // ★ 持ち物を永続化セーブから復元（v1〜v4 は空）
             CurrentPhase    = GamePhaseFlow.InitialPhase; // ロード再開は Chronicle から
             CurrentAction   = PlannedAction.March;         // ロード再開時の既定行動は出撃
             CurrentFormation = FormationBoard.Empty();     // 盤面は永続化せずロードは空盤面から
@@ -2078,6 +2174,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalInventoryChanged);
         SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
 
