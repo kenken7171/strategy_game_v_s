@@ -444,7 +444,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 
 - `user://save_data.json` に **未暗号化の整形 JSON** で保存（可読性・デバッグ性優先）。
 - アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）でクラッシュ耐性。
-- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 5。v5=持ち物 Inventory 追加・旧版は空で後方互換）。
+- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 6。v5=持ち物 Inventory / v6=旅団史の Gender 追加・旧版は既定値で後方互換）。
 - **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog` / 持ち物 `BrigadeInventory`（v5）。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数・選択待ちドロップ。
 - ロード時は新しい Random を再注入し、`CurrentPhase` は **常に Chronicle から再開**。
 

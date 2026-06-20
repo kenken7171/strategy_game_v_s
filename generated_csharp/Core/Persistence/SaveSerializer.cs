@@ -100,8 +100,10 @@ public static class SaveSerializer
     ///     婚姻の男女ペア制約をロード後も維持する）。
     /// v5: 旅団共有の持ち物（Inventory: 未装着の装備個体）を追加（旧 v1〜v4 セーブは欠落 →
     ///     空リストで後方互換復元。Affix 付きドロップ等を外して保管しても消えない土台）。
+    /// v6: 旅団史 ChronicleLogEntry に Gender を追加（旧 v1〜v5 セーブは欠落 → 既定 Male で
+    ///     後方互換復元。年代記ログに性別別のジョブ立ち絵アイコンを出すため）。
     /// </summary>
-    public const int CurrentSaveVersion = 5;
+    public const int CurrentSaveVersion = 6;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -261,6 +263,7 @@ public static class SaveSerializer
         UnitFirstNameKey = c.UnitFirstNameKey,
         UnitLastNameKey  = c.UnitLastNameKey,
         Job              = c.Job,
+        Gender           = c.Gender,
         Age              = c.Age,
         FromLevel        = c.FromLevel,
         ToLevel          = c.ToLevel,
@@ -355,6 +358,7 @@ public static class SaveSerializer
         UnitFirstNameKey = d.UnitFirstNameKey ?? string.Empty,
         UnitLastNameKey  = d.UnitLastNameKey ?? string.Empty,
         Job              = d.Job,
+        Gender           = d.Gender,
         Age              = d.Age,
         FromLevel        = d.FromLevel,
         ToLevel          = d.ToLevel,
@@ -477,6 +481,8 @@ public static class SaveSerializer
         public string UnitFirstNameKey { get; set; } = string.Empty;
         public string UnitLastNameKey { get; set; } = string.Empty;
         public JobId Job { get; set; }
+        // v6 で追加。旧セーブには無く JSON 上で欠落 → enum 既定 Male で後方互換復元。
+        public Gender Gender { get; set; } = Gender.Male;
         public int Age { get; set; }
         public int FromLevel { get; set; }
         public int ToLevel { get; set; }

@@ -31,6 +31,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;            // Gender
 using ChronicleKnights.Core.Units;
 
 namespace ChronicleKnights.Core.Chronicle;
@@ -76,6 +77,12 @@ public sealed record ChronicleLogEntry
 
     /// <summary>当該ユニットのジョブ（表示名は UI が ResolveJobName で解決する）。</summary>
     public required JobId Job { get; init; }
+
+    /// <summary>
+    /// 当該ユニットの性別。UI が年代記ログにジョブ立ち絵（ジョブ×性別）を出すために使う。
+    /// 旧 v1〜v5 セーブには無いため既定 Male（required を付けず後方互換。立ち絵は性別で male/female を出し分け）。
+    /// </summary>
+    public Gender Gender { get; init; } = Gender.Male;
 
     /// <summary>引退 / 戦死時の年齢（昇級では未使用・既定 0）。</summary>
     public int Age { get; init; }
@@ -140,6 +147,7 @@ public static class ChronicleLog
                     UnitFirstNameKey = unit.FirstNameKey,
                     UnitLastNameKey  = unit.LastNameKey,
                     Job              = unit.Job,
+                    Gender           = unit.Gender,
                     FromLevel        = gain.FromLevel,
                     ToLevel          = gain.ToLevel,
                 });
@@ -163,6 +171,7 @@ public static class ChronicleLog
                 UnitFirstNameKey = unit.FirstNameKey,
                 UnitLastNameKey  = unit.LastNameKey,
                 Job              = unit.Job,
+                Gender           = unit.Gender,
                 Age              = unit.Age,
             });
         }
@@ -197,6 +206,7 @@ public static class ChronicleLog
             UnitFirstNameKey = dismissed.FirstNameKey,
             UnitLastNameKey  = dismissed.LastNameKey,
             Job              = dismissed.Job,
+            Gender           = dismissed.Gender,
             Age              = dismissed.Age,
             FromLevel        = dismissed.Level, // 解雇時の最終レベル（ToLevel は未使用）。
         };

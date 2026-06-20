@@ -41,8 +41,11 @@ using System;
 using System.Collections.Immutable;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
+using ChronicleKnights.Core.Naming;           // Gender
 using ChronicleKnights.Core.Timeline;
+using ChronicleKnights.UserInterface;         // JobTextureLibrary（ジョブ立ち絵アイコン）
 using Godot;
 
 namespace ChronicleKnights.UI;
@@ -61,6 +64,9 @@ public partial class TimelineUI : Godot.Control
 
     /// <summary>年代記ナレーションに一度に表示する最大行数（古い行はスクロールで辿れる）。</summary>
     private const int MaxNarrationLines = 60;
+
+    /// <summary>年代記ログ各行のジョブ立ち絵アイコンの一辺サイズ（px）。立ち絵は縦長なので小さく。</summary>
+    private const int LogIconSize = 24;
 
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
@@ -341,16 +347,45 @@ public partial class TimelineUI : Godot.Control
         int shown = 0;
         for (int i = log.Length - 1; i >= 0 && shown < MaxNarrationLines; i--, shown++)
         {
+            var entry = log[i];
+
+            // 1 行 = 小さなジョブ立ち絵アイコン（性別別）＋ ナレーション文。
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            // testid は「新しい行ほど小さい番号」で安定させる（0 = 最新）。行コンテナに付与。
+            row.SetMeta(TestIdMetaKey, $"chronicle-log-line-{shown}");
+
+            var icon = MakeJobIcon(entry.Job, entry.Gender);
+            if (icon is not null) row.AddChild(icon);
+
             var line = new Label
             {
-                Text = FormatEntry(log[i]),
+                Text = FormatEntry(entry),
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             line.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            // testid は「新しい行ほど小さい番号」で安定させる（0 = 最新）。
-            line.SetMeta(TestIdMetaKey, $"chronicle-log-line-{shown}");
-            _narrationLinesBox.AddChild(line);
+            line.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            line.SetMeta(TestIdMetaKey, $"chronicle-log-text-{shown}");
+            row.AddChild(line);
+
+            _narrationLinesBox.AddChild(row);
         }
+    }
+
+    /// <summary>年代記ログ用の小さなジョブ立ち絵アイコン（ジョブ×性別）。資産欠落時のみ null。</summary>
+    private static TextureRect? MakeJobIcon(JobId job, Gender gender)
+    {
+        var tex = JobTextureLibrary.TryLoad(job, gender);
+        if (tex is null) return null;
+        return new TextureRect
+        {
+            Texture           = tex,
+            CustomMinimumSize  = new Vector2(LogIconSize, LogIconSize),
+            StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
+            ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
+            SizeFlagsVertical  = Control.SizeFlags.ShrinkCenter,
+        };
     }
 
     /// <summary>

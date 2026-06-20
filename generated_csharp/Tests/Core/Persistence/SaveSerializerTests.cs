@@ -17,6 +17,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.Chronicle;
 using ChronicleKnights.Core.Job;
+using ChronicleKnights.Core.Naming;          // Gender
 using ChronicleKnights.Core.Persistence;
 using ChronicleKnights.Core.Units;
 using ChronicleKnights.Tests.TestSupport;
@@ -240,6 +241,30 @@ public class SaveSerializerTests
     }
 
     [Fact]
+    public void Roundtrip_PreservesChronicleLog_Gender()
+    {
+        var state = SampleData.BuildState();
+        // 性別を明示した女性の昇級エントリ（既定 Male ではなく Female の往復を検証）。
+        var log = ImmutableArray.Create(new ChronicleLogEntry
+        {
+            Generation       = 3,
+            Kind             = ChronicleEventKind.LevelGained,
+            UnitFirstNameKey = "name-test-female",
+            UnitLastNameKey  = "name-family-test",
+            Job              = JobId.Medic,
+            Gender           = Gender.Female,
+            FromLevel        = 1,
+            ToLevel          = 2,
+        });
+
+        var json = SaveSerializer.Serialize(state.Economy, state.Timeline, state.Roster, log);
+        var loaded = SaveSerializer.Deserialize(json);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(Gender.Female, loaded!.ChronicleLog.Single().Gender);
+    }
+
+    [Fact]
     public void Serialize_WritesChronicleLogKinds_AsStrings()
     {
         var state = SampleData.BuildState();
@@ -376,6 +401,7 @@ public class SaveSerializerTests
         Assert.Equal(expected.UnitFirstNameKey, actual.UnitFirstNameKey);
         Assert.Equal(expected.UnitLastNameKey, actual.UnitLastNameKey);
         Assert.Equal(expected.Job, actual.Job);
+        Assert.Equal(expected.Gender, actual.Gender);
         Assert.Equal(expected.Age, actual.Age);
         Assert.Equal(expected.FromLevel, actual.FromLevel);
         Assert.Equal(expected.ToLevel, actual.ToLevel);
