@@ -266,10 +266,10 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 （非戦闘＝休息は `ExecuteRest`、章ボス年で強制出撃した非戦闘予言は `AdvanceGenerationLocked` 冒頭が拾う）:
 - `RewardPoints` → `EarnDirect(Value)` でポイント加算。
 - `ScoutReward` → `ScoutService.CreateOutsiderUnit` で無償の新人を `Value` 名加入（コスト 0）。
-- `EquipmentDrop` → 生存者 1 名へ Lv `clamp(Value,1,5)` の装備をドロップ装着。
+- `EquipmentDrop` → Lv `clamp(Value,1,5)` の 3 択候補を生成し、選んだ 1 つを持ち物へ（`EquipmentDropOverlay`・後述 E-5）。
 - `Rest`/予言なし → 固定の休息ボーナス `RestPointsReward=2`。`Battle` → 報酬 0（戦果決算で報いる）。
 
-成果は `RestOutcome`（休息頭数 / 獲得ポイント / 加入数 / ドロップ装備）として `RestResultOverlay` が提示する。
+成果は `RestOutcome`（休息頭数 / 獲得ポイント / 加入数 / ドロップ 3 択候補）として `RestResultOverlay`（＋ドロップは `EquipmentDropOverlay`）が提示する。
 
 ### E-3. 手動婚姻 `MarriageService`
 
@@ -288,7 +288,12 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - アイテム `ItemId`（5 種）: `SwordKnight` / `BowSniper` / `StaffMage` / `RingPurelove` / `CoinGreed`。
 - レベル 1〜5（`MinEquipmentLevel`/`MaxEquipmentLevel`）。レベル倍率 `{1.2,1.3,1.4,1.5}`、`AffinityMultiplier = (1.0 + Level×0.1) × BaseAffinityMultiplier`。
 - 兵器廠: 購入 `BuyCost=5`（固定）、強化 `UpgradeCostFor(lv) = 2 × lv`（`BaseUpgradeCost=2`）。共通サイフを消費。
-- 編成段階の無償脱着 `EquipItem` / `UnequipItem` は経済・盤面に触れない（`RosterChanged` のみ）。
+- 編成段階の無償脱着 `EquipItem` / `UnequipItem`（旧・在庫なしの conjure/discard 型。FormationUI のドック）は経済・盤面に触れない。
+- **持ち物（インベントリ）**: 旅団共有の未装着装備 `BrigadeInventory`（SoT）を `InventoryService`（`Core/Unit/InventoryService.cs`）が
+  個体保持のまま非破壊に往復させる。`EquipFromInventory`（旧装備は持ち物へ戻る）/ `UnequipToInventory`（外しても消えない＝保存則）。
+  拠点 `MarriageUI` の「🎒 持ち物」セクションが付け外し UI を提供（出撃年専用の Formation ドックに依存せず休息年でも管理可）。`InventoryChanged` で再描画。
+- **3 択ドロップ**: `EquipmentDrop` 予言は自動装着をやめ、`EquipmentDropService.RollCandidates` が 3 候補（種別/Affix を散らす）を生成。
+  `PendingDropCandidates`（SoT）→ `DropChoicePending` シグナル → `EquipmentDropOverlay` が提示 → `ChooseDroppedEquipment` で 1 つを持ち物へ（残りは破棄）。
 - **Affix（接尾効果）**: `Equipment.AffixKeys`（個体ごとのランダム付加効果キー列）を `AffixMaster`（`Core/Unit/AffixMaster.cs`）が
   戦闘ステへ解決する。`AffixKind{Sharp=+ATK3 / Sturdy=+DEF2 / Swift=+SPD2}` のフラット加算（レベル乗算は通さない）で、
   `BattleManager.Equipment{Attack,Defense,Speed}Bonus` に合流して実戦に効く。ドロップ時に `RollAffixKeys` が
@@ -365,7 +370,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 ### G-2. オーバーレイ・演出（最前面に動的 overlay）
 
 `UI/` 配下: `JobManualOverlay`（📖 ジョブ説明）/ `UnitDetailOverlay` / `PedigreeOverlay`（家系図）/
-`ProphecyTimelineOverlay`（運命の帯）/ `RestResultOverlay`（休息報酬）/ `LastHitCeremonyScreen`（とどめ演出）/
+`ProphecyTimelineOverlay`（運命の帯）/ `RestResultOverlay`（休息報酬）/ `EquipmentDropOverlay`（3 択ドロップ）/ `LastHitCeremonyScreen`（とどめ演出）/
 `BattleSpoilsScreen`（戦果決算）/ `JuiceDirector`（Flash/CountUp/Typewriter 等の演出）/ `JobDescriptionView`。
 
 - testid は **`Node.SetMeta("data_testid", "...")`** で付与（kebab-case）。Godot の `Find` 系で参照可能。
@@ -439,8 +444,8 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 
 - `user://save_data.json` に **未暗号化の整形 JSON** で保存（可読性・デバッグ性優先）。
 - アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）でクラッシュ耐性。
-- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 1）。
-- **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog`。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数。
+- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 5。v5=持ち物 Inventory 追加・旧版は空で後方互換）。
+- **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog` / 持ち物 `BrigadeInventory`（v5）。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数・選択待ちドロップ。
 - ロード時は新しい Random を再注入し、`CurrentPhase` は **常に Chronicle から再開**。
 
 ---

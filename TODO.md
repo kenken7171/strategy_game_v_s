@@ -53,8 +53,10 @@
 
 - [x] Affix（接尾効果）システム MVP — `AffixMaster`（Sharp=+ATK / Sturdy=+DEF / Swift=+SPD）の生成・解決・
       戦闘合流・ドロップ付与・localization・UnitDetailOverlay 表示まで実装（`CLAUDE.md` E-5）。
+- [x] `EquipmentDrop` の 3 択ドロップ UI — `EquipmentDropService` で 3 候補生成 → `EquipmentDropOverlay` で 1 つ選び持ち物へ。
+- [x] 持ち物（インベントリ）システム ＋ 付け外し UI — `InventoryService`／`BrigadeInventory`（SoT・永続化 v5）／拠点 `MarriageUI` の「🎒 持ち物」セクション（非破壊な付け替え）。
 - [ ] Affix 拡張 — 経済軸 Affix（婚姻ポイント倍率）・パッシブ付与型・レアリティ別個数の調整。
-- [ ] `EquipmentDrop` の戦闘後 3 択ドロップ UI（現状は生存者へ自動装着。Affix 付きで選択肢を提示する導線）。
+- [ ] 旧 `EquipItem`/`UnequipItem`（conjure/discard 型の Formation ドック）を持ち物ベースへ統一（現状は二系統が併存）。
 - [x] 敵撃破ポイント（`EarnFromKill`）は不採用に決定し削除（戦闘収入は戦果決算 `BattleSpoils` に一本化）。
 
 ### T-5. アセット ＆ 見栄え（`docs/VISUAL_AND_JUICE_ROADMAP.md`）
