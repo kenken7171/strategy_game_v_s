@@ -533,16 +533,19 @@ public partial class MarriageUI : Godot.Control
             // 成人のみ婚姻可能
             if (unit.Age < AdultAge) continue;
             var display = FormatUnitDisplay(unit);
+            var icon = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
             // 性別で振り分ける: 父ドロップダウンは男性のみ、母ドロップダウンは女性のみ。
             // これにより同性ペア・性別逆転ペアを UI 段階で選択不能にする（婚姻=男女ペア）。
             if (unit.Gender == Gender.Male)
             {
-                _fatherSelect.AddItem(display);
+                if (icon is not null) _fatherSelect.AddIconItem(icon, display);
+                else _fatherSelect.AddItem(display);
                 _fatherSelectableIds.Add(unit.Id);
             }
             else
             {
-                _motherSelect.AddItem(display);
+                if (icon is not null) _motherSelect.AddIconItem(icon, display);
+                else _motherSelect.AddItem(display);
                 _motherSelectableIds.Add(unit.Id);
             }
         }
@@ -625,6 +628,8 @@ public partial class MarriageUI : Godot.Control
                 // 成長中 (0〜14歳)
                 var row = new HBoxContainer();
                 row.SetMeta(TestIdMetaKey, $"marriage-family-minor-row-{unit.Id}");
+                var minorIcon = MakeUnitIcon(unit);
+                if (minorIcon is not null) row.AddChild(minorIcon);
                 var minorName = new Label
                 {
                     Text = $"👶 {JobName(unit.Job)} (Age {unit.Age} / {AdultAge})",
@@ -639,6 +644,8 @@ public partial class MarriageUI : Godot.Control
                 // ※ Age >= 18 は通常成人扱いで本リストから外す
                 var row = new HBoxContainer();
                 row.SetMeta(TestIdMetaKey, $"marriage-family-ready-row-{unit.Id}");
+                var readyIcon = MakeUnitIcon(unit);
+                if (readyIcon is not null) row.AddChild(readyIcon);
                 var readyName = new Label
                 {
                     Text = $"🎓 {JobName(unit.Job)} (Age {unit.Age})",
@@ -692,6 +699,9 @@ public partial class MarriageUI : Godot.Control
             var row = new HBoxContainer();
             row.AddThemeConstantOverride("separation", 8);
             row.SetMeta(TestIdMetaKey, $"shop-row-{capturedId}");
+
+            var shopIcon = MakeUnitIcon(unit);
+            if (shopIcon is not null) row.AddChild(shopIcon);
 
             var name = new Label
             {
@@ -1028,6 +1038,9 @@ public partial class MarriageUI : Godot.Control
             row.AddThemeConstantOverride("separation", 8);
             row.SetMeta(TestIdMetaKey, $"marriage-dismiss-row-{capturedId}");
 
+            var dismissIcon = MakeUnitIcon(unit);
+            if (dismissIcon is not null) row.AddChild(dismissIcon);
+
             var name = new Label
             {
                 Text = $"🎖 {JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
@@ -1093,6 +1106,9 @@ public partial class MarriageUI : Godot.Control
             var row = new HBoxContainer();
             row.AddThemeConstantOverride("separation", 8);
             row.SetMeta(TestIdMetaKey, $"marriage-pedigree-row-{capturedId}");
+
+            var pedigreeIcon = MakeUnitIcon(unit);
+            if (pedigreeIcon is not null) row.AddChild(pedigreeIcon);
 
             var name = new Label
             {
