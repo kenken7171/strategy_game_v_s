@@ -288,10 +288,10 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - アイテム `ItemId`（5 種）: `SwordKnight` / `BowSniper` / `StaffMage` / `RingPurelove` / `CoinGreed`。
 - レベル 1〜5（`MinEquipmentLevel`/`MaxEquipmentLevel`）。レベル倍率 `{1.2,1.3,1.4,1.5}`、`AffinityMultiplier = (1.0 + Level×0.1) × BaseAffinityMultiplier`。
 - 兵器廠: 購入 `BuyCost=5`（固定）、強化 `UpgradeCostFor(lv) = 2 × lv`（`BaseUpgradeCost=2`）。共通サイフを消費。
-- 編成段階の無償脱着 `EquipItem` / `UnequipItem`（旧・在庫なしの conjure/discard 型。FormationUI のドック）は経済・盤面に触れない。
-- **持ち物（インベントリ）**: 旅団共有の未装着装備 `BrigadeInventory`（SoT）を `InventoryService`（`Core/Unit/InventoryService.cs`）が
+- **持ち物（インベントリ）に一本化**: 旅団共有の未装着装備 `BrigadeInventory`（SoT）を `InventoryService`（`Core/Unit/InventoryService.cs`）が
   個体保持のまま非破壊に往復させる。`EquipFromInventory`（旧装備は持ち物へ戻る）/ `UnequipToInventory`（外しても消えない＝保存則）。
-  拠点 `MarriageUI` の「🎒 持ち物」セクションが付け外し UI を提供（出撃年専用の Formation ドックに依存せず休息年でも管理可）。`InventoryChanged` で再描画。
+  付け外し UI は **拠点 `MarriageUI` の「🎒 持ち物」と編成 `FormationUI` の装備ドックの両方**が持ち物プルダウンで提供（休息年でも出撃年でも同一機構）。`InventoryChanged` で再描画。
+  （旧・在庫なしの conjure/discard 型 `EquipItem`/`UnequipItem` ＋ `EquipmentService` は持ち物導入で廃止・削除済。）
 - **3 択ドロップ**: `EquipmentDrop` 予言は自動装着をやめ、`EquipmentDropService.RollCandidates` が 3 候補（種別/Affix を散らす）を生成。
   `PendingDropCandidates`（SoT）→ `DropChoicePending` シグナル → `EquipmentDropOverlay` が提示 → `ChooseDroppedEquipment` で 1 つを持ち物へ（残りは破棄）。
 - **Affix（接尾効果）**: `Equipment.AffixKeys`（個体ごとのランダム付加効果キー列）を `AffixMaster`（`Core/Unit/AffixMaster.cs`）が
@@ -469,7 +469,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ## K. 主要ファイルマップ（`generated_csharp/`）
 
 ### Core（純粋ロジック・48 ファイル）
-- `Core/Unit/Unit.cs` `Equipment.cs` `EquipmentService.cs` — 旅団員・装備
+- `Core/Unit/Unit.cs` `Equipment.cs` `InventoryService.cs` `EquipmentDropService.cs` `AffixMaster.cs` — 旅団員・装備・持ち物・ドロップ・Affix
 - `Core/Job/JobMaster.cs` `JobData.cs` `JobCodex.cs` — ジョブ数値 SoT・enum
 - `Core/GameFlow/GamePhase.cs` `PlannedAction.cs` `RestOutcome.cs` `ScreenVisibility.cs` — フェーズ・行動・休息・画面可視ルール
 - `Core/Formation/FormationBoard.cs` `DeploymentGate.cs` — V 字盤面・無人出撃封鎖

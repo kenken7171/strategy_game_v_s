@@ -22,6 +22,7 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
@@ -210,6 +211,8 @@ public partial class FormationUI : Godot.Control
         _chronicleGlobal.FormationChanged += OnFormationChanged;
         _chronicleGlobal.RosterChanged    += OnRosterChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
+        // 持ち物の増減（ドロップ取得・付け替え）で装備ドックの持ち物プルダウンを再描画する。
+        _chronicleGlobal.InventoryChanged += OnInventoryChanged;
     }
 
     private void UnsubscribeSignals()
@@ -220,6 +223,7 @@ public partial class FormationUI : Godot.Control
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.RosterChanged    -= OnRosterChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
+            _chronicleGlobal.InventoryChanged -= OnInventoryChanged;
         }
         catch
         {
@@ -230,6 +234,7 @@ public partial class FormationUI : Godot.Control
     private void OnFormationChanged() => RenderAll();
     private void OnRosterChanged()    => RenderAll();
     private void OnStateInitialized() => RenderAll();
+    private void OnInventoryChanged() => RenderEquipmentSlots();
 
     // ─── Render (re-read SoT every time; never cache) ──────────────────────────
 
@@ -652,19 +657,46 @@ public partial class FormationUI : Godot.Control
 
             if (_pendingEquipId == capturedId)
             {
-                foreach (var item in Enum.GetValues<ItemId>())
+                // 持ち物（旅団共有の未装着装備）からプルダウンで選んで装着する（無からの生成は廃止）。
+                var inventory = _chronicleGlobal.BrigadeInventory;
+                if (inventory.Count > 0)
                 {
-                    var capturedItem = item;
-                    var pickButton = new Button { Text = ItemName(item) };
-                    pickButton.SetMeta(TestIdMetaKey, $"roster-equip-pick-{item}");
-                    pickButton.Pressed += () => OnEquipPickPressed(capturedId, capturedItem);
-                    row.AddChild(pickButton);
+                    var invSelect = new OptionButton();
+                    invSelect.SetMeta(TestIdMetaKey, $"roster-equip-inv-select-{capturedId}");
+                    var invIds = new List<Guid>();
+                    foreach (var item in inventory)
+                    {
+                        invSelect.AddItem(EquipmentSummary(item));
+                        invIds.Add(item.Id);
+                    }
+                    row.AddChild(invSelect);
+
+                    var equipButton = new Button { Text = "装備" };
+                    equipButton.SetMeta(TestIdMetaKey, $"roster-equip-confirm-{capturedId}");
+                    equipButton.Pressed += () =>
+                    {
+                        var sel = invSelect.Selected;
+                        if (sel >= 0 && sel < invIds.Count)
+                        {
+                            OnEquipFromInventoryPressed(capturedId, invIds[sel]);
+                        }
+                    };
+                    row.AddChild(equipButton);
+                }
+                else
+                {
+                    var noInv = new Label { Text = "（持ち物なし）" };
+                    noInv.SetMeta(TestIdMetaKey, $"roster-equip-no-inventory-{capturedId}");
+                    row.AddChild(noInv);
                 }
 
-                var unequipButton = new Button { Text = "外す" };
-                unequipButton.SetMeta(TestIdMetaKey, $"roster-unequip-btn-{capturedId}");
-                unequipButton.Pressed += () => OnUnequipPressed(capturedId);
-                row.AddChild(unequipButton);
+                if (equip is not null)
+                {
+                    var unequipButton = new Button { Text = "外す → 持ち物" };
+                    unequipButton.SetMeta(TestIdMetaKey, $"roster-unequip-btn-{capturedId}");
+                    unequipButton.Pressed += () => OnUnequipPressed(capturedId);
+                    row.AddChild(unequipButton);
+                }
 
                 var cancelButton = new Button { Text = "やめる" };
                 cancelButton.SetMeta(TestIdMetaKey, $"roster-equip-cancel-{capturedId}");
@@ -737,19 +769,17 @@ public partial class FormationUI : Godot.Control
         RenderEquipmentSlots();
     }
 
-    private void OnEquipPickPressed(Guid unitId, ItemId itemId)
+    private void OnEquipFromInventoryPressed(Guid unitId, Guid equipmentId)
     {
         if (_chronicleGlobal is null) return;
         _pendingEquipId = null;
 
-        var affected = _chronicleGlobal.EquipItem(unitId, itemId);
-        if (affected is null)
+        // 持ち物から装着（旧装備は持ち物へ戻る・非破壊）。成功時は Roster/Inventory シグナルで
+        // 自動再描画。失敗（不在）時のみ手動でドックを畳む。
+        if (_chronicleGlobal.EquipFromInventory(unitId, equipmentId) is null)
         {
-            GD.Print($"[FormationUI] equip failed (uninitialized or unit not found): Id={unitId} Item={itemId}");
             RenderEquipmentSlots();
-            return;
         }
-        GD.Print($"[FormationUI] equip {ItemName(itemId)} -> Id={unitId}");
     }
 
     private void OnUnequipPressed(Guid unitId)
@@ -757,11 +787,8 @@ public partial class FormationUI : Godot.Control
         if (_chronicleGlobal is null) return;
         _pendingEquipId = null;
 
-        var affected = _chronicleGlobal.UnequipItem(unitId);
-        GD.Print(affected is null
-            ? $"[FormationUI] unequip failed (uninitialized or unit not found): Id={unitId}"
-            : $"[FormationUI] unequip -> Id={unitId}");
-
+        // 取り外しは持ち物へ戻す（外しても消えない）。成功時はシグナルで自動再描画。
+        _chronicleGlobal.UnequipToInventory(unitId);
         RenderEquipmentSlots();
     }
 
@@ -797,4 +824,20 @@ public partial class FormationUI : Godot.Control
     /// <summary>Item display name via ChronicleGlobal localization (ASCII fallback).</summary>
     private string ItemName(ItemId item)
         => _chronicleGlobal?.ResolveItemName(item) ?? item.ToString();
+
+    /// <summary>装備 1 個の表示文（種別名 Lv ＋ Affix 名の連結）。持ち物プルダウンの項目に使う。</summary>
+    private string EquipmentSummary(Equipment equip)
+    {
+        var text = $"{ItemName(equip.ItemId)} Lv{equip.Level}";
+        if (equip.HasAnyAffix)
+        {
+            var affixes = new List<string>();
+            foreach (var key in equip.AffixKeys)
+            {
+                affixes.Add(_chronicleGlobal?.ResolveAffixName(key) ?? key);
+            }
+            text += $" 〈{string.Join(" / ", affixes)}〉";
+        }
+        return text;
+    }
 }
