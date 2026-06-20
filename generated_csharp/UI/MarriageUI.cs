@@ -541,7 +541,7 @@ public partial class MarriageUI : Godot.Control
             // 成人のみ婚姻可能
             if (unit.Age < AdultAge) continue;
             var display = FormatUnitDisplay(unit);
-            var icon = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+            var icon = MakeUnitIconThumbnail(unit); // 両辺を抑えたサムネイル（高さも他リストと同等）
             // 性別で振り分ける: 父ドロップダウンは男性のみ、母ドロップダウンは女性のみ。
             // これにより同性ペア・性別逆転ペアを UI 段階で選択不能にする（婚姻=男女ペア）。
             if (unit.Gender == Gender.Male)
@@ -920,7 +920,7 @@ public partial class MarriageUI : Godot.Control
                 foreach (var unit in alive)
                 {
                     var optLabel = $"{JobName(unit.Job)} {_chronicleGlobal.ResolveDisplayName(unit)}";
-                    var icon = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+                    var icon = MakeUnitIconThumbnail(unit); // 両辺を抑えたサムネイル
                     if (icon is not null) targetSelect.AddIconItem(icon, optLabel);
                     else targetSelect.AddItem(optLabel);
                     targetIds.Add(unit.Id);
@@ -971,6 +971,41 @@ public partial class MarriageUI : Godot.Control
             StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
             ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
         };
+    }
+
+    /// <summary>(job, gender) → 縮小済みサムネイルのキャッシュ（再描画ごとの再生成を避ける）。</summary>
+    private static readonly Dictionary<(int Job, int Gender), Texture2D> _iconThumbnailCache = new();
+
+    /// <summary>
+    /// OptionButton 項目アイコン用に、ジョブ立ち絵を UnitIconSize 角の枠へ収めた
+    /// サムネイル（ImageTexture）を返す。OptionButton は <c>icon_max_width</c> で幅しか
+    /// 制限できず、縦長の立ち絵は高さが膨らむため、CPU 側で両辺を縮めて高さも抑える
+    /// （リスト側の TextureRect と同等サイズに揃える）。(job, gender) でキャッシュする。
+    /// </summary>
+    private static Texture2D? MakeUnitIconThumbnail(Unit unit)
+    {
+        var key = ((int)unit.Job, (int)unit.Gender);
+        if (_iconThumbnailCache.TryGetValue(key, out var cached)) return cached;
+
+        var tex = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (tex is null) return null;
+
+        var image = tex.GetImage();
+        if (image is null) return tex; // 画像が取得できない環境では原寸へフォールバック
+
+        var srcW = image.GetWidth();
+        var srcH = image.GetHeight();
+        if (srcW <= 0 || srcH <= 0) return tex;
+
+        // 両辺が UnitIconSize 以下に収まる倍率（アスペクト比保持）。
+        var scale = Mathf.Min((float)UnitIconSize / srcW, (float)UnitIconSize / srcH);
+        var dstW = Mathf.Max(1, Mathf.RoundToInt(srcW * scale));
+        var dstH = Mathf.Max(1, Mathf.RoundToInt(srcH * scale));
+
+        image.Resize(dstW, dstH, Image.Interpolation.Bilinear);
+        var thumb = ImageTexture.CreateFromImage(image);
+        _iconThumbnailCache[key] = thumb;
+        return thumb;
     }
 
     /// <summary>装備 1 個の表示文（種別名 Lv ＋ Affix 名の連結）。コード側に日本語は持たない。</summary>
