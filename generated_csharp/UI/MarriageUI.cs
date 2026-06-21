@@ -18,12 +18,12 @@
 //   └────────────────────────────────────────────────────┘
 //
 //   ┌─ 👶 家系図（子供たち） ───────────────────────────┐
-//   │  ── 入団待ち (Age ≥ 15) ──                          │
-//   │  🎓 Sniper (Age 16)   [0 pt で正式加入]            │
-//   │  🎓 Medic  (Age 17)   [0 pt で正式加入]            │
-//   │  ── 成長中 (Age < 15) ──                            │
-//   │  👶 Tactician (Age 3 / 15)                          │
-//   │  👶 Sorcerer (Age 8 / 15)                           │
+//   │  ── 入団待ち ──                                     │
+//   │  🎓 Sniper 16歳   [0 pt で正式加入]                │
+//   │  🎓 Medic  17歳   [0 pt で正式加入]                │
+//   │  ── 成長中 ──                                       │
+//   │  👶 Tactician 3歳                                   │
+//   │  👶 Sorcerer 8歳                                    │
 //   └────────────────────────────────────────────────────┘
 //
 //  シグナル購読:
@@ -67,9 +67,6 @@ public partial class MarriageUI : Godot.Control
 
     /// <summary>外様スカウトの固定コスト (pt)。</summary>
     private const int ScoutCost = 3;
-
-    /// <summary>家系図「成長中」表示対象の最大年齢 (Age &lt; AdultAge)。</summary>
-    private const int MinorMaxAge = AdultAge - 1;
 
     /// <summary>子の既定寿命（newborn 生成時のデフォルト）。</summary>
     private const int ChildDefaultMaxAge = 60;
@@ -298,14 +295,14 @@ public partial class MarriageUI : Godot.Control
         familyTitle.SetMeta(TestIdMetaKey, "marriage-family-title");
         familySection.AddChild(familyTitle);
 
-        var readyLabel = new Label { Text = $"🎓 入団待ち (Age ≥ {AdultAge})" };
+        var readyLabel = new Label { Text = "🎓 入団待ち" };
         readyLabel.SetMeta(TestIdMetaKey, "marriage-family-ready-label");
         familySection.AddChild(readyLabel);
         _readyChildrenContainer = new VBoxContainer();
         _readyChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-ready-list");
         familySection.AddChild(_readyChildrenContainer);
 
-        var minorLabel = new Label { Text = $"👶 成長中 (Age < {AdultAge})" };
+        var minorLabel = new Label { Text = "👶 成長中" };
         minorLabel.SetMeta(TestIdMetaKey, "marriage-family-minor-label");
         familySection.AddChild(minorLabel);
         _minorChildrenContainer = new VBoxContainer();
@@ -640,7 +637,7 @@ public partial class MarriageUI : Godot.Control
                 if (minorIcon is not null) row.AddChild(minorIcon);
                 var minorName = new Label
                 {
-                    Text = $"👶 {JobName(unit.Job)} (Age {unit.Age} / {AdultAge})",
+                    Text = $"👶 {JobName(unit.Job)} {unit.Age}歳",
                 };
                 minorName.SetMeta(TestIdMetaKey, $"marriage-family-minor-name-{unit.Id}");
                 row.AddChild(minorName);
@@ -656,7 +653,7 @@ public partial class MarriageUI : Godot.Control
                 if (readyIcon is not null) row.AddChild(readyIcon);
                 var readyName = new Label
                 {
-                    Text = $"🎓 {JobName(unit.Job)} (Age {unit.Age})",
+                    Text = $"🎓 {JobName(unit.Job)} {unit.Age}歳",
                 };
                 readyName.SetMeta(TestIdMetaKey, $"marriage-family-ready-name-{unit.Id}");
                 row.AddChild(readyName);
