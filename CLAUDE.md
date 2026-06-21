@@ -364,6 +364,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
   初期 9 名は**完全一様ランダムではなく役割保証付き**: 前衛≥2・回復≥1・支援≥1 を確保し、同職は最大 2（`MaxSameJob`）。
   「前衛ゼロ／回復ゼロ／同職 3 ダブり」の詰み開幕＝リセマラを構造排除する（職の中身・性別・名前・年齢は乱数のまま）。
   役割判定は職名ハードコードではなく `JobMaster` のデータ（推奨 row／パッシブ `TurnEndSquadHeal`・`InitiativeBuff`）から導出。
+- レイアウトは3層: **最背面＝全フェーズ共通の戦場背景**（`_backgroundRect`）→ **半透明コンテンツカード**（`ContentCard`：画面端から `ContentCardMarginPx` 余白を残した `MarginContainer`＋`PanelContainer`。地色は半透明暗色で背景が薄く透ける）→ その上に **ヘッダ＋現在フェーズ画面**。背景が額縁のように覗き、本番で「背景の上にカードを置く」見た目の土台になる。
 - **常駐 A 型は廃止**。`PhaseChanged` を受け、現在フェーズの画面だけを 1 つ `new` してマウントし、旧画面は `QueueFree`
   （`MountScreenForCurrentPhase` / `FreeCurrentScreen`）。任意の瞬間に生きている画面はちょうど 1 つ（`ScreenVisibility` が形式仕様）。
 

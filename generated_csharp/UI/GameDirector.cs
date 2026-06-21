@@ -59,6 +59,24 @@ public partial class GameDirector : Godot.Control
     private const string TestIdMetaKey = "data_testid";
 
     /// <summary>
+    /// コンテンツカードを画面端から離す余白（px）。全画面ではなく余白を残すことで、最背面の
+    /// 共通背景がカードの周囲に額縁のように見える（最終的に「背景の上にカードを置く」見た目の土台）。
+    /// </summary>
+    private const int ContentCardMarginPx = 24;
+
+    /// <summary>コンテンツカードの角丸半径（px）。</summary>
+    private const int ContentCardCornerRadius = 14;
+
+    /// <summary>コンテンツカードの内側パディング（px）。中身（ヘッダ＋画面）と縁の間。</summary>
+    private const int ContentCardInnerPadding = 16;
+
+    /// <summary>コンテンツカードの地色（半透明の暗色）。背景がうっすら透ける薄いカード。</summary>
+    private static readonly Color ContentCardColor = new(0.06f, 0.07f, 0.10f, 0.74f);
+
+    /// <summary>コンテンツカードの縁取り色（淡い枠線）。</summary>
+    private static readonly Color ContentCardBorderColor = new(1.0f, 1.0f, 1.0f, 0.10f);
+
+    /// <summary>
     /// 運命の帯（予言タイムライン）オーバーレイの既定先読みターン数。数ターン先の戦術判断
     /// （ローテーションの読み合い）に足る現実的な深さに留める。AttackIntentRoller 側でも上限クランプ。
     /// </summary>
@@ -582,11 +600,29 @@ public partial class GameDirector : Godot.Control
         AddChild(_backgroundRect);
         RefreshBackground();
 
+        // ── コンテンツカード（全画面ではない半透明カード） ───────────────
+        //  画面端から ContentCardMarginPx だけ離した枠（MarginContainer）の中に、半透明の
+        //  カード（PanelContainer）を置き、その上にヘッダ＋画面を載せる。余白から最背面の
+        //  共通背景が額縁のように覗き、カード地は薄く背景を透かす（「背景の上にカード」の土台）。
+        var cardMargin = new MarginContainer { Name = "ContentCardMargin" };
+        cardMargin.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        cardMargin.AddThemeConstantOverride("margin_left", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_top", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_right", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_bottom", ContentCardMarginPx);
+        AddChild(cardMargin);
+
+        var card = new PanelContainer { Name = "ContentCard" };
+        card.AddThemeStyleboxOverride("panel", BuildContentCardStyleBox());
+        card.SetMeta(TestIdMetaKey, "game-director-content-card");
+        cardMargin.AddChild(card);
+
+        // root（ヘッダ＋画面コンテナ）はカードの子。サイズは PanelContainer が司るので
+        // FullRect アンカーは不要（カードの内側パディングぶん詰めて配置される）。
         var root = new VBoxContainer { Name = "DirectorRoot" };
-        root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 8);
         root.SetMeta(TestIdMetaKey, "game-director-root");
-        AddChild(root);
+        card.AddChild(root);
 
         // ── 常設ヘッダー：フェーズインジケータ + 次へボタン ──────────
         var header = new HBoxContainer { Name = "DirectorHeader" };
@@ -617,6 +653,23 @@ public partial class GameDirector : Godot.Control
         _screenContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _screenContainer.SetMeta(TestIdMetaKey, "game-director-screen-container");
         root.AddChild(_screenContainer);
+    }
+
+    /// <summary>
+    /// コンテンツカードの地（半透明の暗色 + 角丸 + 淡い枠 + 内側パディング）を組む。
+    /// 地色にアルファを持たせることで最背面の共通背景がうっすら透ける「薄いカード」になる。
+    /// </summary>
+    private static StyleBoxFlat BuildContentCardStyleBox()
+    {
+        var box = new StyleBoxFlat
+        {
+            BgColor      = ContentCardColor,
+            BorderColor  = ContentCardBorderColor,
+        };
+        box.SetBorderWidthAll(1);
+        box.SetCornerRadiusAll(ContentCardCornerRadius);
+        box.SetContentMarginAll(ContentCardInnerPadding);
+        return box;
     }
 
     // ─── 動的B型 画面ライフサイクル（オンデマンド生成・遷移で完全消滅） ────────
