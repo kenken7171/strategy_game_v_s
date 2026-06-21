@@ -271,11 +271,16 @@ public class MultiverseSimulationRunner
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  黄金均衡の包囲（絶滅率 0.0% ＆ 全章黒字 ＆ 美しい傾斜壁）
+    //  完走均衡の包囲（絶滅率 0.0% ＆ 全章黒字 ＆ 章ボスは全章踏破可能）
     // ════════════════════════════════════════════════════════════════════════
+    //  ★ 設計意図の更新（2026-06-21・旅団長 FB「全体的に下げて最後まで走り抜けたい」）:
+    //    旧テストは「終焉ボスは突破率 <1.0 の最難関の壁」を要求していたが、全ステータス緩和で
+    //    完走できる難易度へ寄せたため、ATK 基準の本模型では全章の章ボスが安定踏破（1.0）になる。
+    //    なお本模型は HP×DPS の削り合い（実戦の難所）を見ないため、章ボス突破率 1.0 は「ATK で即敗
+    //    しない」ことの保証であって、実機が単調作業という意味ではない（実難易度は HP 壁＝playtest 駆動）。
 
     [Fact]
-    public void GoldenEquilibrium_FiftyUniverses_ZeroExtinction_PositiveNet_BossGradient()
+    public void CompletableEquilibrium_FiftyUniverses_ZeroExtinction_PositiveNet_AllBossesClearable()
     {
         var metrics = UniverseEvaluator.Evaluate(RunUniverses(BaselineSeeds));
 
@@ -292,16 +297,15 @@ public class MultiverseSimulationRunner
                 $"{epoch.EpochNameKey} avg_net must stay positive but was {epoch.AvgNet}");
         }
 
-        // 🎯 難易度条件: 章ボス突破率が黎明（易）→ 終焉（最難関）へ傾斜。0% 即死トラップでも、
-        //    すべて 1.000 のぬるま湯でもないこと。
+        // 🎯 完走条件: どの章の章ボスも ATK 起因の即敗ではなく踏破可能（最後まで走り抜けられる）。
+        //    難易度の傾斜は非増加（黎明 >= 終焉）であればよく、「終焉は超えられない壁」は要求しない。
         var dawn = metrics.Epochs.Single(e => e.Id == EpochId.Dawn);
         var twilight = metrics.Epochs.Single(e => e.Id == EpochId.Twilight);
-        Assert.Equal(1.0, dawn.BossClearRate, 6);                  // 黎明の章ボスは確実に超えられる
-        Assert.True(twilight.BossClearRate > 0.0, "twilight boss must not be a 0% death trap");
-        Assert.True(twilight.BossClearRate < 1.0, "twilight boss must remain the hardest wall");
+        Assert.True(dawn.BossClearRate > 0.0, "dawn boss must be clearable");
+        Assert.True(twilight.BossClearRate > 0.0, "twilight boss must be clearable (run is completable)");
         Assert.True(
-            dawn.BossClearRate > twilight.BossClearRate,
-            "boss difficulty must slope from dawn (easiest) to twilight (hardest)");
+            dawn.BossClearRate >= twilight.BossClearRate,
+            "boss difficulty must not invert (dawn no harder than twilight)");
     }
 
     // ════════════════════════════════════════════════════════════════════════

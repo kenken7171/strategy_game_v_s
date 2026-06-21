@@ -47,15 +47,16 @@ public class ChronicleTimelineConfigTests
         var epochs = ChronicleTimelineConfig.Epochs;
         for (var i = 1; i < epochs.Length; i++)
         {
-            // 難易度は章ごとに厳密に上がる（黎明 100 < 激動 140 < 斜陽 150 < 終焉 170）。
+            // 難易度は章ごとに厳密に上がる（黎明 80 < 激動 105 < 斜陽 120 < 終焉 135）。
+            // 全体的なステータス緩和で各章の難易度%を一律に引き下げ済み（完走できる傾斜へ）。
             Assert.True(epochs[i].DifficultyScalePercent > epochs[i - 1].DifficultyScalePercent);
             // 環境補正は単調非減少（黄金均衡への調律で後半をフラット化＝100,110,110,110）。
             Assert.True(epochs[i].EnvironmentModifierPercent >= epochs[i - 1].EnvironmentModifierPercent);
         }
 
-        // 章ごとの基準値（黎明=等倍、終焉=最も過酷だが超えられる傾斜壁）を固定アサート。
-        Assert.Equal(100, epochs[0].DifficultyScalePercent);
-        Assert.Equal(170, epochs[3].DifficultyScalePercent);
+        // 章ごとの基準値（黎明=最易、終焉=最も過酷だが超えられる傾斜壁）を固定アサート。
+        Assert.Equal(80, epochs[0].DifficultyScalePercent);
+        Assert.Equal(135, epochs[3].DifficultyScalePercent);
     }
 
     // ─── 2. 年 → 章の引き当て ──────────────────────────────────────────────

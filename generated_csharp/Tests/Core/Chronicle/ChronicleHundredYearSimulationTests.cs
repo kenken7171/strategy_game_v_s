@@ -30,11 +30,15 @@ public class ChronicleHundredYearSimulationTests
     // ─── 1. 難易度曲線（1→100 年で毎年単調成長・章境界で段差） ──────────────
 
     [Fact]
-    public void HundredYearLoop_EveryStat_StrictlyIncreasesEachYear()
+    public void HundredYearLoop_EveryStat_RisesOverTheCentury_AndNeverDropsYearOverYear()
     {
+        // 難易度緩和で各章の難易度% を 100 未満含む値へ引き下げたため、年成長（+1/年の ATK/DEF 等）に
+        // 整数 floor が掛かると同値の年が生じうる。よって「年ごと厳密増」ではなく「年ごと非減少」を契約とし、
+        // 「世紀をまたいで確実に増える（year1 ≪ year100）」を別途厳密に固定する（難易度曲線の本質を維持）。
         var template = EnemyScalingResolver.TrialGuardianTemplate;
-        var previous = EnemyScalingResolver.ResolveEnemyStats(
+        var first = EnemyScalingResolver.ResolveEnemyStats(
             ChronicleTimelineConfig.FirstYear, template);
+        var previous = first;
 
         for (var year = ChronicleTimelineConfig.FirstYear + 1;
              year <= ChronicleTimelineConfig.TotalYears;
@@ -42,13 +46,20 @@ public class ChronicleHundredYearSimulationTests
         {
             var current = EnemyScalingResolver.ResolveEnemyStats(year, template);
 
-            Assert.True(current.Hp > previous.Hp, $"HP must rise at year {year}");
-            Assert.True(current.Attack > previous.Attack, $"ATK must rise at year {year}");
-            Assert.True(current.Defense > previous.Defense, $"DEF must rise at year {year}");
-            Assert.True(current.Speed > previous.Speed, $"SPD must rise at year {year}");
+            Assert.True(current.Hp >= previous.Hp, $"HP must not drop at year {year}");
+            Assert.True(current.Attack >= previous.Attack, $"ATK must not drop at year {year}");
+            Assert.True(current.Defense >= previous.Defense, $"DEF must not drop at year {year}");
+            Assert.True(current.Speed >= previous.Speed, $"SPD must not drop at year {year}");
 
             previous = current;
         }
+
+        // 世紀の始終で全ステータスが確実に成長している（難易度曲線が右肩上がりであることの担保）。
+        var last = previous;
+        Assert.True(last.Hp > first.Hp);
+        Assert.True(last.Attack > first.Attack);
+        Assert.True(last.Defense > first.Defense);
+        Assert.True(last.Speed > first.Speed);
     }
 
     [Theory]

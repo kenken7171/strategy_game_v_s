@@ -63,36 +63,37 @@ public class EnemyScalingResolverTests
     // ─── 2. 整数 floor の厳密値 ─────────────────────────────────────────────
 
     [Fact]
-    public void ResolveEnemyStats_Year1_Dawn_IsExactlyPureGrowth()
+    public void ResolveEnemyStats_Year1_Dawn_AppliesDifficultyFloorScaling()
     {
-        // 黎明（100%/100%）= 等倍。grown = base + 1*gain がそのまま出る。
+        // 黎明（80%/100%）。grown = base + 1*gain → ×80/100（floor）→ ×100/100。
+        // 全体的なステータス緩和で黎明も 80% へ引き下げ済み（旧 100% 等倍ではない）。
         var stats = EnemyScalingResolver.ResolveEnemyStats(
             1, EnemyScalingResolver.TrialGuardianTemplate);
 
         Assert.Equal(EpochId.Dawn, stats.Epoch);
         Assert.Equal(1, stats.Year);
-        Assert.Equal(155, stats.Hp);      // 150 + 1*5
-        Assert.Equal(31, stats.Attack);   // 30 + 1*1
-        Assert.Equal(11, stats.Defense);  // 10 + 1*1
-        Assert.Equal(101, stats.Speed);   // 100 + 1*1
+        Assert.Equal(124, stats.Hp);      // (150+5)=155 → 155*80/100=124
+        Assert.Equal(24, stats.Attack);   // (30+1)=31  → 31*80/100=24.8→24
+        Assert.Equal(8, stats.Defense);   // (10+1)=11  → 11*80/100=8.8→8
+        Assert.Equal(80, stats.Speed);    // (100+1)=101 → 101*80/100=80.8→80
     }
 
     [Fact]
     public void ResolveEnemyStats_Year26_Upheaval_AppliesIntegerFloorScaling()
     {
-        // 激動（140%/110%）。grown → ×140/100（floor）→ ×110/100（floor）。
+        // 激動（105%/110%）。grown → ×105/100（floor）→ ×110/100（floor）。
         var stats = EnemyScalingResolver.ResolveEnemyStats(
             26, EnemyScalingResolver.TrialGuardianTemplate);
 
         Assert.Equal(EpochId.Upheaval, stats.Epoch);
-        // HP : (150+130)=280 → 280*140/100=392 → 392*110/100=431.2→431
-        Assert.Equal(431, stats.Hp);
-        // ATK: (30+26)=56 → 56*140/100=78.4→78 → 78*110/100=85.8→85
-        Assert.Equal(85, stats.Attack);
-        // DEF: (10+26)=36 → 36*140/100=50.4→50 → 50*110/100=55
-        Assert.Equal(55, stats.Defense);
-        // SPD: (100+26)=126 → 126*140/100=176.4→176 → 176*110/100=193.6→193
-        Assert.Equal(193, stats.Speed);
+        // HP : (150+130)=280 → 280*105/100=294 → 294*110/100=323.4→323
+        Assert.Equal(323, stats.Hp);
+        // ATK: (30+26)=56 → 56*105/100=58.8→58 → 58*110/100=63.8→63
+        Assert.Equal(63, stats.Attack);
+        // DEF: (10+26)=36 → 36*105/100=37.8→37 → 37*110/100=40.7→40
+        Assert.Equal(40, stats.Defense);
+        // SPD: (100+26)=126 → 126*105/100=132.3→132 → 132*110/100=145.2→145
+        Assert.Equal(145, stats.Speed);
     }
 
     [Fact]
@@ -199,34 +200,34 @@ public class EnemyScalingResolverTests
     [Fact]
     public void ComposeBattleEnemy_NoJitter_Year1_IsEraTimesAggregation()
     {
-        // 無揺らぎ（jitter=1.0）。era(year1 TrialGuardian)=HP155/ATK31/SPD101。
-        // HP は ×6 集約: 155*6=930。攻撃・速度は等倍。
+        // 無揺らぎ（jitter=1.0）。era(year1 TrialGuardian, 黎明80%)=HP124/ATK24/SPD80。
+        // HP は ×6 集約: 124*6=744。攻撃・速度は等倍。
         var enemy = EnemyScalingResolver.ComposeBattleEnemy(
             1, EnemyArchetype.TrialGuardian, new FixedRandom(NoJitterSample));
 
         Assert.Equal(EnemyArchetype.TrialGuardian, enemy.Archetype);
-        Assert.Equal(930, enemy.MaxHp);
-        Assert.Equal(31, enemy.Attack);
-        Assert.Equal(101, enemy.Speed);
+        Assert.Equal(744, enemy.MaxHp);
+        Assert.Equal(24, enemy.Attack);
+        Assert.Equal(80, enemy.Speed);
         Assert.Equal(enemy.MaxHp, enemy.Hp); // 満タン生成。
     }
 
     [Fact]
     public void ComposeBattleEnemy_ConsumesRngInHpAttackSpeedOrder()
     {
-        // 連続 3 値を HP / 攻撃 / 速度 が順に消費する（決定論の核心）。
-        //   HP   ← 0.0 → jitter 0.85 → round(930*0.85=790.5, AwayFromZero) = 791
-        //   攻撃 ← 0.5 → jitter 1.00 → 31
-        //   速度 ← 1.0 → jitter 1.15 → round(101*1.15=116.15) = 116
+        // 連続 3 値を HP / 攻撃 / 速度 が順に消費する（決定論の核心）。era(year1 黎明80%)=HP124/ATK24/SPD80。
+        //   HP   ← 0.0 → jitter 0.85 → round(744*0.85=632.4, AwayFromZero) = 632
+        //   攻撃 ← 0.5 → jitter 1.00 → 24
+        //   速度 ← 1.0 → jitter 1.15 → round(80*1.15=92.0) = 92
         var rng = new SequencedRandom(
             FloorJitterSample, NoJitterSample, CeilingJitterSample);
 
         var enemy = EnemyScalingResolver.ComposeBattleEnemy(
             1, EnemyArchetype.TrialGuardian, rng);
 
-        Assert.Equal(791, enemy.MaxHp);
-        Assert.Equal(31, enemy.Attack);
-        Assert.Equal(116, enemy.Speed);
+        Assert.Equal(632, enemy.MaxHp);
+        Assert.Equal(24, enemy.Attack);
+        Assert.Equal(92, enemy.Speed);
     }
 
     [Fact]
