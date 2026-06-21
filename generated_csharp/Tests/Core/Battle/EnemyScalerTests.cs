@@ -77,8 +77,8 @@ public class EnemyScalerTests
     {
         var enemy = EnemyScaler.ScaleTrialGuardian(0, 1, new FixedRandom(NoJitterSample));
 
-        // (150 + 0) * 10 = 1500 / (30 + 0) = 30 / (100 + 0) = 100
-        Assert.Equal(1500, enemy.MaxHp);
+        // (150 + 0) * 6 = 900 / (30 + 0) = 30 / (100 + 0) = 100
+        Assert.Equal(900, enemy.MaxHp);
         Assert.Equal(30, enemy.Attack);
         Assert.Equal(100, enemy.Speed);
     }
@@ -88,8 +88,8 @@ public class EnemyScalerTests
     {
         var enemy = EnemyScaler.ScaleTrialGuardian(100, 1, new FixedRandom(NoJitterSample));
 
-        // 移植元コメントの基準値: HP=650(×10=6500), ATK=90, SPD=160。
-        Assert.Equal(6500, enemy.MaxHp);
+        // 基準値: era HP=650(×6=3900), ATK=90, SPD=160。
+        Assert.Equal(3900, enemy.MaxHp);
         Assert.Equal(90, enemy.Attack);
         Assert.Equal(160, enemy.Speed);
     }
@@ -99,8 +99,8 @@ public class EnemyScalerTests
     {
         var enemy = EnemyScaler.ScaleTrialGuardian(0, 1, new FixedRandom(FloorJitterSample));
 
-        // 1500 * 0.85 = 1275 / 100 * 0.85 = 85
-        Assert.Equal(1275, enemy.MaxHp);
+        // 900 * 0.85 = 765 / 100 * 0.85 = 85
+        Assert.Equal(765, enemy.MaxHp);
         Assert.Equal(85, enemy.Speed);
     }
 
@@ -109,8 +109,8 @@ public class EnemyScalerTests
     {
         var enemy = EnemyScaler.ScaleTrialGuardian(0, 1, new FixedRandom(CeilingJitterSample));
 
-        // 1500 * 1.15 = 1725 / 100 * 1.15 = 115
-        Assert.Equal(1725, enemy.MaxHp);
+        // 900 * 1.15 = 1035 / 100 * 1.15 = 115
+        Assert.Equal(1035, enemy.MaxHp);
         Assert.Equal(115, enemy.Speed);
     }
 
@@ -134,10 +134,10 @@ public class EnemyScalerTests
         var level2 = EnemyScaler.ScaleTrialGuardian(0, 2, new FixedRandom(NoJitterSample));
         var level3 = EnemyScaler.ScaleTrialGuardian(0, 3, new FixedRandom(NoJitterSample));
 
-        // Lv1=×1.0 / Lv2=×1.5 / Lv3=×2.0（PerLevelGain=0.5）
-        Assert.Equal(1500, level1.MaxHp);
-        Assert.Equal(2250, level2.MaxHp);
-        Assert.Equal(3000, level3.MaxHp);
+        // Lv1=×1.0 / Lv2=×1.5 / Lv3=×2.0（PerLevelGain=0.5）。HP は ×6 集約。
+        Assert.Equal(900, level1.MaxHp);
+        Assert.Equal(1350, level2.MaxHp);
+        Assert.Equal(1800, level3.MaxHp);
 
         // 単調増加かつ「Lv3 HP は Lv1 HP の 2 倍」。
         Assert.True(level1.MaxHp < level2.MaxHp);
@@ -155,15 +155,15 @@ public class EnemyScalerTests
     public void ScaleTrialGuardian_ConsumesRngInHpAttackSpeedOrder()
     {
         // 連続する 3 値を HP / 攻撃 / 速度 が順に消費する。
-        //   HP    ← 0.0 → jitter 0.85 → 1500 * 0.85 = 1275
-        //   攻撃  ← 0.5 → jitter 1.00 →   30 * 1.00 =   30
-        //   速度  ← 1.0 → jitter 1.15 →  100 * 1.15 =  115
+        //   HP    ← 0.0 → jitter 0.85 → 900 * 0.85 = 765
+        //   攻撃  ← 0.5 → jitter 1.00 →  30 * 1.00 =  30
+        //   速度  ← 1.0 → jitter 1.15 → 100 * 1.15 = 115
         var rng = new SequencedRandom(
             FloorJitterSample, NoJitterSample, CeilingJitterSample);
 
         var enemy = EnemyScaler.ScaleTrialGuardian(0, 1, rng);
 
-        Assert.Equal(1275, enemy.MaxHp);
+        Assert.Equal(765, enemy.MaxHp);
         Assert.Equal(30, enemy.Attack);
         Assert.Equal(115, enemy.Speed);
     }

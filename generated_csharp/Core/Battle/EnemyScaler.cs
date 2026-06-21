@@ -61,8 +61,13 @@ public static class EnemyScaler
     /// </summary>
     public const double SpeedGainPerYear = 0.6;
 
-    /// <summary>HP 集約倍率。旧 10 体集団の合算 HP を単体ボスへ集約する係数。</summary>
-    public const int HpAggregationFactor = 10;
+    /// <summary>
+    /// HP 集約倍率。旧 10 体集団の合算 HP を単体敵へ集約する係数（レガシー由来）。
+    /// 実プレイで章ボスの HP が厚すぎ「削り切れない」（旅団長フィードバック 2026-06-21）ため、
+    /// 全敵の HP 壁を一律に下げる単一レバーとして 10 → 6 へ緩和（ボス>通常の序列は係数共通ゆえ維持）。
+    /// ATK は据え置き（被弾で溶ける問題ではなく HP×DPS の削り合いが論点のため）。
+    /// </summary>
+    public const int HpAggregationFactor = 6;
 
     /// <summary>個体差（±15%）の下限係数。jitter = JitterFloor + rng * JitterSpan。</summary>
     public const double JitterFloor = 0.85;

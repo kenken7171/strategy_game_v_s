@@ -200,12 +200,12 @@ public class EnemyScalingResolverTests
     public void ComposeBattleEnemy_NoJitter_Year1_IsEraTimesAggregation()
     {
         // 無揺らぎ（jitter=1.0）。era(year1 TrialGuardian)=HP155/ATK31/SPD101。
-        // HP は ×10 集約: 155*10=1550。攻撃・速度は等倍。
+        // HP は ×6 集約: 155*6=930。攻撃・速度は等倍。
         var enemy = EnemyScalingResolver.ComposeBattleEnemy(
             1, EnemyArchetype.TrialGuardian, new FixedRandom(NoJitterSample));
 
         Assert.Equal(EnemyArchetype.TrialGuardian, enemy.Archetype);
-        Assert.Equal(1550, enemy.MaxHp);
+        Assert.Equal(930, enemy.MaxHp);
         Assert.Equal(31, enemy.Attack);
         Assert.Equal(101, enemy.Speed);
         Assert.Equal(enemy.MaxHp, enemy.Hp); // 満タン生成。
@@ -215,7 +215,7 @@ public class EnemyScalingResolverTests
     public void ComposeBattleEnemy_ConsumesRngInHpAttackSpeedOrder()
     {
         // 連続 3 値を HP / 攻撃 / 速度 が順に消費する（決定論の核心）。
-        //   HP   ← 0.0 → jitter 0.85 → round(1550*0.85=1317.5, AwayFromZero) = 1318
+        //   HP   ← 0.0 → jitter 0.85 → round(930*0.85=790.5, AwayFromZero) = 791
         //   攻撃 ← 0.5 → jitter 1.00 → 31
         //   速度 ← 1.0 → jitter 1.15 → round(101*1.15=116.15) = 116
         var rng = new SequencedRandom(
@@ -224,7 +224,7 @@ public class EnemyScalingResolverTests
         var enemy = EnemyScalingResolver.ComposeBattleEnemy(
             1, EnemyArchetype.TrialGuardian, rng);
 
-        Assert.Equal(1318, enemy.MaxHp);
+        Assert.Equal(791, enemy.MaxHp);
         Assert.Equal(31, enemy.Attack);
         Assert.Equal(116, enemy.Speed);
     }

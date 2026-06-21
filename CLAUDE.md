@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: バランス再検証（100 年シミュを実機の年送りループ＝予言 SkipYears・休息混在・章ボス強制出撃へ忠実化。旧「1 年 1 戦」前提を撤廃し絶滅は `ChronicleMetrics.Extinct` の明示フラグへ。新ループで一度 100% 絶滅が露見→模型を再調律し黄金均衡（絶滅率 0%・章ボス傾斜壁）を回復）＋ 戦場アセット基盤の通電（背景は `GameDirector` が全フェーズ共通で最背面・敵は `BattleUI`）＋ 半透明コンテンツカード／ 検収: `dotnet test` 756 pass / 0 fail。
+> 最終更新の根拠: 章ボスHP壁の緩和（実機FB「最初の章ボスを削り切れない」→ `EnemyScaler.HpAggregationFactor` を 10→6 に。全敵HP一律-40%・ATK据置・ボス>通常の序列維持。模型はHP無視＝勝敗を見抜けない盲点も判明）＋ バランス再検証（100 年シミュを実機の年送りループへ忠実化し黄金均衡を再調律）／ 検収: `dotnet test` 756 pass / 0 fail。
 
 ---
 
@@ -221,7 +221,8 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 ### D-4. 敵生成・スケーリング
 
 - `EnemyScaler`（`Core/Battle/`）: `BaseHp=150` / `BaseAttack=30` / `BaseSpeed=100`、年率 `HpGainPerYear=5.0` /
-  `AttackGainPerYear=0.6` / `SpeedGainPerYear=0.6`、個体差ジッタ `0.85 + rng()*0.30`（**±15%**）、`PerLevelGain=0.5`。
+  `AttackGainPerYear=0.6` / `SpeedGainPerYear=0.6`、個体差ジッタ `0.85 + rng()*0.30`（**±15%**）、`PerLevelGain=0.5`、
+  `HpAggregationFactor=6`（旧 10 体合算のレガシー係数。章ボスHP壁が厚すぎ「削り切れない」実機FBで 10→6 に緩和・ATK据置）。
 - `ChronicleTimelineConfig`: 100 年 / 25 年で 1 章（`YearsPerEpoch=25`）。章ボス出現年は **25 / 50 / 75 / 100**、
   時代は `EpochId{Dawn, Upheaval, Decline, Twilight}`。`BattleArchetypeForYear(year)` がその年の原型を決定論選択。
 - `ChronicleGlobal.CreateCurrentYearEnemy(seed?)` が「今年は誰と戦うか」を暦から決め、時代スケール＋個体差で敵 1 体を合成。
