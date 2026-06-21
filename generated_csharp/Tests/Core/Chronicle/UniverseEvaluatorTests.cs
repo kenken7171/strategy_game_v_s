@@ -46,7 +46,8 @@ public class UniverseEvaluatorTests
             });
         }
 
-        return MetricsCollector.Aggregate(samples);
+        // 100 年に届かない宇宙は絶滅（明示フラグで運ぶ。実機の年送りでも実戦闘数<100 は正常なため）。
+        return MetricsCollector.Aggregate(samples, extinct: years < ChronicleTimelineConfig.TotalYears);
     }
 
     /// <summary>シードから決定論的に 1 宇宙を生成（seed%5==0 は 30 年で絶滅）。</summary>
@@ -73,7 +74,7 @@ public class UniverseEvaluatorTests
             });
         }
 
-        return MetricsCollector.Aggregate(samples);
+        return MetricsCollector.Aggregate(samples, extinct: years < ChronicleTimelineConfig.TotalYears);
     }
 
     private static UniverseEpochMetrics EpochOf(UniverseMetrics metrics, EpochId id)

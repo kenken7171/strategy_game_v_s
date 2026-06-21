@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 戦場アセット基盤の通電（`BackgroundTextureLibrary`/`EnemyTextureLibrary`＋slug 写像 SoT `Core/Assets/AssetSlugs`。背景は `GameDirector` が**全フェーズ共通**で最背面に敷き、敵は `BattleUI` の敵カードへ。背景4・敵5は原色プレースホルダ配置・本番差し替え待ち）＋ 初期パーティーの役割保証（`NewGameFactory`）＋ 予言生成の本実装（`ProphecyMaster`）／ 検収: `dotnet test` 756 pass / 0 fail。
+> 最終更新の根拠: バランス再検証（100 年シミュを実機の年送りループ＝予言 SkipYears・休息混在・章ボス強制出撃へ忠実化。旧「1 年 1 戦」前提を撤廃し絶滅は `ChronicleMetrics.Extinct` の明示フラグへ。新ループで一度 100% 絶滅が露見→模型を再調律し黄金均衡（絶滅率 0%・章ボス傾斜壁）を回復）＋ 戦場アセット基盤の通電（背景は `GameDirector` が全フェーズ共通で最背面・敵は `BattleUI`）＋ 半透明コンテンツカード／ 検収: `dotnet test` 756 pass / 0 fail。
 
 ---
 

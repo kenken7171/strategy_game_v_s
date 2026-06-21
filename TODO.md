@@ -81,6 +81,10 @@
 
 ## 🧪 テスト拡充
 
+- [x] バランス再検証 — 100 年シミュ（`MultiverseSimulationRunner`）を実機の年送りループ（予言 `SkipYears` で年が飛ぶ・休息混在・章ボス強制出撃）へ忠実化。
+      旧「1 年 1 戦＝100 戦」前提を撤廃し、絶滅を `ChronicleMetrics.Extinct` 明示フラグ化（`UniverseEvaluator` も追従）。新ループで一度 **100% 絶滅**が露見
+      （投資はターン毎・敵は年率スケールで成長が約 1/3 に減速）→ 模型を再調律（`BasePower 30→36` / `InvestmentPerUpgrade 3→9` / `LossDivisor 8→12`）し
+      **黄金均衡（絶滅率 0.0%・全章黒字・黎明1.0→終焉0.42 の章ボス傾斜壁）を回復**。
 - [ ] 戦闘ライフサイクル（`StartBattle`→`ResolveBattleTurn`→`EndBattle`→`FinalizeBattleSpoils`）の統合シナリオ追加。
 - [ ] セーブ/ロード往復の網羅（血統・婚姻リンク・装備の復元）。
 

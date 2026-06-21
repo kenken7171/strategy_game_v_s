@@ -9,9 +9,10 @@
 //    章ボス突破率を宇宙横断で集約し、さらに「家系断絶絶滅率（Extinction Rate）」＝途中で人口や
 //    ポイントが尽きてゲームオーバーになった（＝100 年に届かず戦闘数が満たない）宇宙の割合を弾く。
 //
-//  ★ 絶滅判定（ChronicleMetrics から決定論的に導出）:
-//    100 年完走した宇宙は 1 年 1 戦で TotalBattles == TotalYears(100)。途中で絶滅した宇宙は
-//    戦闘数が満たない（TotalBattles < TotalYears）。よって TotalBattles < TotalYears を絶滅とみなす。
+//  ★ 絶滅判定（ChronicleMetrics の明示フラグ）:
+//    年送り（予言の SkipYears で 2〜4 年一気に進む）＋休息混在のため、完走しても実戦闘数は
+//    100 未満が正常。よって絶滅は戦闘数からの推測ではなく ChronicleMetrics.Extinct（大隊全滅で
+//    ゲームオーバーになったか）を直接読む。
 //
 //  ★ 集計方式（センチネル混入を避けるプール集計）:
 //    章別の勝率・生存率・章ボス突破率は、宇宙横断で生の合計を取ってから比を弾く（プール率）。
@@ -159,9 +160,6 @@ public sealed record UniverseMetrics
 /// </summary>
 public static class UniverseEvaluator
 {
-    /// <summary>100 年完走の戦闘数（1 年 1 戦）。これに満たない宇宙を絶滅とみなす境界。</summary>
-    private const int FullRunBattles = ChronicleTimelineConfig.TotalYears;
-
     /// <summary>
     /// 多重宇宙（複数回の 100 年集約）を章別・全体・絶滅率のマクロ統計へ畳み込む。各章は
     /// 宇宙横断でプール集計され、戦闘の無い章も 0 として必ず含む。null 宇宙は安全にスキップ。
@@ -196,9 +194,9 @@ public static class UniverseEvaluator
             }
 
             universeCount++;
-            if (universe.TotalBattles < FullRunBattles)
+            if (universe.Extinct)
             {
-                extinctCount++; // 100 年に届かなかった＝途中でゲームオーバー（絶滅）。
+                extinctCount++; // 大隊全滅でゲームオーバー（明示フラグ。年送りで実戦闘数<100 は正常）。
             }
 
             totalBattles += universe.TotalBattles;

@@ -133,6 +133,12 @@ public sealed record ChronicleMetrics
     /// <summary>章順（黎明 → 激動 → 斜陽 → 終焉）に並ぶ章別統計。戦闘の無い章も 0 で必ず含む。</summary>
     public required ImmutableArray<EpochMetrics> Epochs { get; init; }
 
+    /// <summary>
+    /// この宇宙が絶滅（大隊全滅でゲームオーバー）したか。年送り（予言の SkipYears）で実戦闘数は
+    /// 100 未満になるのが正常なので、絶滅は戦闘数からの推測ではなく明示フラグで運ぶ（既定 false）。
+    /// </summary>
+    public bool Extinct { get; init; }
+
     /// <summary>全戦闘数。</summary>
     public required int TotalBattles { get; init; }
 
@@ -186,9 +192,10 @@ public static class MetricsCollector
     /// 戦闘の無い章も 0 の統計として必ず含む。null 標本は安全に読み飛ばす。
     /// </summary>
     /// <param name="samples">1 戦闘ごとの計測標本列（null 不可・要素 null は読み飛ばす）。</param>
+    /// <param name="extinct">この宇宙が絶滅（大隊全滅）したか。既定 false（完走）。</param>
     /// <returns>章別 + 全体のマクロ統計。</returns>
     /// <exception cref="ArgumentNullException">samples が null の場合。</exception>
-    public static ChronicleMetrics Aggregate(IEnumerable<BattleMetricSample> samples)
+    public static ChronicleMetrics Aggregate(IEnumerable<BattleMetricSample> samples, bool extinct = false)
     {
         ArgumentNullException.ThrowIfNull(samples);
 
@@ -238,6 +245,7 @@ public static class MetricsCollector
         return new ChronicleMetrics
         {
             Epochs             = epochMetrics.ToImmutable(),
+            Extinct            = extinct,
             TotalBattles       = totalBattles,
             TotalVictories     = totalVictories,
             TotalEarned        = totalEarned,

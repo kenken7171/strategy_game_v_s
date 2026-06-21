@@ -23,7 +23,8 @@
 //  ★ 例外不在の死守:
 //    全演算は Min/Max クランプと整数演算で境界づけられ、添字アクセスを行わない。婚姻ポイントは
 //    獲得（≥0）で増え、消費は残高 ≥ UpgradeCost のときだけ起きるため負へ沈まない。絶滅（大隊全滅）は
-//    途中打ち切りで TotalBattles < 100 として現れる。
+//    ChronicleMetrics.Extinct（明示フラグ）で運ぶ。年送り（SkipYears で年が飛ぶ）＋休息混在のため
+//    実戦闘数は 100 未満が正常であり、戦闘数からの絶滅推測はもう使わない。
 //
 //  ★ 開発憲法①: 数値と ASCII の章キーだけを扱い、表示テキストを持たない（レポート整形は別層）。
 // =============================================================================
@@ -34,6 +35,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.Core.Timeline;       // ProphecyMaster / Prophecy / ProphecyKind
 using Xunit;
 
 namespace ChronicleKnights.Tests.Core.Chronicle;
@@ -54,16 +56,18 @@ public class MultiverseSimulationRunner
     private const int StartingPoints = 12;
 
     /// <summary>
-    /// 初期大隊の戦力（敵攻撃力と突き合わせる攻撃力相当の代理値）。黎明期の安全マージンを縮小し
-    /// 難易度ラダーが噛むよう 36 → 30 へ締め上げ済み。
+    /// 初期大隊の戦力（敵攻撃力と突き合わせる攻撃力相当の代理値）。年送り化で序盤の戦闘回数が減り、
+    /// 不運な大ジャンプ（休息続きで未強化のまま強敵へ着地）が一撃全滅を招くため、序盤の床を
+    /// 30 → 36 へ戻し、絶滅率 0% を回復しつつ難易度ラダーは投資追従で維持する。
     /// </summary>
-    private const int BasePower = 30;
+    private const int BasePower = 36;
 
     /// <summary>
-    /// 強化 1 回あたりの戦力還元。雪だるまインフレ（投資が難易度成長を凌駕する暴走）を止めるため
-    /// 8 → 3 へ締め上げ済み（投資の戦力還元を鈍化させ、難易度曲線に牙を取り戻させる）。
+    /// 強化 1 回あたりの戦力還元。年送り化（1 ターンで 2〜4 年進む＝総ターン数が年数の約 1/3）に伴い、
+    /// 1 ターンの成長が年率の難易度ラダーへ追従できるよう 3 → 9 へ引き上げ（実機の「戦闘ごとに昇級＋装備
+    /// 進化」というチャンクな成長が、戦闘が稀でも 1 戦で大きく効くことの模型反映）。
     /// </summary>
-    private const int InvestmentPerUpgrade = 3;
+    private const int InvestmentPerUpgrade = 9;
 
     /// <summary>
     /// 強化投資 1 回のコスト（ShopService.BaseUpgradeCost 相当の物価ノブ）。投資効率を改善し後半の
@@ -72,10 +76,11 @@ public class MultiverseSimulationRunner
     private const int UpgradeCost = 2;
 
     /// <summary>
-    /// 戦力不足ぶんを完全ロスト数へ写す除数（不利なほど損失が増える）。不利な戦闘の損耗を倍に
-    /// 厳罰化するため 16 → 8 へ締め上げ済み（後半章で絶滅が現実に発生するよう牙を立てる）。
+    /// 戦力不足ぶんを完全ロスト数へ写す除数（不利なほど損失が増える）。勝敗（deficit≤0）には影響せず
+    /// 1 戦の損耗の大きさだけを決める。年送り化で稀な大ジャンプの一撃全滅が残るため 8 → 12 へ緩め、
+    /// 絶滅率 0% を回復しつつ後半章の損耗（生存率<1.0 の手応え）は維持する。
     /// </summary>
-    private const int LossDivisor = 8;
+    private const int LossDivisor = 12;
 
     // ─── 報酬ノブ（婚姻ポイント算出の模型レート。BattleSpoils と同型・基礎のみ調律） ──
 
@@ -90,6 +95,12 @@ public class MultiverseSimulationRunner
 
     /// <summary>完全ロスト 1 件あたりの減点（BattleSpoils の PermanentLossPenalty と同レート）。</summary>
     private const int LossPenalty = 3;
+
+    /// <summary>
+    /// 休息年（非戦闘）の控えめな収入（RestService.RestPointsReward と同レート）。年送りループでは
+    /// 戦闘以外の年は休息となり、戦果はないが少額の収入が投資へ還元される（実機の休息経済の模型）。
+    /// </summary>
+    private const int RestPointsReward = 2;
 
     /// <summary>ベースライン測定に用いる固定シード列（1..DefaultUniverseCount・決定論的に不変）。</summary>
     public static ImmutableArray<int> BaselineSeeds { get; } =
@@ -115,9 +126,17 @@ public class MultiverseSimulationRunner
     }
 
     /// <summary>
-    /// 1 宇宙（固定シード）の 100 年を巡航し、年ごとの計測標本を集約した <see cref="ChronicleMetrics"/> を返す。
-    /// 難易度（ComposeBattleEnemy）・報酬（BaseMarriagePoints）・物価（UpgradeCost）の 3 ノブを
-    /// 実値で叩き、大隊全滅で打ち切る（絶滅 = TotalBattles &lt; 100）。
+    /// 1 宇宙（固定シード）を実機の年送りループで巡航し、計測標本を集約した <see cref="ChronicleMetrics"/> を返す。
+    ///
+    /// ★ 実プレイループの忠実化（再検証の核心）:
+    ///   旧模型は「1 年 1 戦＝100 戦」固定だったが、実機は予言の <c>SkipYears</c>（2〜4 年）で年が一気に飛び、
+    ///   多くのターンは休息（非戦闘）になる。本ランナーはそれを写し取る:
+    ///     - 各ターンで <see cref="ProphecyMaster.Generate"/> がその年の 3 予言を生成（実機と同一・rng 消費）。
+    ///     - 行動方針（代表プレイヤー）: 章ボス年は強制出撃。非ボス年は手札に戦闘予言があれば出撃して育ち、
+    ///       無ければ休息する（攻めの成長型＝生存の保守的な下界を測る）。
+    ///     - 暦は選んだ予言の <c>SkipYears</c> を <see cref="ChronicleTimelineConfig.ClampSkipToNextBossYear"/> で
+    ///       章ボス年を踏み越さないようクランプして前進（実機 AdvanceGenerationLocked と同一規律）。
+    ///   よって実戦闘数は 100 未満が正常。絶滅（大隊全滅）は戦闘数ではなく明示フラグで運ぶ。
     /// </summary>
     public static ChronicleMetrics SimulateUniverse(int seed)
     {
@@ -126,56 +145,97 @@ public class MultiverseSimulationRunner
 
         var marriagePoints = StartingPoints;
         var investment = 0;
+        var extinct = false;
 
-        for (var year = ChronicleTimelineConfig.FirstYear; year <= ChronicleTimelineConfig.TotalYears; year++)
+        var year = ChronicleTimelineConfig.FirstYear;
+        while (year <= ChronicleTimelineConfig.TotalYears)
         {
-            var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(year);
-            var enemy = EnemyScalingResolver.ComposeBattleEnemy(year, archetype, rng); // 実難易度曲線 + 個体差
+            var isBoss = ChronicleTimelineConfig.IsEpochBossYear(year);
 
-            var brigadePower = BasePower + investment;
-            var deficit = enemy.Attack - brigadePower;
-            var victory = deficit <= 0;
-            var lost = deficit <= 0 ? 0 : Math.Min(BattalionSize, 1 + deficit / LossDivisor);
+            // 年代記：その年の 3 予言を生成（実機 ProphecyMaster と同一・rng を消費）。
+            var prophecies = ProphecyMaster.Generate(year, rng);
 
-            // 報酬は件数のみで決まる模型レート（BattleSpoils と同型・基礎のみ調律）: 勝利でその年の
-            // 英雄が 1 名育ち、章ボス勝利で装備が 1 件進化。Max(0,…) で底打ち（負の報酬は経済へ流さない）。
-            var levelGains = victory ? 1 : 0;
-            var evolutions = victory && ChronicleTimelineConfig.IsEpochBossYear(year) ? 1 : 0;
-            var earned = victory
-                ? Math.Max(0, BaseMarriagePoints
-                    + levelGains * LevelGainBounty
-                    + evolutions * EvolutionBounty
-                    - lost * LossPenalty)
-                : 0;
-            marriagePoints += earned;
+            // 行動方針：章ボス年は強制出撃。非ボス年は戦闘予言が手札にあれば出撃、無ければ休息。
+            var battleCard = FirstBattleProphecy(prophecies);
+            var march = isBoss || battleCard is not null;
 
-            // 物価: 残高が許す限り強化へ投資し、戦力へ還元する。
-            var spent = 0;
-            if (marriagePoints >= UpgradeCost)
+            // タイムスキップ年数の出所（出撃＝戦闘札 / 休息＝手札先頭）。
+            var chosen = battleCard ?? prophecies[0];
+
+            if (march)
             {
-                marriagePoints -= UpgradeCost;
-                investment += InvestmentPerUpgrade;
-                spent = UpgradeCost;
+                var archetype = ChronicleTimelineConfig.BattleArchetypeForYear(year);
+                var enemy = EnemyScalingResolver.ComposeBattleEnemy(year, archetype, rng); // 実難易度曲線 + 個体差
+
+                var brigadePower = BasePower + investment;
+                var deficit = enemy.Attack - brigadePower;
+                var victory = deficit <= 0;
+                var lost = deficit <= 0 ? 0 : Math.Min(BattalionSize, 1 + deficit / LossDivisor);
+
+                // 報酬は件数のみで決まる模型レート（BattleSpoils と同型）: 勝利で英雄 1 名が育ち、
+                // 章ボス勝利で装備 1 件が進化。Max(0,…) で底打ち（負の報酬は経済へ流さない）。
+                var levelGains = victory ? 1 : 0;
+                var evolutions = victory && isBoss ? 1 : 0;
+                var earned = victory
+                    ? Math.Max(0, BaseMarriagePoints
+                        + levelGains * LevelGainBounty
+                        + evolutions * EvolutionBounty
+                        - lost * LossPenalty)
+                    : 0;
+                marriagePoints += earned;
+
+                // 物価: 残高が許す限り強化へ投資し、戦力へ還元する。
+                var spent = 0;
+                if (marriagePoints >= UpgradeCost)
+                {
+                    marriagePoints -= UpgradeCost;
+                    investment += InvestmentPerUpgrade;
+                    spent = UpgradeCost;
+                }
+
+                samples.Add(new BattleMetricSample
+                {
+                    Year           = year,
+                    EarnedPoints   = earned,
+                    SpentPoints    = spent,
+                    CombatantCount = BattalionSize,
+                    LostCount      = lost,
+                    Outcome        = victory ? BattleOutcome.BattalionVictory : BattleOutcome.BattalionDefeat,
+                    IsEpochBoss    = isBoss,
+                });
+
+                if (lost >= BattalionSize)
+                {
+                    extinct = true;
+                    break; // 大隊全滅＝ゲームオーバー（以後の年は刻まれない）。
+                }
+            }
+            else
+            {
+                // 休息年：戦闘なし・損耗なし。少額の休息収入を投資へ還元する（戦闘標本は記録しない）。
+                marriagePoints += RestPointsReward;
+                if (marriagePoints >= UpgradeCost)
+                {
+                    marriagePoints -= UpgradeCost;
+                    investment += InvestmentPerUpgrade;
+                }
             }
 
-            samples.Add(new BattleMetricSample
-            {
-                Year           = year,
-                EarnedPoints   = earned,
-                SpentPoints    = spent,
-                CombatantCount = BattalionSize,
-                LostCount      = lost,
-                Outcome        = victory ? BattleOutcome.BattalionVictory : BattleOutcome.BattalionDefeat,
-                IsEpochBoss    = ChronicleTimelineConfig.IsEpochBossYear(year),
-            });
-
-            if (lost >= BattalionSize)
-            {
-                break; // 大隊全滅＝ゲームオーバー（途中絶滅。以後の年は刻まれない）。
-            }
+            // 暦を前進（章ボス年を踏み越さないクランプ・最低 1 年で前進保証＝無限ループ封じ）。
+            year += Math.Max(1, ChronicleTimelineConfig.ClampSkipToNextBossYear(year, chosen.SkipYears));
         }
 
-        return MetricsCollector.Aggregate(samples);
+        return MetricsCollector.Aggregate(samples, extinct);
+    }
+
+    /// <summary>手札（3 予言）の中から最初の戦闘予言を返す。無ければ null（その年は休息へ）。</summary>
+    private static Prophecy? FirstBattleProphecy(ImmutableArray<Prophecy> prophecies)
+    {
+        foreach (var p in prophecies)
+        {
+            if (p.Kind == ProphecyKind.Battle) return p;
+        }
+        return null;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -260,7 +320,7 @@ public class MultiverseSimulationRunner
         var universe = UniverseEvaluator.Evaluate(metrics);
 
         Console.WriteLine("=== MULTIVERSE TUNED BALANCE REPORT ===");
-        Console.WriteLine("config: golden equilibrium (difficulty ladder + reward + price tuned)");
+        Console.WriteLine("config: golden equilibrium re-validated for realistic year-skip cadence (prophecy SkipYears + rest mix)");
         Console.WriteLine(
             "seeds: 1.." + DefaultUniverseCount
             + "   years-per-universe: " + ChronicleTimelineConfig.TotalYears
