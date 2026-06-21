@@ -31,8 +31,8 @@ using System.Globalization;
 using System.Linq;
 using ChronicleKnights.Core.Bootstrap;
 using ChronicleKnights.Core.Chronicle;
-using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.GameFlow;
+using ChronicleKnights.Core.Job;             // JobMaster（最終ステータス解決）
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;          // Gender
 using ChronicleKnights.Core.Timeline;
@@ -43,8 +43,11 @@ namespace ChronicleKnights.Tests.Core.Chronicle;
 
 public class StrategyPlaythroughSimulationTests
 {
-    /// <summary>旅団（ロスター）の上限＝大隊 3×3 の席数。満員でこれを超えると除外が発動する。</summary>
-    private const int RosterCap = FormationBoard.SlotCount; // = 9
+    /// <summary>
+    /// 旅団（ロスター）の上限。旅団長運用上限の 15 名（出撃枠の大隊 3×3＝9 とは別概念で、控えを含む
+    /// 旅団全体の保有上限）。コード側に定数が無いため本シミュの方針値として置く。満員でこれを超えると除外。
+    /// </summary>
+    private const int RosterCap = 15;
 
     /// <summary>外様スカウトの固定コスト（MarriageUI / 実機と同レート）。</summary>
     private const int ScoutCost = 3;
@@ -79,6 +82,22 @@ public class StrategyPlaythroughSimulationTests
         public required int FinalRoster { get; init; }
         public required int MaxLineageDepth { get; init; }
         public required ImmutableArray<string> Log { get; init; }
+        public required ImmutableArray<string> FinalRosterLines { get; init; }
+    }
+
+    /// <summary>最終旅団 1 名を「ステータス行」へ整形する（Job 数値は JobMaster から解決）。</summary>
+    private static string FormatUnitStatus(int index, Unit u, int generation)
+    {
+        var s = JobMaster.Find(u.Job)?.Stats;
+        var hp = s?.MaxHp ?? 0;
+        var spd = s?.Speed ?? 0;
+        var fa = s?.FrontAttack ?? 0;
+        var ra = s?.RearAttack ?? 0;
+        var equip = u.MainEquipment is { } e ? $"{e.ItemId} Lv{e.Level}" : "-";
+        var bond = u.IsMarried ? "married" : (u.HasParentage ? "child" : "single");
+        return string.Format(CultureInfo.InvariantCulture,
+            "{0,2}. {1,-16} {2,-6} age {3,3}/{4,3}  Lv{5}  gen{6}  HP{7,3} SPD{8,2} FA{9,3} RA{10,3}  equip:{11,-14} {12}",
+            index, u.Job, u.Gender, u.Age, u.MaxAge, u.Level, generation, hp, spd, fa, ra, equip, bond);
     }
 
     // ─── 方針ヘルパ ───────────────────────────────────────────────────────
@@ -219,6 +238,15 @@ public class StrategyPlaythroughSimulationTests
             }
         }
 
+        // 最終旅団のステータス行（生存者を寿命到達率の浅い＝若い順で並べる）。
+        var finalLines = ImmutableArray.CreateBuilder<string>();
+        var i = 1;
+        foreach (var u in roster.Where(u => u.IsAlive)
+                                .OrderBy(u => u.MaxAge <= 0 ? 1.0 : (double)u.Age / u.MaxAge))
+        {
+            finalLines.Add(FormatUnitStatus(i++, u, generationOf.GetValueOrDefault(u.Id)));
+        }
+
         return new PlaythroughReport
         {
             FinalYear = Math.Min(year, ChronicleTimelineConfig.TotalYears),
@@ -237,6 +265,7 @@ public class StrategyPlaythroughSimulationTests
             FinalRoster = roster.Count,
             MaxLineageDepth = maxLineageDepth,
             Log = log.ToImmutable(),
+            FinalRosterLines = finalLines.ToImmutable(),
         };
     }
 
@@ -298,6 +327,8 @@ public class StrategyPlaythroughSimulationTests
             report.PeakRoster, report.FinalRoster, report.Births, report.ScoutHires,
             report.ProphecyRecruits, report.AgeDeaths, report.Evictions, report.MaxLineageDepth));
         foreach (var line in report.Log) Console.WriteLine(line);
+        Console.WriteLine("--- FINAL BRIGADE ROSTER (alive) ---");
+        foreach (var line in report.FinalRosterLines) Console.WriteLine(line);
 
         // 🎯 完走: 100 年に到達している（フローが詰まらず最後まで回る）。
         Assert.Equal(ChronicleTimelineConfig.TotalYears, report.FinalYear);
