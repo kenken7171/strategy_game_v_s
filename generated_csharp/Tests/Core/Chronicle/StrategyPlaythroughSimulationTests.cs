@@ -354,21 +354,27 @@ public class StrategyPlaythroughSimulationTests
             special, equip);
     }
 
-    /// <summary>基本（素のジョブ値）→ 最終（装備込み）の成長差分を 1 行へ。差は装備のみが生む（C# は Lv/年齢で伸びない）。</summary>
+    /// <summary>
+    /// 基本（素のジョブ値）→ 最終（レベル成長＋三段階加齢＋装備込み）の成長差分を 1 行へ。
+    /// 実効＝UnitStatProfile（Lv×加齢）＋ 装備ボーナス。年齢段階（修業/全盛/衰退）も付記する。
+    /// </summary>
     private static string FormatGrowth(int index, Unit u)
     {
-        var s = JobMaster.Find(u.Job)?.Stats;
-        var baseFa = s?.FrontAttack ?? 0;
-        var baseRa = s?.RearAttack ?? 0;
-        var baseSpd = s?.Speed ?? 0;
-        var baseDef = s?.SquadDefense ?? 0;
-        var dAtk = BattleManager.EquipmentAttackBonus(u);
-        var dDef = BattleManager.EquipmentDefenseBonus(u);
-        var dSpd = BattleManager.EquipmentSpeedBonus(u);
+        var bs = JobMaster.Find(u.Job)?.Stats;
+        var es = UnitStatProfile.Resolve(u); // レベル成長＋加齢を反映した実効ジョブ値
+        var baseFa = bs?.FrontAttack ?? 0;
+        var baseRa = bs?.RearAttack ?? 0;
+        var baseSpd = bs?.Speed ?? 0;
+        var baseDef = bs?.SquadDefense ?? 0;
+        var effFa = (es?.FrontAttack ?? baseFa) + BattleManager.EquipmentAttackBonus(u);
+        var effRa = (es?.RearAttack ?? baseRa) + BattleManager.EquipmentAttackBonus(u);
+        var effSpd = (es?.Speed ?? baseSpd) + BattleManager.EquipmentSpeedBonus(u);
+        var effDef = (es?.SquadDefense ?? baseDef) + BattleManager.EquipmentDefenseBonus(u);
+        var phase = u.Age < UnitStatProfile.MaturityAge ? "growth"
+            : u.Age <= UnitStatProfile.DeclineAge ? "prime" : "decline";
         return string.Format(CultureInfo.InvariantCulture,
-            "{0,2}. {1,-15} FA {2,3}->{3,3} (+{4})  RA {5,3}->{6,3} (+{4})  SPD {7,2}->{8,3} (+{9})  DEF {10,2}->{11,3} (+{12})",
-            index, u.Job, baseFa, baseFa + dAtk, dAtk, baseRa, baseRa + dAtk, baseSpd, baseSpd + dSpd, dSpd,
-            baseDef, baseDef + dDef, dDef);
+            "{0,2}. {1,-15} Lv{2} age{3,3}({4,-7}) | FA {5,3}->{6,3}  RA {7,3}->{8,3}  SPD {9,2}->{10,3}  DEF {11,2}->{12,3}",
+            index, u.Job, u.Level, u.Age, phase, baseFa, effFa, baseRa, effRa, baseSpd, effSpd, baseDef, effDef);
     }
 
     private static void DumpReport(string title, PlaythroughReport r)

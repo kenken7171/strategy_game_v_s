@@ -185,7 +185,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.BattalionDefense)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += def.Stats.BattalionDefense;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).BattalionDefense;
         }
         return total;
     }
@@ -210,7 +210,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.SquadDefense)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += def.Stats.SquadDefense;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).SquadDefense;
         }
         return total;
     }
@@ -412,7 +412,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
             var def = JobMaster.Find(buffer.Job);
             if (def is null) continue;
-            total += def.Stats.Speed;
+            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age).Speed;
         }
         return total;
     }
@@ -436,7 +436,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
             var def = JobMaster.Find(buffer.Job);
             if (def is null) continue;
-            total += def.Stats.InitiativeBuff;
+            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age).InitiativeBuff;
         }
         return total;
     }
@@ -453,7 +453,7 @@ public static class BattleManager
         ArgumentNullException.ThrowIfNull(battalion);
 
         var def = JobMaster.Find(unit.Job);
-        var baseSpeed = def?.Stats.Speed ?? 0;
+        var baseSpeed = def is null ? 0 : UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).Speed;
         return baseSpeed + CalculateBroadcastSpeedBonus(unit, battalion) + EquipmentSpeedBonus(unit);
     }
 
@@ -535,7 +535,8 @@ public static class BattleManager
         var def = JobMaster.Find(unit.Job);
         if (def is null) return 0;
 
-        var rowAttack = row == SquadRow.Front ? def.Stats.FrontAttack : def.Stats.RearAttack;
+        var eff = UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age);
+        var rowAttack = row == SquadRow.Front ? eff.FrontAttack : eff.RearAttack;
         var attackBonus = CalculateBroadcastAttackBonus(unit, battalion);
         var equipmentAttack = EquipmentAttackBonus(unit); // 装備由来 ATK を素手攻撃へ合流。
         var repetitions = ResolveAttackRepetitions(unit, order);
@@ -560,7 +561,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.TurnEndSquadHeal)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += def.Stats.TurnEndSquadHeal;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).TurnEndSquadHeal;
         }
         return total;
     }

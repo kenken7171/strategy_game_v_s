@@ -45,7 +45,9 @@ public class BattleResolverTests
     {
         Id = id,
         Job = job,
-        Age = 20,
+        // 全盛期年齢（UnitStatProfile.MaturityAge 以上）＝成長係数 1.0。素のジョブ値で戦闘機構を検証する
+        // （レベル/加齢の成長スケーリング自体は UnitStatProfileTests で個別検証）。
+        Age = 25,
         MaxAge = 60,
         FirstNameKey = "first-test",
         LastNameKey = "last-test",

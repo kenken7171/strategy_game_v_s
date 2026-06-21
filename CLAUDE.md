@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: 敵ステータスの全体緩和（実機FB「ATKも高い・最後まで走り抜けたい」→ 章難易度% `DifficultyScalePercent` を 黎明80/激動105/斜陽120/終焉135 へ一律引き下げ＝HP・ATK・DEF・SPD を全章で減。先行の `HpAggregationFactor` 10→6（全敵HP-40%）と併せ完走できる難易度へ。シミュは「完走均衡」へ更新＝0%絶滅・全章黒字・全章ボス踏破可。章ボス突破率の <1.0 壁要求は撤廃）／ 検収: `dotnet test` 756 pass / 0 fail。
+> 最終更新の根拠: ユニット成長の復活（仕様・旧TS版に在り C#移植で欠落していた「レベル成長＋三段階加齢」を `Core/Unit/UnitStatProfile.cs` で実装。Lvごと+25%／修業期=成長→全盛期=素値→衰退期=年3%減。`BattleManager`/`BattleResolver` が実効ステを本解決器経由で読む。検証 `UnitStatProfileTests`、戦闘契約テストは全盛期年齢fixtureで不変）／ 検収: `dotnet test` 776 pass / 0 fail。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 区分 | 場所 | 実態 | 扱い |
 |---|---|---|---|
-| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・756 テスト緑 | **すべての新規実装はここ** |
+| **現役の本体** | **`generated_csharp/`** | **Godot 4.3 (.NET/mono) ／ .NET 8 ターゲット ／ C# 12**。実機起動可能・776 テスト緑 | **すべての新規実装はここ** |
 | 凍結された旧本体 | `apps/`・`packages/`・`scripts/`・`config/jobs.json`・`tools/` | Bun + Hono + React + Vite の TypeScript 版。もうゲームには一切繋がっていない | **参照専用（変更禁止・原則放置）**。アーキタイプ検証の歴史的レファレンス |
 
 旧 TS 版は「先に TS で検証 → C# へ翻訳」というかつてのフローの名残で、今は完全に役目を終えている。
@@ -42,7 +42,7 @@ generated_csharp/
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
 ├── Assets/Textures/{Jobs|Backgrounds|Enemies}/  ジョブ立ち絵16枚＋背景4・敵5（背景/敵は原色プレースホルダ）
-└── Tests/       xUnit 単体テスト（Core を対象。756 pass）
+└── Tests/       xUnit 単体テスト（Core を対象。776 pass）
 ```
 
 ### A-2. 技術スタック
@@ -77,7 +77,7 @@ generated_csharp/
 | コマンド | 内容 |
 |---|---|
 | `dotnet build ChronicleKnights.csproj --configuration Debug` | 本体ビルド（Godot.NET.Sdk） |
-| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**756 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
+| `dotnet test Tests/ChronicleKnights.Tests.csproj` | xUnit 全テスト（**776 pass / 0 fail**）。net8 ターゲットを RollForward で net10 上実行 |
 | `./play.command` | C# 自動ビルド → `godot --path .` で実機起動 |
 | `./play.command -e` | Godot エディタを開く |
 | `godot --path .` | （ビルド済み前提で）直接起動 |
@@ -95,8 +95,13 @@ generated_csharp/
 ### B-1. 設計の核心 — Unit は「数値ステータスも HP も持たない」
 
 TS 版の `Unit` は HP・攻撃力・速度を自前で保持していたが、**C# 版は意図的にそれらを捨てた**。
-`Unit` が持つのは「個体の履歴・属性」だけ。戦闘数値は `unit.Job` から `JobMaster.All[Job].Stats` で
-**動的解決**する（数値の SoT は `JobMaster` ただ 1 つ）。
+`Unit` が持つのは「個体の履歴・属性」だけ。戦闘数値は `unit.Job` から `JobMaster.All[Job].Stats` を
+**素値**として引き、`UnitStatProfile`（`Core/Unit/UnitStatProfile.cs`）が **レベル成長＋三段階加齢** を掛けた
+**実効値**へ動的解決する（素値の SoT は `JobMaster`、成長係数の SoT は `UnitStatProfile`）。
+`BattleManager`/`BattleResolver` はユニットの戦闘ステを必ず `UnitStatProfile` 経由で読む（素の JobStats を直読しない）:
+- **レベル成長**: Lv ごと +25%（Lv1=×1.0 / Lv2=×1.25 / Lv3=×1.5）。
+- **三段階加齢**: 修業期（`MaturityAge`=25 未満）=`age/25` の線形成長 → 全盛期（25〜`DeclineAge`=45）=1.0 → 衰退期（45 超）=`0.97^(age-45)` の年 3% 減。
+- 0 値の項（多くの BDEF/BUF/HEAL）は 0 のまま（係数で 1 に膨らませない保護）。さらに装備ボーナスが加算される。
 
 | プロパティ | 型 | 説明 |
 |---|---|---|
@@ -410,7 +415,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ## H. テスト規約と検証
 
-実体: `generated_csharp/Tests/`（xUnit / **756 pass / 0 fail**）
+実体: `generated_csharp/Tests/`（xUnit / **776 pass / 0 fail**）
 
 ### H-1. テスト方針
 
@@ -481,7 +486,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 ## K. 主要ファイルマップ（`generated_csharp/`）
 
 ### Core（純粋ロジック・48 ファイル）
-- `Core/Unit/Unit.cs` `Equipment.cs` `InventoryService.cs` `EquipmentDropService.cs` `AffixMaster.cs` — 旅団員・装備・持ち物・ドロップ・Affix
+- `Core/Unit/Unit.cs` `UnitStatProfile.cs`（実効ステ＝素値×レベル成長×三段階加齢） `Equipment.cs` `InventoryService.cs` `EquipmentDropService.cs` `AffixMaster.cs` — 旅団員・成長・装備・持ち物・ドロップ・Affix
 - `Core/Job/JobMaster.cs` `JobData.cs` `JobCodex.cs` — ジョブ数値 SoT・enum
 - `Core/GameFlow/GamePhase.cs` `PlannedAction.cs` `RestOutcome.cs` `ScreenVisibility.cs` — フェーズ・行動・休息・画面可視ルール
 - `Core/Formation/FormationBoard.cs` `DeploymentGate.cs` — V 字盤面・無人出撃封鎖

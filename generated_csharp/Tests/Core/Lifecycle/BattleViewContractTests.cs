@@ -33,7 +33,8 @@ public class BattleViewContractTests
     {
         Id           = id,
         Job          = job,
-        Age          = 20,
+        // 全盛期年齢（UnitStatProfile.MaturityAge〜DeclineAge）＝成長係数 1.0。素のジョブ値で HP 契約を検証。
+        Age          = 25,
         MaxAge       = 60,
         FirstNameKey = "first-battle",
         LastNameKey  = "last-battle",

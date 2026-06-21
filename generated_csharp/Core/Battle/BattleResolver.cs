@@ -352,6 +352,7 @@ public static class BattleResolver
     private static int ResolveMaxHitPoints(Unit unit)
     {
         var definition = JobMaster.Find(unit.Job);
-        return definition?.Stats.MaxHp ?? 0;
+        // レベル成長＋加齢成長を反映した実効 MaxHp（素の JobStats を直接読まない）。
+        return definition is null ? 0 : UnitStatProfile.EffectiveStats(definition.Stats, unit.Level, unit.Age).MaxHp;
     }
 }
