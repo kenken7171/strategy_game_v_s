@@ -392,7 +392,7 @@ public class StrategyPlaythroughSimulationTests
         foreach (var line in r.Log) Console.WriteLine(line);
         Console.WriteLine("--- FINAL BRIGADE (enlisted, age>=15) ---");
         foreach (var line in r.EnlistedLines) Console.WriteLine(line);
-        Console.WriteLine("--- GROWTH base->effective (equipment only; Lv/age never scale unit combat) ---");
+        Console.WriteLine("--- GROWTH base->effective (Lv x age via UnitStatProfile; equipment adds on top) ---");
         foreach (var line in r.GrowthLines) Console.WriteLine(line);
     }
 
