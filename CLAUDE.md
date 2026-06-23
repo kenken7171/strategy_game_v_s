@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: ユニット成長の復活（仕様・旧TS版に在り C#移植で欠落していた「レベル成長＋三段階加齢」を `Core/Unit/UnitStatProfile.cs` で実装。Lvごと+25%／修業期=成長→全盛期=素値→衰退期=年12%減（旅団長判断で旧3%から強化）。`BattleManager`/`BattleResolver` が実効ステを本解決器経由で読む。検証 `UnitStatProfileTests`、戦闘契約テストは全盛期年齢fixtureで不変）／ 検収: `dotnet test` 776 pass / 0 fail。
+> 最終更新の根拠: ユニット成長の復活（仕様・旧TS版に在り C#移植で欠落していた「レベル成長＋三段階加齢」を `Core/Unit/UnitStatProfile.cs` で実装。Lvごと+25%／修業期=成長→全盛期=素値→衰退期=年12%減（旅団長判断で旧3%から強化）。`BattleManager`/`BattleResolver` が実効ステを本解決器経由で読む。検証 `UnitStatProfileTests`、戦闘契約テストは全盛期年齢fixtureで不変）。さらに婚姻で生まれた子の**血統継承ボーナス**（両親の高ステ差分50%＝`MarriageService.InheritedBonusShare`、`Unit.InheritedBonus`、セーブ v8）を実装し `UnitStatProfile` が素値へ合算。検証 `InheritedBonusTests`／ 検収: `dotnet test` 783 pass / 0 fail。
 
 ---
 
@@ -101,6 +101,8 @@ TS 版の `Unit` は HP・攻撃力・速度を自前で保持していたが、
 `BattleManager`/`BattleResolver` はユニットの戦闘ステを必ず `UnitStatProfile` 経由で読む（素の JobStats を直読しない）:
 - **レベル成長**: Lv ごと +25%（Lv1=×1.0 / Lv2=×1.25 / Lv3=×1.5）。
 - **三段階加齢**: 修業期（`MaturityAge`=25 未満）=`age/25` の線形成長 → 全盛期（25〜`DeclineAge`=45）=1.0 → 衰退期（45 超）=`0.88^(age-45)` の年 12% 減（`DeclineRetentionPerYear`=0.88・旅団長判断で旧 0.97/3% から強化）。
+- **血統継承ボーナス**: 婚姻で生まれた子は `Unit.InheritedBonus`（加算 JobStats）を持ち、`UnitStatProfile` が
+  素値へ合算してから Lv×加齢を掛ける（各ステ「両親ジョブの高い方−継承ジョブ値」の差分 50%＝`MarriageService.InheritedBonusShare`。後述 E-3）。
 - 0 値の項（多くの BDEF/BUF/HEAL）は 0 のまま（係数で 1 に膨らませない保護）。さらに装備ボーナスが加算される。
 
 | プロパティ | 型 | 説明 |
@@ -282,6 +284,7 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 - コスト = `ceil((父TargetRating×倍率 + 母TargetRating×倍率) / 20)`（`CostDivisor=20`）。
 - **自然婚姻（コスト 0）**: 双方向 `BattleAffinity` がともに **150 以上**（`NaturalMarriageThreshold=150`）なら無償。
 - 子: Level 1・ジョブは父母から 50/50 継承（`OverrideJob` 可）・Origin も 50/50 継承・名前は文化圏プールから自動払い出し・好感度/装備は空。
+- **血統継承ボーナス**（`MarriageService.CalculateInheritedBonus`）: 子は各ステで `max(0, max(父,母) − 子の継承ジョブ値) × 0.5`（`InheritedBonusShare=0.5`）を加算ボーナス `Unit.InheritedBonus` として受ける（両親の良いとこ取りを半分。全項目 0 なら null）。各ジョブの最高値が天井で暴走しない。`UnitStatProfile` が素値へ合算し Lv×加齢が乗る。
 - 死亡同士は不可（例外）。`ChronicleGlobal.ExecuteMarriage` は例外を握り潰し null を返す（UI を落とさない）。
 
 ### E-4. 外様スカウト `ScoutService`
@@ -461,7 +464,7 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 
 - `user://save_data.json` に **未暗号化の整形 JSON** で保存（可読性・デバッグ性優先）。
 - アトミック書き込み（`.tmp` 書き切り → 本ファイルを `.bak` へ退避 → リネーム）でクラッシュ耐性。
-- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 7。v5=持ち物 Inventory / v6=旅団史の Gender 追加 / v7=予言 Rarity 追加・旧版は既定値（Bronze 等）で後方互換）。
+- 可変 DTO 経由でマッピング（enum は文字列、Guid キー辞書は文字列キー化）、`Version` でスキーマ管理（現 8。v5=持ち物 Inventory / v6=旅団史の Gender 追加 / v7=予言 Rarity 追加 / v8=血統継承ボーナス `Unit.InheritedBonus` 追加・旧版は既定値（Bronze / null 等）で後方互換）。
 - **保存対象**: 経済 / タイムライン / ロスタ / `_chronicleLog` / 持ち物 `BrigadeInventory`（v5）。**非保存**: Random・盤面・戦闘・英霊アーカイブ・保留年数・選択待ちドロップ。
 - ロード時は新しい Random を再注入し、`CurrentPhase` は **常に Chronicle から再開**。
 

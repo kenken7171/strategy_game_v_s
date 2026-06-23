@@ -184,6 +184,15 @@ public sealed record Unit
     /// </summary>
     public Guid? SpouseId { get; init; }
 
+    /// <summary>
+    /// 血統継承ボーナス（加算ステ）。婚姻で生まれた子のみ非 null。
+    /// 各ステで「両親ジョブの高い方 − 子の継承ジョブ値」の差分の一部（<see cref="Managers.MarriageService.InheritedBonusShare"/>
+    /// ＝50%）を加算した値を持つ。<see cref="UnitStatProfile"/> が素のジョブ値へ本ボーナスを合算した上で
+    /// Lv×加齢係数を掛けるため、子は「両親の良いとこ取り」を半分だけ受け、その後の成長・衰退も乗る。
+    /// 既定 null = ボーナスなし（スカウト・初代・両親が同職で差分ゼロの子）。
+    /// </summary>
+    public JobStats? InheritedBonus { get; init; }
+
     // ─── 派生プロパティ（純粋な読み取り専用） ─────────────────────────────
 
     /// <summary>戦闘で死亡しておらず、かつ寿命にも達していない状態。</summary>

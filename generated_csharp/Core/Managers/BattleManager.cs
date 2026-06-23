@@ -185,7 +185,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.BattalionDefense)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).BattalionDefense;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus).BattalionDefense;
         }
         return total;
     }
@@ -210,7 +210,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.SquadDefense)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).SquadDefense;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus).SquadDefense;
         }
         return total;
     }
@@ -412,7 +412,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
             var def = JobMaster.Find(buffer.Job);
             if (def is null) continue;
-            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age).Speed;
+            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age, buffer.InheritedBonus).Speed;
         }
         return total;
     }
@@ -436,7 +436,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(buffer.Job, PassiveKind.InitiativeBuff)) continue;
             var def = JobMaster.Find(buffer.Job);
             if (def is null) continue;
-            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age).InitiativeBuff;
+            total += UnitStatProfile.EffectiveStats(def.Stats, buffer.Level, buffer.Age, buffer.InheritedBonus).InitiativeBuff;
         }
         return total;
     }
@@ -453,7 +453,7 @@ public static class BattleManager
         ArgumentNullException.ThrowIfNull(battalion);
 
         var def = JobMaster.Find(unit.Job);
-        var baseSpeed = def is null ? 0 : UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).Speed;
+        var baseSpeed = def is null ? 0 : UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus).Speed;
         return baseSpeed + CalculateBroadcastSpeedBonus(unit, battalion) + EquipmentSpeedBonus(unit);
     }
 
@@ -535,7 +535,7 @@ public static class BattleManager
         var def = JobMaster.Find(unit.Job);
         if (def is null) return 0;
 
-        var eff = UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age);
+        var eff = UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus);
         var rowAttack = row == SquadRow.Front ? eff.FrontAttack : eff.RearAttack;
         var attackBonus = CalculateBroadcastAttackBonus(unit, battalion);
         var equipmentAttack = EquipmentAttackBonus(unit); // 装備由来 ATK を素手攻撃へ合流。
@@ -561,7 +561,7 @@ public static class BattleManager
             if (!JobMaster.HasPassive(unit.Job, PassiveKind.TurnEndSquadHeal)) continue;
             var def = JobMaster.Find(unit.Job);
             if (def is null) continue;
-            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age).TurnEndSquadHeal;
+            total += UnitStatProfile.EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus).TurnEndSquadHeal;
         }
         return total;
     }

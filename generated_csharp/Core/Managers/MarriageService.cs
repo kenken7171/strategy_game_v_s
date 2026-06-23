@@ -131,6 +131,12 @@ public static class MarriageService
     /// </summary>
     public const int CostDivisor = 20;
 
+    /// <summary>
+    /// 血統継承ボーナスの取り分。子は各ステで「両親ジョブの高い方 − 子の継承ジョブ値」の
+    /// 差分の本割合だけをボーナスとして受ける（旅団長判断 2026-06-22: 差分の 50%）。
+    /// </summary>
+    public const double InheritedBonusShare = 0.5;
+
     // ─── 自然婚姻判定 ─────────────────────────────────────────────────────
 
     /// <summary>
@@ -189,6 +195,54 @@ public static class MarriageService
 
         var weighted = (fatherRating * fatherMul) + (motherRating * motherMul);
         return (int)Math.Ceiling(weighted / CostDivisor);
+    }
+
+    // ─── 血統継承ボーナス算出 ─────────────────────────────────────────────
+
+    /// <summary>
+    /// 子の血統継承ボーナス（加算ステ）を算出する純粋関数。子は継承ジョブの素値を基礎としつつ、
+    /// 各ステで「両親ジョブの高い方 − 継承ジョブ値」が正の差分について <see cref="InheritedBonusShare"/>
+    /// （＝50%）をボーナスとして上乗せできる（＝両親の良いとこ取りを半分だけ受ける）。
+    ///
+    /// 例: 父=重装歩兵(RA20) × 母=呪術師(RA120)、子が重装歩兵を継承 →
+    ///     RA ボーナス = round((120 − 20) × 0.5) = +50（実効 RA は素 20＋50＝70 を基礎に Lv×加齢が乗る）。
+    ///
+    /// 全項目 0（両親が同職、または継承ジョブが両親双方以上）の場合は null を返す（ボーナスなし）。
+    /// ジョブ未定義が混じる場合も null。
+    /// </summary>
+    public static JobStats? CalculateInheritedBonus(JobId childJob, JobId fatherJob, JobId motherJob)
+    {
+        var child  = JobMaster.Find(childJob)?.Stats;
+        var father = JobMaster.Find(fatherJob)?.Stats;
+        var mother = JobMaster.Find(motherJob)?.Stats;
+        if (child is null || father is null || mother is null) return null;
+
+        static int Share(int childStat, int fatherStat, int motherStat)
+        {
+            var surplus = Math.Max(fatherStat, motherStat) - childStat;
+            return surplus <= 0
+                ? 0
+                : (int)Math.Round(surplus * InheritedBonusShare, MidpointRounding.AwayFromZero);
+        }
+
+        var bonus = new JobStats
+        {
+            MaxHp            = Share(child.MaxHp, father.MaxHp, mother.MaxHp),
+            Speed            = Share(child.Speed, father.Speed, mother.Speed),
+            FrontAttack      = Share(child.FrontAttack, father.FrontAttack, mother.FrontAttack),
+            RearAttack       = Share(child.RearAttack, father.RearAttack, mother.RearAttack),
+            BattalionDefense = Share(child.BattalionDefense, father.BattalionDefense, mother.BattalionDefense),
+            SquadDefense     = Share(child.SquadDefense, father.SquadDefense, mother.SquadDefense),
+            InitiativeBuff   = Share(child.InitiativeBuff, father.InitiativeBuff, mother.InitiativeBuff),
+            TurnEndSquadHeal = Share(child.TurnEndSquadHeal, father.TurnEndSquadHeal, mother.TurnEndSquadHeal),
+        };
+
+        var allZero = bonus is
+        {
+            MaxHp: 0, Speed: 0, FrontAttack: 0, RearAttack: 0,
+            BattalionDefense: 0, SquadDefense: 0, InitiativeBuff: 0, TurnEndSquadHeal: 0,
+        };
+        return allZero ? null : bonus;
     }
 
     // ─── 結婚コスト見積もり（UI 表示用） ──────────────────────────────────
@@ -276,6 +330,10 @@ public static class MarriageService
         var inheritedJob = newborn.OverrideJob
             ?? (rng.NextDouble() < 0.5 ? father.Job : mother.Job);
 
+        // 3b. 血統継承ボーナス: 継承しなかった側の親が高いステの差分 50% を加算ボーナスとして受ける
+        //     （両親の良いとこ取りを半分だけ。全項目 0 なら null）。
+        var inheritedBonus = CalculateInheritedBonus(inheritedJob, father.Job, mother.Job);
+
         // 4. 文化圏は両親のどちらかを 50%/50% で継承（血統系譜の追跡）。
         var childOrigin = rng.NextDouble() < 0.5 ? father.Origin : mother.Origin;
 
@@ -305,6 +363,8 @@ public static class MarriageService
             IsDead = false,
             // ★ 血統リンクを刻む。これが家系図の縦軸（父母→子）の唯一のソース。
             Parentage = new Parentage { FatherId = father.Id, MotherId = mother.Id },
+            // ★ 血統継承ボーナス（両親の良いとこ取り 50%）。UnitStatProfile が素値へ合算して解決する。
+            InheritedBonus = inheritedBonus,
         };
 
         // 6. 婚姻の横リンク（配偶者）を双方へ相互定着させる。呼び出し側が roster の

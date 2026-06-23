@@ -2,7 +2,8 @@
 //  ChronicleKnights — Core/Unit/UnitStatProfile.cs
 // -----------------------------------------------------------------------------
 //  ユニットの「実効戦闘ステータス」を解決する純粋関数。素のジョブ値（JobMaster の
-//  JobStats）へ ① レベル成長 ② 三段階加齢（修業期→全盛期→衰退期）の係数を掛けて返す。
+//  JobStats）へ ⓪ 血統継承ボーナス（婚姻で生まれた子のみ・係数を掛ける前に合算）
+//  ① レベル成長 ② 三段階加齢（修業期→全盛期→衰退期）の係数を掛けて返す。
 //
 //  ★ なぜ必要か（仕様 instructions.md・旧 TS 版に在った成長が C# 移植で欠落していた）:
 //    instructions.md は「騎士は生まれ・育ち・全盛期を迎え…」と成長曲線を謳い、旧 TS 版 Unit は
@@ -66,29 +67,47 @@ public static class UnitStatProfile
     private static int Scale(int baseStat, double factor)
         => baseStat <= 0 ? baseStat : Math.Max(1, (int)Math.Round(baseStat * factor, MidpointRounding.AwayFromZero));
 
-    /// <summary>素の JobStats へ (level, age) の成長係数を掛けた実効 JobStats を返す。</summary>
-    public static JobStats EffectiveStats(JobStats baseStats, int level, int age)
+    /// <summary>2 つの JobStats を項目ごとに加算する（血統継承ボーナスを素の値へ合流させる用）。</summary>
+    private static JobStats AddStats(JobStats a, JobStats b) => a with
+    {
+        MaxHp            = a.MaxHp + b.MaxHp,
+        Speed            = a.Speed + b.Speed,
+        FrontAttack      = a.FrontAttack + b.FrontAttack,
+        RearAttack       = a.RearAttack + b.RearAttack,
+        BattalionDefense = a.BattalionDefense + b.BattalionDefense,
+        SquadDefense     = a.SquadDefense + b.SquadDefense,
+        InitiativeBuff   = a.InitiativeBuff + b.InitiativeBuff,
+        TurnEndSquadHeal = a.TurnEndSquadHeal + b.TurnEndSquadHeal,
+    };
+
+    /// <summary>
+    /// 素の JobStats へ ① 血統継承ボーナス（任意・Lv/加齢の前に合算）② (level, age) の成長係数
+    /// を掛けた実効 JobStats を返す。lineageBonus が null なら従来どおり素値のみをスケールする。
+    /// 継承ボーナスを「係数を掛ける前の基礎」へ足すため、子のボーナスも本人の成長・衰退に乗る。
+    /// </summary>
+    public static JobStats EffectiveStats(JobStats baseStats, int level, int age, JobStats? lineageBonus = null)
     {
         ArgumentNullException.ThrowIfNull(baseStats);
+        var combined = lineageBonus is null ? baseStats : AddStats(baseStats, lineageBonus);
         var f = GrowthFactor(level, age);
-        return baseStats with
+        return combined with
         {
-            MaxHp            = Scale(baseStats.MaxHp, f),
-            Speed            = Scale(baseStats.Speed, f),
-            FrontAttack      = Scale(baseStats.FrontAttack, f),
-            RearAttack       = Scale(baseStats.RearAttack, f),
-            BattalionDefense = Scale(baseStats.BattalionDefense, f),
-            SquadDefense     = Scale(baseStats.SquadDefense, f),
-            InitiativeBuff   = Scale(baseStats.InitiativeBuff, f),
-            TurnEndSquadHeal = Scale(baseStats.TurnEndSquadHeal, f),
+            MaxHp            = Scale(combined.MaxHp, f),
+            Speed            = Scale(combined.Speed, f),
+            FrontAttack      = Scale(combined.FrontAttack, f),
+            RearAttack       = Scale(combined.RearAttack, f),
+            BattalionDefense = Scale(combined.BattalionDefense, f),
+            SquadDefense     = Scale(combined.SquadDefense, f),
+            InitiativeBuff   = Scale(combined.InitiativeBuff, f),
+            TurnEndSquadHeal = Scale(combined.TurnEndSquadHeal, f),
         };
     }
 
-    /// <summary>ユニットの実効戦闘ステを解決する（ジョブ未定義なら null）。</summary>
+    /// <summary>ユニットの実効戦闘ステを解決する（血統継承ボーナス込み・ジョブ未定義なら null）。</summary>
     public static JobStats? Resolve(Unit unit)
     {
         ArgumentNullException.ThrowIfNull(unit);
         var def = JobMaster.Find(unit.Job);
-        return def is null ? null : EffectiveStats(def.Stats, unit.Level, unit.Age);
+        return def is null ? null : EffectiveStats(def.Stats, unit.Level, unit.Age, unit.InheritedBonus);
     }
 }

@@ -104,8 +104,10 @@ public static class SaveSerializer
     ///     後方互換復元。年代記ログに性別別のジョブ立ち絵アイコンを出すため）。
     /// v7: 予言 Prophecy に Rarity（Bronze/Silver/Gold）を追加（旧 v1〜v6 セーブは欠落 →
     ///     既定 Bronze で後方互換復元。ProphecyMaster のレア度カードを保存するため）。
+    /// v8: 血統継承ボーナス（Unit.InheritedBonus）を追加（旧 v1〜v7 セーブは欠落 → null で
+    ///     後方互換復元。婚姻で生まれた子の「両親の良いとこ取り 50%」加算ステを保存するため）。
     /// </summary>
-    public const int CurrentSaveVersion = 7;
+    public const int CurrentSaveVersion = 8;
 
     // ─── JSON シリアライズ設定 ────────────────────────────────────────────
 
@@ -243,12 +245,26 @@ public static class SaveSerializer
         // 血統リンク（v3）。婚姻で生まれた子のみ非 null（初代は null で省略される）。
         Parentage = u.Parentage is null ? null : ToDto(u.Parentage),
         SpouseId = u.SpouseId,
+        // 血統継承ボーナス（v8）。婚姻で生まれた子のみ非 null。
+        InheritedBonus = u.InheritedBonus is null ? null : ToDto(u.InheritedBonus),
     };
 
     private static ParentageDto ToDto(Parentage p) => new()
     {
         FatherId = p.FatherId,
         MotherId = p.MotherId,
+    };
+
+    private static JobStatsDto ToDto(JobStats s) => new()
+    {
+        MaxHp            = s.MaxHp,
+        Speed            = s.Speed,
+        FrontAttack      = s.FrontAttack,
+        RearAttack       = s.RearAttack,
+        BattalionDefense = s.BattalionDefense,
+        SquadDefense     = s.SquadDefense,
+        InitiativeBuff   = s.InitiativeBuff,
+        TurnEndSquadHeal = s.TurnEndSquadHeal,
     };
 
     private static EquipmentDto ToDto(Equipment e) => new()
@@ -338,6 +354,8 @@ public static class SaveSerializer
             // 血統リンク（v3）。旧 v1/v2 セーブは欠落 → null で後方互換復元。
             Parentage      = d.Parentage is null ? null : FromDto(d.Parentage),
             SpouseId       = d.SpouseId,
+            // 血統継承ボーナス（v8）。旧 v1〜v7 セーブは欠落 → null で後方互換復元。
+            InheritedBonus = d.InheritedBonus is null ? null : FromDto(d.InheritedBonus),
         };
     }
 
@@ -345,6 +363,18 @@ public static class SaveSerializer
     {
         FatherId = d.FatherId,
         MotherId = d.MotherId,
+    };
+
+    private static JobStats FromDto(JobStatsDto d) => new()
+    {
+        MaxHp            = d.MaxHp,
+        Speed            = d.Speed,
+        FrontAttack      = d.FrontAttack,
+        RearAttack       = d.RearAttack,
+        BattalionDefense = d.BattalionDefense,
+        SquadDefense     = d.SquadDefense,
+        InitiativeBuff   = d.InitiativeBuff,
+        TurnEndSquadHeal = d.TurnEndSquadHeal,
     };
 
     private static Equipment FromDto(EquipmentDto d) => new()
@@ -457,6 +487,12 @@ public static class SaveSerializer
         /// 旧 v1/v2 セーブには無く欠落するため nullable とし、FromDto 側で null 許容。
         /// </summary>
         public Guid? SpouseId { get; set; }
+
+        /// <summary>
+        /// 血統継承ボーナス（加算ステ）。v8 で追加。婚姻で生まれた子のみ非 null。
+        /// 旧 v1〜v7 セーブには無く欠落するため nullable とし、FromDto 側で null 許容。
+        /// </summary>
+        public JobStatsDto? InheritedBonus { get; set; }
     }
 
     /// <summary>Parentage（血統リンク）の保存形。v3 で追加。</summary>
@@ -464,6 +500,19 @@ public static class SaveSerializer
     {
         public Guid FatherId { get; set; }
         public Guid MotherId { get; set; }
+    }
+
+    /// <summary>JobStats（加算ステ＝血統継承ボーナス）の保存形。v8 で追加。</summary>
+    private sealed class JobStatsDto
+    {
+        public int MaxHp { get; set; }
+        public int Speed { get; set; }
+        public int FrontAttack { get; set; }
+        public int RearAttack { get; set; }
+        public int BattalionDefense { get; set; }
+        public int SquadDefense { get; set; }
+        public int InitiativeBuff { get; set; }
+        public int TurnEndSquadHeal { get; set; }
     }
 
     /// <summary>Equipment の保存形。</summary>
