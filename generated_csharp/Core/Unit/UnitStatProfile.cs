@@ -12,10 +12,10 @@
 //
 //  ★ 係数（旅団長決定 2026-06-21）:
 //    レベル成長 : Lv ごと +25%（Lv1=×1.0 / Lv2=×1.25 / Lv3=×1.5）。
-//    加齢（三段階・旧 TS 版と同式）:
+//    加齢（三段階。修業期/全盛期は旧 TS 版と同式、衰退率は旅団長判断で強化）:
 //      - 修業期 (age < MaturityAge)         : ageFactor = age / MaturityAge（全盛期へ向かい線形成長）
 //      - 全盛期 (MaturityAge..DeclineAge)   : ageFactor = 1.0
-//      - 衰退期 (age > DeclineAge)           : ageFactor = DeclineRetentionPerYear^(age - DeclineAge)（年 3% 減）
+//      - 衰退期 (age > DeclineAge)           : ageFactor = DeclineRetentionPerYear^(age - DeclineAge)（年 12% 減）
 //    実効       = round(base × levelMult × ageFactor)。base が 0 の項は 0 のまま（治癒/防御の 0 を 1 に
 //                 しないための保護）。base>0 は最低 1 を保証する。
 //
@@ -37,8 +37,8 @@ public static class UnitStatProfile
     /// <summary>衰退期に入る年齢。これを超えると毎年 <see cref="DeclineRetentionPerYear"/> ずつステが落ちる。</summary>
     public const int DeclineAge = 45;
 
-    /// <summary>衰退期の年あたり残存率（0.97＝年 3% 減・旧 TS 版と同式）。</summary>
-    public const double DeclineRetentionPerYear = 0.97;
+    /// <summary>衰退期の年あたり残存率（0.88＝年 12% 減。旧 TS 版 0.97＝年 3% 減より旅団長判断で強化）。</summary>
+    public const double DeclineRetentionPerYear = 0.88;
 
     /// <summary>レベル 1 段あたりの戦闘ステ上昇率（+25% / Lv）。</summary>
     public const double LevelGrowthPerLevel = 0.25;
@@ -49,14 +49,14 @@ public static class UnitStatProfile
 
     /// <summary>
     /// 三段階の加齢係数。修業期(age&lt;MaturityAge)=age/MaturityAge の線形成長 / 全盛期(..DeclineAge)=1.0 /
-    /// 衰退期(&gt;DeclineAge)=DeclineRetentionPerYear^(age-DeclineAge) の複利減（年 3%）。
+    /// 衰退期(&gt;DeclineAge)=DeclineRetentionPerYear^(age-DeclineAge) の複利減（年 12%）。
     /// </summary>
     public static double AgeFactor(int age)
     {
         if (age <= 0) return 0.0;
         if (age < MaturityAge) return (double)age / MaturityAge;          // 修業期: 全盛期へ向かい成長
         if (age <= DeclineAge) return 1.0;                               // 全盛期
-        return Math.Pow(DeclineRetentionPerYear, age - DeclineAge);     // 衰退期: 年 3% 減
+        return Math.Pow(DeclineRetentionPerYear, age - DeclineAge);     // 衰退期: 年 12% 減
     }
 
     /// <summary>レベル × 加齢の合成成長係数。</summary>

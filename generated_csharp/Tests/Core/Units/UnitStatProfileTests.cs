@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 //  ユニットの実効戦闘ステ解決（UnitStatProfile）の純粋ロジック検証。
 //    - レベル成長: Lv1=×1.0 / Lv2=×1.25 / Lv3=×1.5
-//    - 三段階加齢: 修業期(線形成長) → 全盛期(1.0) → 衰退期(年3%減)
+//    - 三段階加齢: 修業期(線形成長) → 全盛期(1.0) → 衰退期(年12%減)
 //    - 0 値の項は 0 のまま（治癒/防御の 0 を 1 に膨らませない保護）
 // =============================================================================
 
@@ -46,12 +46,12 @@ public class UnitStatProfileTests
     [Fact]
     public void AgeFactor_DeclinePhase_FallsBelowOne_AndMonotonicallyDecreases()
     {
-        // 衰退期: 0.97^(age-DeclineAge)。DeclineAge=45 → 50 で 0.97^5。
+        // 衰退期: DeclineRetentionPerYear^(age-DeclineAge)。DeclineAge=45 → 50 で 残存率^5。
         var at50 = UnitStatProfile.AgeFactor(50);
         var at60 = UnitStatProfile.AgeFactor(60);
         Assert.True(at50 < 1.0, $"decline should drop below 1.0 but was {at50}");
         Assert.True(at60 < at50, "older = weaker in decline phase");
-        Assert.Equal(System.Math.Pow(0.97, 5), at50, 6);
+        Assert.Equal(System.Math.Pow(UnitStatProfile.DeclineRetentionPerYear, 5), at50, 6);
     }
 
     // ─── 実効ステ（成長は 0 値を 0 のまま保つ） ───────────────────────────────

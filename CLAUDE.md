@@ -7,7 +7,7 @@
 > 一次仕様書（絶対ルール）は `instructions.md`。本書は「コードの実態」、instructions.md は
 > 「守るべきルール」と役割が分かれている。
 >
-> 最終更新の根拠: ユニット成長の復活（仕様・旧TS版に在り C#移植で欠落していた「レベル成長＋三段階加齢」を `Core/Unit/UnitStatProfile.cs` で実装。Lvごと+25%／修業期=成長→全盛期=素値→衰退期=年3%減。`BattleManager`/`BattleResolver` が実効ステを本解決器経由で読む。検証 `UnitStatProfileTests`、戦闘契約テストは全盛期年齢fixtureで不変）／ 検収: `dotnet test` 776 pass / 0 fail。
+> 最終更新の根拠: ユニット成長の復活（仕様・旧TS版に在り C#移植で欠落していた「レベル成長＋三段階加齢」を `Core/Unit/UnitStatProfile.cs` で実装。Lvごと+25%／修業期=成長→全盛期=素値→衰退期=年12%減（旅団長判断で旧3%から強化）。`BattleManager`/`BattleResolver` が実効ステを本解決器経由で読む。検証 `UnitStatProfileTests`、戦闘契約テストは全盛期年齢fixtureで不変）／ 検収: `dotnet test` 776 pass / 0 fail。
 
 ---
 
@@ -100,7 +100,7 @@ TS 版の `Unit` は HP・攻撃力・速度を自前で保持していたが、
 **実効値**へ動的解決する（素値の SoT は `JobMaster`、成長係数の SoT は `UnitStatProfile`）。
 `BattleManager`/`BattleResolver` はユニットの戦闘ステを必ず `UnitStatProfile` 経由で読む（素の JobStats を直読しない）:
 - **レベル成長**: Lv ごと +25%（Lv1=×1.0 / Lv2=×1.25 / Lv3=×1.5）。
-- **三段階加齢**: 修業期（`MaturityAge`=25 未満）=`age/25` の線形成長 → 全盛期（25〜`DeclineAge`=45）=1.0 → 衰退期（45 超）=`0.97^(age-45)` の年 3% 減。
+- **三段階加齢**: 修業期（`MaturityAge`=25 未満）=`age/25` の線形成長 → 全盛期（25〜`DeclineAge`=45）=1.0 → 衰退期（45 超）=`0.88^(age-45)` の年 12% 減（`DeclineRetentionPerYear`=0.88・旅団長判断で旧 0.97/3% から強化）。
 - 0 値の項（多くの BDEF/BUF/HEAL）は 0 のまま（係数で 1 に膨らませない保護）。さらに装備ボーナスが加算される。
 
 | プロパティ | 型 | 説明 |
