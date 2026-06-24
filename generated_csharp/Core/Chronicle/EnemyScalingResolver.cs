@@ -174,7 +174,7 @@ public static class EnemyScalingResolver
     /// <see cref="EnemyState"/> が返る（決定論）。個体差の SoT は <see cref="EnemyScaler.ApplyJitter"/>
     /// を再利用し二重定義しない（Chronicle → Battle の一方向結合）。
     ///
-    /// 合成順序（乱数消費を HP → 攻撃 → 速度 に固定＝EnemyScaler.ScaleTrialGuardian と同型）:
+    /// 合成順序（乱数消費を HP → 攻撃 → 速度 に固定＝決定論の核心）:
     ///   era    = ResolveEnemyStats(year, template)                       // 章の難易度・環境を畳んだ時代基準
     ///   hp     = ApplyJitter(era.Hp × HpAggregationFactor)               // 旧 10 体合算の集約＋個体差
     ///   attack = ApplyJitter(era.Attack)

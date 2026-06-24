@@ -227,9 +227,13 @@ EndBattle()                      → 戦闘後の複製を正本ロスタへ書�
 
 ### D-4. 敵生成・スケーリング
 
-- `EnemyScaler`（`Core/Battle/`）: `BaseHp=150` / `BaseAttack=30` / `BaseSpeed=100`、年率 `HpGainPerYear=5.0` /
-  `AttackGainPerYear=0.6` / `SpeedGainPerYear=0.6`、個体差ジッタ `0.85 + rng()*0.30`（**±15%**）、`PerLevelGain=0.5`、
-  `HpAggregationFactor=6`（旧 10 体合算のレガシー係数。章ボスHP壁が厚すぎ「削り切れない」実機FBで 10→6 に緩和・ATK据置）。
+- **現行の敵生成は `EnemyScalingResolver`（`Core/Chronicle/`）**: 原型テンプレ（素値 `TrialGuardian 150/30/10/100`・章ボス 4 種）に
+  年成長（`HpGainPerYear=5` / `AttackGainPerYear=1` / `DefenseGainPerYear=1` / `SpeedGainPerYear=1`）と
+  章補正（`Epoch.DifficultyScalePercent` × `EnvironmentModifierPercent`）を整数で重ね、`ComposeBattleEnemy` が個体差を乗せて 1 体を合成。
+- `EnemyScaler`（`Core/Battle/`）は**個体差プリミティブ専任**へ整理済（旧 `ScaleTrialGuardian` ＋ `BaseHp/BaseAttack/…` は撤去）:
+  個体差ジッタ `ApplyJitter`（`JitterFloor=0.85 + rng()*JitterSpan=0.30` ＝ **±15%**）と HP 集約 `HpAggregationFactor=6`
+  （旧 10 体合算の名残。章ボスHP壁が厚すぎ「削り切れない」実機FBで 10→6 に緩和・ATK据置）の SoT。`EnemyScalingResolver` が本 2 つを再利用。
+  全パラメータの実値は `docs/PARAMETERS.md` に集約。
 - `ChronicleTimelineConfig`: 100 年 / 25 年で 1 章（`YearsPerEpoch=25`）。章ボス出現年は **25 / 50 / 75 / 100**、
   時代は `EpochId{Dawn, Upheaval, Decline, Twilight}`。`BattleArchetypeForYear(year)` がその年の原型を決定論選択。
 - `ChronicleGlobal.CreateCurrentYearEnemy(seed?)` が「今年は誰と戦うか」を暦から決め、時代スケール＋個体差で敵 1 体を合成。

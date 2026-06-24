@@ -65,7 +65,7 @@
 | Scout 斥候 | 90 | 60 | 40 | 40 | 0 | 0 | 0 | 0 | 30 | — |
 
 - **TargetRating（UI 比較用総合値）** = `floor(MaxHp/5 + max(FA,RA) + SPD) + RoleBonus`（`CalculateTargetRating`）。
-  ※除数 5 は式中インライン（命名定数化されていない・後述 11 の監査参照）。
+  除数は `JobMaster.HpRatingDivisor`=5.0（UI 比較用 Rating のみ・戦闘非関与）。
 
 ## 4. 血統継承ボーナス — `Core/Managers/MarriageService.cs`
 
@@ -103,7 +103,8 @@
 
 - **レベルスケール** `ComputeScaledStat(base)`: Lv1=base ／ Lv2=base+1 ／ Lv3〜5=(base+1)×(先頭 Lv−1 個の乗算)。
 - **強化コスト** `UpgradeCostFor(lv)` = `2 × lv`（Lv1→2 は 2pt、Lv4→5 は 8pt と逓増）。
-- **自然婚姻P倍率** `AffinityMultiplier` = `(1.0 + Level×0.1) × BaseAffinityMultiplier`（×0.1 はインライン・監査参照）。
+- **自然婚姻P倍率** `AffinityMultiplier` = `(1.0 + Level × AffinityBonusPerLevel) × BaseAffinityMultiplier`（`AffinityBonusPerLevel`=0.1）。
+- レベル段差の `+1` は `Equipment.FlatBonusAboveLevel1`=1（ComputeScaledStat で参照）。
 - **装備→戦闘ステ**（`BattleManager`）: ATK = `floor(CurrentAttackPower) + AffixAttackBonus`。DEF/SPD も同様に Affix を合流。
 
 ## 6. Affix（接尾効果） — `Core/Unit/AffixMaster.cs`
@@ -126,8 +127,7 @@
 ## 7. 敵スケーリング（★現行は EnemyScalingResolver） — `Core/Chronicle/EnemyScalingResolver.cs`
 
 > 実戦の敵は `ChronicleGlobal.CreateCurrentYearEnemy` → `EnemyScalingResolver.ComposeBattleEnemy` で合成される。
-> （`Core/Battle/EnemyScaler.cs` は**旧スケーラ**で、現在は `ApplyJitter` と `HpAggregationFactor` だけが再利用される。
-> 監査 11 の二重化注記を参照。）
+> （`Core/Battle/EnemyScaler.cs` は個体差プリミティブ専任へ整理済。`ApplyJitter` と `HpAggregationFactor` を本リゾルバが再利用する。）
 
 **年成長率（1 年あたりの素増分・整数）:**
 
@@ -159,7 +159,7 @@ hp戦闘値    = ApplyJitter( era.Hp × HpAggregationFactor )
 attack/spd = ApplyJitter( era.Attack / era.Speed )
 ```
 
-**個体差ジッタ（`Core/Battle/EnemyScaler.cs`・再利用される現役部分）:**
+**個体差ジッタ（`Core/Battle/EnemyScaler.cs`・個体差プリミティブ専任）:**
 
 | 定数 | 値 | 意味 |
 |---|---:|---|
@@ -228,24 +228,21 @@ attack/spd = ApplyJitter( era.Attack / era.Speed )
 
 ## 11. 外出し監査（externalization audit）
 
-**結論: ステータス関連の数値はほぼ全て Core の名前付き定数／不変テーブルに外出し済み**（約 80 個の `const` ＋
+**結論: ステータス関連の数値は全て Core の名前付き定数／不変テーブルに外出し済み**（約 80 個の `const` ＋
 `JobMaster.All` / `Equipment.BaseStatsRegistry` / `AffixMaster.All` / `EnemyScalingResolver` テンプレ /
 `ChronicleTimelineConfig.Epochs` 等のテーブル）。UI・テスト・ロジックは全て参照側で、マジックナンバー散乱はない。
 
-ただし以下は軽微な**未命名のインライン係数**（コメントで説明はあるが `const` 化されていない）。挙動に影響はないが
-完全な外出しを徹底するなら命名定数化の余地:
+**整理済み（2026-06-22）:**
 
-1. `JobMaster.CalculateTargetRating` の `MaxHp / 5.0` の **除数 5**（UI 比較用 Rating のみ・戦闘非関与）。
-2. `Equipment.AffinityMultiplier` の `1.0 + Level × 0.1` の **レベル係数 0.1**。
-3. `Equipment.ComputeScaledStat` の Lv2 段差 `base + 1` の **+1**。
+1. 旧・未命名のインライン係数 3 件を命名定数化:
+   `JobMaster.HpRatingDivisor`=5.0 ／ `Equipment.AffinityBonusPerLevel`=0.1 ／ `Equipment.FlatBonusAboveLevel1`=1。
+2. 敵スケーラの新旧二重化を解消: 現行の実戦敵は `Core/Chronicle/EnemyScalingResolver.cs`（テンプレ＋章補正）が生成し、
+   `Core/Battle/EnemyScaler.cs` は個体差プリミティブ（`ApplyJitter` / `HpAggregationFactor` / `JitterFloor` /
+   `JitterSpan` / `MinimumStatValue`）専任へ縮約。旧 `ScaleTrialGuardian` メソッドと未使用の素値/年成長/レベル定数
+   （`BaseHp` / `BaseAttack` / `BaseSpeed` / `HpGainPerYear` / `AttackGainPerYear` / `SpeedGainPerYear` /
+   `PerLevelGain` / `BaseLevel`）は撤去。テストは `EnemyScalerTests`（ApplyJitter 直接検証）へ差し替え。CLAUDE.md D-4 も是正。
 
-また**敵スケーラの新旧二重化**に注意:
-- 現行の実戦敵は `Core/Chronicle/EnemyScalingResolver.cs`（テンプレ＋章補正）が生成する。
-- `Core/Battle/EnemyScaler.cs` は旧スケーラで、`ApplyJitter` / `HpAggregationFactor` / `JitterFloor` /
-  `JitterSpan` / `MinimumStatValue` のみ現役再利用。`BaseHp(150)` / `BaseAttack(30)` / `BaseSpeed(100)` /
-  `HpGainPerYear` / `AttackGainPerYear` / `SpeedGainPerYear` / `PerLevelGain` / `BaseLevel` ＋ `ScaleTrialGuardian`
-  メソッドは**現在どこからも呼ばれていない**（テストのみ）。CLAUDE.md D-4 は旧 EnemyScaler を現役として記述しており実態と乖離。
-  → 整理候補: 旧定数の削除と D-4 の是正（別タスク）。
+これにより、本書の各節の値はすべて単一の SoT 定数／テーブルが起点で、コード内に重複・浮きの数値は無い。
 
 > 数値を調整するときは本書の各節の SoT ファイルを直接編集すること。挙動の単体検証は `dotnet test`
 > （`UnitStatProfileTests` / `InheritedBonusTests` / `EnemyScalingResolverTests` / `*ContractTests` 等）。

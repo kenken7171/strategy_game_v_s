@@ -301,17 +301,23 @@ public static class JobMaster
     }
 
     /// <summary>
+    /// TargetRating 算出で MaxHp を攻撃・速度と同じ目盛りへ均すための除数（HP は容量値ゆえ縮約する）。
+    /// 式: floor(MaxHp / 本値 + max(FA, RA) + Speed) + RoleBonus。
+    /// </summary>
+    public const double HpRatingDivisor = 5.0;
+
+    /// <summary>
     /// UI 比較用のジョブ基準総合値を算出する（旧 baseJobRating + ROLE_BONUS）。
     /// 全ジョブの平均総合値が 140〜148 程度に揃うよう ROLE_BONUS で調整済み。
     ///
-    /// 式: floor(MaxHp / 5 + max(FrontAttack, RearAttack) + Speed) + RoleBonus
+    /// 式: floor(MaxHp / HpRatingDivisor + max(FrontAttack, RearAttack) + Speed) + RoleBonus
     /// </summary>
     public static int CalculateTargetRating(JobId id)
     {
         var def = All[id];
         var s = def.Stats;
         var baseStat = (int)Math.Floor(
-            s.MaxHp / 5.0 + Math.Max(s.FrontAttack, s.RearAttack) + s.Speed);
+            s.MaxHp / HpRatingDivisor + Math.Max(s.FrontAttack, s.RearAttack) + s.Speed);
         return baseStat + def.RoleBonus;
     }
 

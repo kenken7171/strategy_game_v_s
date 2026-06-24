@@ -120,6 +120,16 @@ public sealed record Equipment
     /// </summary>
     private static readonly double[] LevelMultipliers = { 1.2, 1.3, 1.4, 1.5 };
 
+    /// <summary>
+    /// Lv2 以上で基礎値へ一度だけ足すフラット加算（Lv2=base+1、Lv3〜5 も (base+1) を起点に累積乗算）。
+    /// </summary>
+    public const int FlatBonusAboveLevel1 = 1;
+
+    /// <summary>
+    /// 自然婚姻ポイント倍率のレベル係数。AffinityMultiplier = (1.0 + Level × 本値) × BaseAffinityMultiplier。
+    /// </summary>
+    public const double AffinityBonusPerLevel = 0.1;
+
     // ─── 5 大アイテムの基礎ステータス SoT ────────────────────────────────
 
     /// <summary>
@@ -232,10 +242,10 @@ public sealed record Equipment
     public double ComputeScaledStat(int baseValue)
     {
         if (Level <= 1) return baseValue;
-        if (Level == 2) return baseValue + 1;
+        if (Level == 2) return baseValue + FlatBonusAboveLevel1;
 
-        // Lv3 以上: (基礎値 + 1) を起点に累積乗算
-        double value = baseValue + 1;
+        // Lv3 以上: (基礎値 + フラット加算) を起点に累積乗算
+        double value = baseValue + FlatBonusAboveLevel1;
         int multiplierCount = Math.Min(Level - 1, LevelMultipliers.Length);
         for (int i = 0; i < multiplierCount; i++)
         {
@@ -284,7 +294,7 @@ public sealed record Equipment
     /// 将来 Affix システムで追加倍率を載せる場合は、本プロパティの戻り値に
     /// 別途累積乗算する設計の余白を BaseAffinityMultiplier が提供している。
     /// </summary>
-    public double AffinityMultiplier => (1.0 + Level * 0.1) * BaseStats.BaseAffinityMultiplier;
+    public double AffinityMultiplier => (1.0 + Level * AffinityBonusPerLevel) * BaseStats.BaseAffinityMultiplier;
 
     // ─── 強欲効果フラグ ───────────────────────────────────────────────────
 
