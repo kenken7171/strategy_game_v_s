@@ -57,6 +57,7 @@
 ローダ: `UserInterface/EnemyTextureLibrary.cs`（**実装済**）。現状は動作確認用の原色べた塗りを配置済（本番アートで上書きするだけでよい）。
 
 `EnemyArchetype` は5種。`TrialGuardian` は全時代の通常敵、残り4種は各章ボス（出現年 25/50/75/100）。
+**生成プロンプト（Scenario 用・英/日）は `docs/ENEMY_ART_PROMPTS.md` に集約**（ネズミ通常＋ヘビ/ワニ/ロボ/魔法騎士の章ボス）。
 
 | archetype (slug) | 役割 | 出現 | 必要ファイル |
 |---|---|---|---|

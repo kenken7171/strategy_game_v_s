@@ -520,4 +520,5 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 - `docs/system_architecture.md` / `design_blueprint.md` / `job_definitions.md` / `simulation_guide.md` — C# 版各論
 - `docs/PARAMETERS.md` — **ステータス関連パラメータ全集（SoT 一覧）**。成長/ジョブ素ステ/装備/Affix/敵/経済/予言等の実値を 1 枚に集約＋外出し監査
 - `docs/VISUAL_AND_JUICE_ROADMAP.md` / `ASSET_MANIFEST.md` — 見栄え強化ロードマップ・アセット必要物
+- `docs/ENEMY_ART_PROMPTS.md` — 敵5種（ネズミ通常＋ヘビ/ワニ/ロボ/魔法騎士の章ボス）の Scenario 用生成プロンプト（英/日）
 - `PROGRESS_REPORT.md` — 実装進捗レポート
