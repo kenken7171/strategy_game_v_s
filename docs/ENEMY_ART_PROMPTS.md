@@ -52,6 +52,22 @@ deformed, mutated, messy background, scenery, ground shadow
 | `decline_tyrant` | 斜陽の暴君 | 斜陽の章ボス・75 年 | **ロボット** | 特大 |
 | `eternal_sovereign` | 永劫の覇王 | 終焉の最終章ボス・100 年 | **人型の魔法騎士** | 最大（ラスボス） |
 
+### 保存先パス（5 枚・このファイル名で上書き保存）
+
+> ファイル名は固定（slug＝enum 名の snake_case）。**すべて既に原色プレースホルダが置いてあるので、同名で上書きするだけ**。
+> リポジトリルート（`/Users/ken/work/strategy_game_v_s/`）からの相対パスは下表のとおり。Godot 内のパスは `res://Assets/Textures/Enemies/{slug}.png`。
+
+| モチーフ | 表示名 | 保存先（リポジトリルートからの相対パス） |
+|---|---|---|
+| ネズミ（通常敵） | 試練の門の守護者 | `generated_csharp/Assets/Textures/Enemies/trial_guardian.png` |
+| ヘビ（黎明ボス） | 黎明の守り手 | `generated_csharp/Assets/Textures/Enemies/dawn_warden.png` |
+| ワニ（激動ボス） | 激動の征服者 | `generated_csharp/Assets/Textures/Enemies/upheaval_conqueror.png` |
+| ロボット（斜陽ボス） | 斜陽の暴君 | `generated_csharp/Assets/Textures/Enemies/decline_tyrant.png` |
+| 魔法騎士（終焉ボス） | 永劫の覇王 | `generated_csharp/Assets/Textures/Enemies/eternal_sovereign.png` |
+
+- ファイル名は**大文字・スペース・日本語不可**（小文字 ASCII の snake_case のみ）。`.png`（RGBA・背景透過）。
+- 置けば即反映（ローダ `UserInterface/EnemyTextureLibrary.cs` 実装済・コード変更不要）。
+
 ---
 
 ## 1. 通常敵 — 試練の門の守護者（ネズミ） `trial_guardian.png`
