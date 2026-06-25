@@ -34,29 +34,7 @@ public static class EnemyTextureLibrary
         var slug = AssetSlugs.ForEnemy(archetype);
         if (slug.Length == 0) return null;
 
-        var resPath = $"{EnemyTextureRoot}{slug}.png";
-
-        // 1. Imported resource (preferred when present).
-        if (ResourceLoader.Exists(resPath))
-        {
-            var loaded = ResourceLoader.Load<Texture2D>(resPath);
-            if (loaded is not null)
-            {
-                return loaded;
-            }
-        }
-
-        // 2. Decode the raw PNG from disk (no Godot import required).
-        var diskPath = ProjectSettings.GlobalizePath(resPath);
-        if (System.IO.File.Exists(diskPath))
-        {
-            var image = Image.LoadFromFile(diskPath);
-            if (image is not null && !image.IsEmpty())
-            {
-                return ImageTexture.CreateFromImage(image);
-            }
-        }
-
-        return null;
+        // Two-stage, content-sniffing resolve (a JPEG/WebP saved as .png still loads).
+        return TextureDiskLoader.Resolve($"{EnemyTextureRoot}{slug}.png");
     }
 }

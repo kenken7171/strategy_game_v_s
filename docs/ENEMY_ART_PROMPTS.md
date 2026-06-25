@@ -9,7 +9,7 @@
 | 項目 | 指定 |
 |---|---|
 | 配置先 | `generated_csharp/Assets/Textures/Enemies/{slug}.png`（slug は下表） |
-| 形式 | PNG / RGBA・**背景透過**（Scenario の Remove Background / transparent 出力を使う） |
+| 形式 | **PNG（中身も PNG であること）/ RGBA・背景透過**（Scenario の Remove Background / transparent 出力を使う） |
 | サイズ | 正方〜やや縦長（**1024×1024 で生成 → 512×512 へ縮小**推奨。敵カード上部表示） |
 | 画風 | **既存ジョブ立ち絵（512² ドット絵）と統一**。＝高精細ピクセルアート／JRPG モンスタースプライト |
 | 構図 | 単体・中央・全身・こちらを向く・カード映えする威圧ポーズ・余白（頭上少し空け） |
@@ -212,6 +212,16 @@ dramatic rim lighting, strong silhouette, isolated on transparent background
 ```
 
 ---
+
+## ⚠ 形式の注意（敵が表示されない時はまずここ）
+
+- **拡張子 `.png` でも中身が JPEG だと、標準の Godot は読み込めない**（Godot は拡張子で画像形式を判定するため、
+  PNG デコーダが JPEG バイト列を解釈できず空画像になる）。Scenario は **JPEG で書き出すことがある**ので注意。
+- 対策（実装済み）: 本リポジトリの画像ローダ（`UserInterface/TextureDiskLoader.cs`）は**ファイルの中身（マジックバイト）で
+  形式を判定**し、`.png` 名でも中身が JPEG / WebP なら正しくデコードする。よって**多少形式がずれても表示はされる**。
+- ただし**透過（背景の切り抜き）は PNG/RGBA でしか出せない**。JPEG は透過を持てないため、JPEG を置くと
+  敵の背景が四角く残る。透明な切り抜きが欲しい場合は Scenario の **Remove Background → PNG（RGBA）で書き出す**こと。
+- 推奨運用: **PNG（RGBA・透過）で書き出して** §0 のパスへ保存。中身が PNG なら Godot のインポートも素直に通る。
 
 ## 6. Scenario 運用メモ
 
