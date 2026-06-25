@@ -10,7 +10,7 @@
 |---|---|
 | 配置先 | `generated_csharp/Assets/Textures/Enemies/{slug}.png`（slug は下表） |
 | 形式 | **PNG（中身も PNG であること）/ RGBA・背景透過**（Scenario の Remove Background / transparent 出力を使う） |
-| サイズ | 正方〜やや縦長（**1024×1024 で生成 → 512×512 へ縮小**推奨。敵カード上部表示） |
+| サイズ | 正方推奨（**1024×1024 で生成**で可）。敵カードは**画面横幅の約 60%**まで自動拡大表示（`BattleUI.EnemyPortraitWidthRatio=0.6`）。 |
 | 画風 | **既存ジョブ立ち絵（512² ドット絵）と統一**。＝高精細ピクセルアート／JRPG モンスタースプライト |
 | 構図 | 単体・中央・全身・こちらを向く・カード映えする威圧ポーズ・余白（頭上少し空け） |
 
@@ -222,6 +222,10 @@ dramatic rim lighting, strong silhouette, isolated on transparent background
 - ただし**透過（背景の切り抜き）は PNG/RGBA でしか出せない**。JPEG は透過を持てないため、JPEG を置くと
   敵の背景が四角く残る。透明な切り抜きが欲しい場合は Scenario の **Remove Background → PNG（RGBA）で書き出す**こと。
 - 推奨運用: **PNG（RGBA・透過）で書き出して** §0 のパスへ保存。中身が PNG なら Godot のインポートも素直に通る。
+- 現状の5枚: Scenario 出力が JPEG（白〜色付き背景・不透明）だったため、**縁から色連続でフラッドする自動背景除去**
+  （`scripts/`相当の一時処理・許容差 8）で透過を焼き込み済み（本体は保持・背景 ~43–62% を除去）。ただし
+  **自動除去は完璧ではない**（特に robot のように背景が本体と同系色のシーンだと縁がやや甘い）。
+  きれいな切り抜きが要るなら **Scenario の Remove Background → PNG(RGBA)** で書き出して同名上書きするのが確実。
 
 ## 6. Scenario 運用メモ
 

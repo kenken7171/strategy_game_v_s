@@ -76,6 +76,12 @@ public partial class BattleUI : Godot.Control
     /// <summary>data-testid を載せるメタキー（Godot ノードメタ）。</summary>
     private const string TestIdMetaKey = "data_testid";
 
+    /// <summary>敵ポートレートが占める画面横幅の割合（0.6 = 60%・旅団長指定）。</summary>
+    private const float EnemyPortraitWidthRatio = 0.6f;
+
+    /// <summary>敵ポートレートの最小一辺（px）。極端に小さいウィンドウでの潰れ防止の下限。</summary>
+    private const float EnemyPortraitMinSidePx = 160.0f;
+
     /// <summary>
     /// 危険スロット赤枠の脈動 1 山あたりの秒数（明 → 暗 / 暗 → 明 の片道）。
     /// ループ Tween がこの周期で self_modulate のアルファを上下させ、予告対象行を脈打たせる。
@@ -368,13 +374,14 @@ public partial class BattleUI : Godot.Control
         // 敵イラスト（原型ごとの画像）。未配置なら Texture=null で非表示（従来の文字表示のまま）。
         _enemyPortrait = new TextureRect
         {
-            CustomMinimumSize = new Vector2(128, 128),
-            StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
-            ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
-            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            StretchMode         = TextureRect.StretchModeEnum.KeepAspectCentered,
+            ExpandMode          = TextureRect.ExpandModeEnum.IgnoreSize,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter, // 60% 幅の枠を中央寄せ（全幅へ伸ばさない）
+            SizeFlagsVertical   = Control.SizeFlags.ShrinkCenter,
         };
         _enemyPortrait.SetMeta(TestIdMetaKey, "battle-enemy-portrait");
         enemyCard.AddChild(_enemyPortrait);
+        ApplyEnemyPortraitSize(); // 画面横幅の約 60% を占める大きさに（リサイズは RenderEnemy で追従）
 
         // 時代スケール敵の原型を晒す無表示の testid ビーコン（RenderEnemy で原型ごとに meta を更新）。
         // 一度だけ生成し以後は更新のみ＝再描画でノードを増やさない（リークフリー）。
@@ -624,6 +631,7 @@ public partial class BattleUI : Godot.Control
         if (_enemyPortrait is not null)
         {
             _enemyPortrait.Texture = EnemyTextureLibrary.TryLoad(enemy.Archetype);
+            ApplyEnemyPortraitSize(); // 現在のウィンドウ横幅の約 60% へ追従（リサイズ反映）
         }
         // 時代スケール敵の原型を機械可読 testid へ反映（E2E・マクロ調律の計測点）。
         _enemyInstanceMarker?.SetMeta(TestIdMetaKey, $"battle-enemy-instance-{ArchetypeSlug(enemy.Archetype)}");
@@ -633,6 +641,19 @@ public partial class BattleUI : Godot.Control
 
         // ① 前面バーは即座に新 HP を示し、背面ドレインバーが遅れて追従する（被害の重みの可視化）。
         DriveEnemyHpBars(enemy.Hp, enemy.MaxHp, enemy.HpRatio);
+    }
+
+    /// <summary>
+    /// 敵ポートレートの最小サイズを「画面（ビューポート）横幅の約 60%」に合わせる。正方アートを
+    /// 想定して縦も同値とし、KeepAspectCentered で枠内にアスペクト維持で収める。極端に小さい
+    /// ウィンドウでも潰れないよう下限を設ける。ウィンドウリサイズには RenderEnemy 経由で追従する。
+    /// </summary>
+    private void ApplyEnemyPortraitSize()
+    {
+        if (_enemyPortrait is null) return;
+        var viewportWidth = GetViewportRect().Size.X;
+        var side = Mathf.Max(EnemyPortraitMinSidePx, viewportWidth * EnemyPortraitWidthRatio);
+        _enemyPortrait.CustomMinimumSize = new Vector2(side, side);
     }
 
     /// <summary>
