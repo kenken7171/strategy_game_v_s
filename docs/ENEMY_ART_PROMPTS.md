@@ -227,6 +227,13 @@ dramatic rim lighting, strong silhouette, isolated on transparent background
   **自動除去は完璧ではない**（特に robot のように背景が本体と同系色のシーンだと縁がやや甘い）。
   きれいな切り抜きが要るなら **Scenario の Remove Background → PNG(RGBA)** で書き出して同名上書きするのが確実。
 
+## 目視確認（全5体を一画面で）
+
+- **`./preview_enemies.command`**（＝`res://EnemyGallery.tscn`）を実行すると、5 体すべての敵イラストを
+  **市松模様（透過が見える）**の上に一覧表示する QA 画面が開く。100 年プレイせずに全敵を一度に確認できる。
+- 表示は**実ローダ `EnemyTextureLibrary` 経由**なので、未配置／読込失敗は各セルに `MISSING` と出る（描画パイプラインのテストになる）。
+  正常時は `OK 1024x1024` のように画素サイズが出る。透過部分は市松が透けて見える。
+
 ## 6. Scenario 運用メモ
 
 - **モデル**: ジョブ立ち絵と同じ（または近い）ピクセルアート系モデルを選ぶと 5 枚＋既存 16 枚の画風が揃う。
