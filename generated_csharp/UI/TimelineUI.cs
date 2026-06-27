@@ -78,6 +78,7 @@ public partial class TimelineUI : Godot.Control
     private Label? _turnLabel;
     private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
+    private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
 
     /// <summary>年代記ナレーションの各行を収める器（無状態：毎回 SoT から丸ごと再描画）。</summary>
     private VBoxContainer? _narrationLinesBox;
@@ -150,6 +151,17 @@ public partial class TimelineUI : Godot.Control
             var card = new VBoxContainer();
             card.AddThemeConstantOverride("separation", 4);
             card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
+
+            // カード上部のイラスト（予言種別ごと）。未配置なら null = 非表示（従来の文字表示のまま）。
+            var art = new TextureRect
+            {
+                CustomMinimumSize = new Vector2(220, 124),
+                StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
+                ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
+            };
+            art.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-{captured}");
+            card.AddChild(art);
+            _prophecyArt[i] = art;
 
             var btn = new Button
             {
@@ -296,6 +308,8 @@ public partial class TimelineUI : Godot.Control
                     $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)} {_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
                     $"値: {p.Value}";
                 btn.Modulate = RarityColor(p.Rarity); // レア度で色味を変える
+                // カード上部のイラスト（予言種別ごと）。未配置なら null = 非表示。
+                if (_prophecyArt[i] is { } art) art.Texture = ProphecyTextureLibrary.TryLoad(p.Kind);
                 // 詳細：フレーバー文 ＋ タイムスキップ年数。
                 var flavor = _chronicleGlobal.ResolveProphecyDescription(p.DescriptionKey);
                 detail.Text = $"{flavor}\n⏳ {p.SkipYears} 年経過";
@@ -306,6 +320,7 @@ public partial class TimelineUI : Godot.Control
                 btn.Modulate = Colors.White;
                 btn.Text = "—";
                 detail.Text = "";
+                if (_prophecyArt[i] is { } art) art.Texture = null;
             }
         }
     }

@@ -19,6 +19,7 @@ using System.Linq;
 using ChronicleKnights.Core.Assets;
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.Core.Timeline;
 using Xunit;
 
 namespace ChronicleKnights.Tests.Core.Assets;
@@ -44,11 +45,21 @@ public class AssetSlugsTests
     public void ForEnemy_ReturnsManifestSlug(EnemyArchetype archetype, string expected)
         => Assert.Equal(expected, AssetSlugs.ForEnemy(archetype));
 
+    [Theory]
+    [InlineData(ProphecyKind.RewardPoints, "reward_points")]
+    [InlineData(ProphecyKind.Battle, "battle")]
+    [InlineData(ProphecyKind.ScoutReward, "scout_reward")]
+    [InlineData(ProphecyKind.EquipmentDrop, "equipment_drop")]
+    [InlineData(ProphecyKind.Rest, "rest")]
+    public void ForProphecyKind_ReturnsManifestSlug(ProphecyKind kind, string expected)
+        => Assert.Equal(expected, AssetSlugs.ForProphecyKind(kind));
+
     [Fact]
     public void EverySlug_IsNonEmpty_ForDefinedEnumValues()
     {
         Assert.All(Enum.GetValues<EpochId>(), e => Assert.NotEqual(string.Empty, AssetSlugs.ForEpoch(e)));
         Assert.All(Enum.GetValues<EnemyArchetype>(), a => Assert.NotEqual(string.Empty, AssetSlugs.ForEnemy(a)));
+        Assert.All(Enum.GetValues<ProphecyKind>(), k => Assert.NotEqual(string.Empty, AssetSlugs.ForProphecyKind(k)));
     }
 
     // ─── 2. 配置の突合（ローダが引くパスに実ファイルがある） ─────────────────────
@@ -72,6 +83,17 @@ public class AssetSlugsTests
         {
             var path = Path.Combine(root, "Enemies", $"{AssetSlugs.ForEnemy(archetype)}.png");
             Assert.True(File.Exists(path), $"missing enemy art for {archetype}: {path}");
+        }
+    }
+
+    [Fact]
+    public void EveryProphecyKind_HasCardImageAtLoaderPath()
+    {
+        var root = LocateTexturesRoot();
+        foreach (var kind in Enum.GetValues<ProphecyKind>())
+        {
+            var path = Path.Combine(root, "Prophecies", $"{AssetSlugs.ForProphecyKind(kind)}.png");
+            Assert.True(File.Exists(path), $"missing prophecy card art for {kind}: {path}");
         }
     }
 

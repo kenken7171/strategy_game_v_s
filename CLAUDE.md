@@ -41,7 +41,7 @@ generated_csharp/
 ├── UI/          ☆現役 UI（Godot Control をコードで動的構築。.tscn は Main 以外不使用）
 ├── UserInterface/  現役の共有部品のみ（JobTextureLibrary ＋ Hub の D&D 部品 3 種。死蔵 View は粛清済。後述 G-3）
 ├── Config/      localization_ja.json（全日本語テキストの唯一の辞書）
-├── Assets/Textures/{Jobs|Backgrounds|Enemies}/  ジョブ立ち絵16枚＋背景4・敵5（背景/敵は原色プレースホルダ）
+├── Assets/Textures/{Jobs|Backgrounds|Enemies|Prophecies}/  ジョブ16・背景4・敵5・予言カード5（予言は原色プレースホルダ）
 └── Tests/       xUnit 単体テスト（Core を対象。776 pass）
 ```
 
@@ -522,4 +522,5 @@ Tests プロジェクトのみ restore/test（GitHub 課金分を抑えるため
 - `docs/VISUAL_AND_JUICE_ROADMAP.md` / `ASSET_MANIFEST.md` — 見栄え強化ロードマップ・アセット必要物
 - `docs/ENEMY_ART_PROMPTS.md` — 敵5種（ネズミ通常＋ヘビ/ワニ/ロボ/魔法騎士の章ボス）の Scenario 用生成プロンプト（英/日）。目視QA: `./preview_enemies.command`
 - `docs/BACKGROUND_ART_PROMPTS.md` — 戦場背景4章（黎明/激動/斜陽/終焉）の Scenario 用生成プロンプト（英/日・16:9・暗め・カード越し前提）。目視QA: `./preview_backgrounds.command`
+- `docs/PROPHECY_CARD_ART_PROMPTS.md` — 予言選択カード5種（報酬/戦闘/新人/装備/休息）の Scenario 用生成プロンプト（英/日・16:9バナー）。目視QA: `./preview_prophecies.command`
 - `PROGRESS_REPORT.md` — 実装進捗レポート

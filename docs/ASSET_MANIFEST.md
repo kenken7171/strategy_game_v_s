@@ -71,6 +71,23 @@
 
 ---
 
+## 3-2. 予言（選択）カード 🟡 原色プレースホルダ配置済（5枚・要差し替え）
+
+`res://Assets/Textures/Prophecies/{kind}.png`。Chronicle の 1 of 3 選択カード上部に表示（`TimelineUI` の `chronicle-prophecy-art-*`）。
+ローダ: `UserInterface/ProphecyTextureLibrary.cs`。生成プロンプトは `docs/PROPHECY_CARD_ART_PROMPTS.md`。目視QA: `./preview_prophecies.command`。
+
+| kind (slug) | 種別 | 必要ファイル |
+|---|---|---|
+| reward_points  | 報酬獲得 | ⬜ `Prophecies/reward_points.png` |
+| battle         | 戦闘発生 | ⬜ `Prophecies/battle.png` |
+| scout_reward   | 新人加入 | ⬜ `Prophecies/scout_reward.png` |
+| equipment_drop | 装備入手 | ⬜ `Prophecies/equipment_drop.png` |
+| rest           | 休息     | ⬜ `Prophecies/rest.png` |
+
+→ **5枚**（16:9 バナー推奨。レア度は色味で表現するので種別1枚でよい）。
+
+---
+
 ## 4. 任意（無くても動く）
 
 - **ヒットエフェクト用テクスチャ**: ロードマップ §2 の `HitEffectDirector` は `CpuParticles2D` で

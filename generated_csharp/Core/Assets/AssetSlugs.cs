@@ -20,6 +20,7 @@
 
 using ChronicleKnights.Core.Battle;
 using ChronicleKnights.Core.Chronicle;
+using ChronicleKnights.Core.Timeline;
 
 namespace ChronicleKnights.Core.Assets;
 
@@ -49,5 +50,19 @@ public static class AssetSlugs
         EnemyArchetype.DeclineTyrant     => "decline_tyrant",
         EnemyArchetype.EternalSovereign  => "eternal_sovereign",
         _                                => string.Empty,
+    };
+
+    /// <summary>
+    /// 予言種別（ProphecyKind）→ 選択カードのイラストのファイル名スラッグ。未知 enum は空文字。
+    /// パス: res://Assets/Textures/Prophecies/{ForProphecyKind(kind)}.png
+    /// </summary>
+    public static string ForProphecyKind(ProphecyKind kind) => kind switch
+    {
+        ProphecyKind.RewardPoints  => "reward_points",
+        ProphecyKind.Battle        => "battle",
+        ProphecyKind.ScoutReward   => "scout_reward",
+        ProphecyKind.EquipmentDrop => "equipment_drop",
+        ProphecyKind.Rest          => "rest",
+        _                          => string.Empty,
     };
 }
