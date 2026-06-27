@@ -22,8 +22,8 @@ namespace ChronicleKnights.UI;
 /// <summary>Standalone gallery previewing all prophecy-kind card illustrations for visual QA.</summary>
 public partial class ProphecyGalleryScreen : Control
 {
-    private const int ArtW = 260;
-    private const int ArtH = 150;
+    private const int ArtW = 190;   // portrait card art (~3:4), matches TimelineUI
+    private const int ArtH = 250;
 
     public override void _Ready()
     {
@@ -66,14 +66,32 @@ public partial class ProphecyGalleryScreen : Control
         var slug = AssetSlugs.ForProphecyKind(kind);
         var texture = ProphecyTextureLibrary.TryLoad(kind);
 
-        var card = new VBoxContainer();
-        card.AddThemeConstantOverride("separation", 4);
+        var outer = new VBoxContainer();
+        outer.AddThemeConstantOverride("separation", 4);
 
-        card.AddChild(new Label
+        outer.AddChild(new Label
         {
             Text = $"{kind}  ({slug}.png)",
             HorizontalAlignment = HorizontalAlignment.Center,
         });
+
+        // Framed portrait card panel (matches TimelineUI's card look so the preview is faithful).
+        var style = new StyleBoxFlat
+        {
+            BgColor     = new Color(0.13f, 0.14f, 0.19f, 0.98f),
+            BorderColor = new Color(1.0f, 0.86f, 0.35f, 0.9f), // gold-ish sample frame
+        };
+        style.SetBorderWidthAll(3);
+        style.SetCornerRadiusAll(12);
+        style.SetContentMarginAll(10);
+        var card = new PanelContainer();
+        card.AddThemeStyleboxOverride("panel", style);
+        card.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+        outer.AddChild(card);
+
+        var col = new VBoxContainer();
+        col.AddThemeConstantOverride("separation", 6);
+        card.AddChild(col);
 
         var art = new TextureRect
         {
@@ -82,18 +100,18 @@ public partial class ProphecyGalleryScreen : Control
             StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
             ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
         };
-        card.AddChild(art);
+        col.AddChild(art);
 
-        // Rarity tint preview row (matches TimelineUI.RarityColor on the real cards).
+        // Rarity tint preview row (matches TimelineUI's frame color on the real cards).
         var tints = new HBoxContainer();
         tints.AddThemeConstantOverride("separation", 6);
         tints.AddChild(new Label { Text = "rarity:" });
         tints.AddChild(MakeSwatch("Bronze", new Color(0.80f, 0.52f, 0.25f)));
         tints.AddChild(MakeSwatch("Silver", new Color(0.82f, 0.88f, 1.0f)));
         tints.AddChild(MakeSwatch("Gold", new Color(1.0f, 0.86f, 0.35f)));
-        card.AddChild(tints);
+        outer.AddChild(tints);
 
-        card.AddChild(new Label
+        outer.AddChild(new Label
         {
             Text = texture is null
                 ? "MISSING (TryLoad returned null)"
@@ -101,7 +119,7 @@ public partial class ProphecyGalleryScreen : Control
             HorizontalAlignment = HorizontalAlignment.Center,
         });
 
-        return card;
+        return outer;
     }
 
     private static ColorRect MakeSwatch(string name, Color color) => new()

@@ -79,6 +79,11 @@ public partial class TimelineUI : Godot.Control
     private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
     private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
+    private readonly StyleBoxFlat[] _prophecyCardStyles = new StyleBoxFlat[ProphecyOptionCount];
+
+    /// <summary>縦長カードのイラスト枠サイズ（約 3:4 のポートレート）。</summary>
+    private const int CardArtWidth = 190;
+    private const int CardArtHeight = 250;
 
     /// <summary>年代記ナレーションの各行を収める器（無状態：毎回 SoT から丸ごと再描画）。</summary>
     private VBoxContainer? _narrationLinesBox;
@@ -148,35 +153,53 @@ public partial class TimelineUI : Godot.Control
         {
             int captured = i; // closure capture safety
 
-            var card = new VBoxContainer();
-            card.AddThemeConstantOverride("separation", 4);
-            card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
+            // カードは「背景から浮く」よう、ほぼ不透明の枠付きパネルにする（背景・コンテンツカードと差を出す）。
+            var cardStyle = new StyleBoxFlat
+            {
+                BgColor     = new Color(0.13f, 0.14f, 0.19f, 0.98f),
+                BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.20f), // 既定枠色。描画時にレア度色へ差し替え。
+            };
+            cardStyle.SetBorderWidthAll(3);
+            cardStyle.SetCornerRadiusAll(12);
+            cardStyle.SetContentMarginAll(10);
+            _prophecyCardStyles[i] = cardStyle;
 
-            // カード上部のイラスト（予言種別ごと）。未配置なら null = 非表示（従来の文字表示のまま）。
+            var card = new PanelContainer();
+            card.AddThemeStyleboxOverride("panel", cardStyle);
+            card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
+            card.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin; // 縦に伸ばさず中身ぴったりの縦長カードに
+
+            var col = new VBoxContainer();
+            col.AddThemeConstantOverride("separation", 6);
+            card.AddChild(col);
+
+            // カードのイラスト（予言種別ごと・縦長）。未配置なら null = 非表示（従来の文字表示のまま）。
             var art = new TextureRect
             {
-                CustomMinimumSize = new Vector2(220, 124),
+                CustomMinimumSize = new Vector2(CardArtWidth, CardArtHeight),
                 StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
                 ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
             };
             art.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-{captured}");
-            card.AddChild(art);
+            col.AddChild(art);
             _prophecyArt[i] = art;
 
             var btn = new Button
             {
-                CustomMinimumSize = new Vector2(220, 120),
+                CustomMinimumSize = new Vector2(CardArtWidth, 64),
             };
             btn.SetMeta(TestIdMetaKey, $"chronicle-prophecy-button-{captured}");
             btn.Pressed += () => OnProphecyButtonPressed(captured);
-            card.AddChild(btn);
+            col.AddChild(btn);
 
             var detail = new Label
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
+                AutowrapMode        = TextServer.AutowrapMode.WordSmart,
+                CustomMinimumSize   = new Vector2(CardArtWidth, 0),
             };
             detail.SetMeta(TestIdMetaKey, $"chronicle-prophecy-detail-{captured}");
-            card.AddChild(detail);
+            col.AddChild(detail);
 
             _prophecyButtons[i] = btn;
             _prophecyDetailLabels[i] = detail;
@@ -307,8 +330,10 @@ public partial class TimelineUI : Godot.Control
                     $"{_chronicleGlobal.ResolveProphecyRarityIcon(p.Rarity)} {_chronicleGlobal.ResolveProphecyRarityName(p.Rarity)}\n" +
                     $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)} {_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
                     $"値: {p.Value}";
-                btn.Modulate = RarityColor(p.Rarity); // レア度で色味を変える
-                // カード上部のイラスト（予言種別ごと）。未配置なら null = 非表示。
+                // レア度はカードの枠色で示す（ボタンは白のまま＝文字を読みやすく）。
+                btn.Modulate = Colors.White;
+                if (_prophecyCardStyles[i] is { } style) style.BorderColor = RarityColor(p.Rarity);
+                // カードのイラスト（予言種別ごと）。未配置なら null = 非表示。
                 if (_prophecyArt[i] is { } art) art.Texture = ProphecyTextureLibrary.TryLoad(p.Kind);
                 // 詳細：フレーバー文 ＋ タイムスキップ年数。
                 var flavor = _chronicleGlobal.ResolveProphecyDescription(p.DescriptionKey);
@@ -320,6 +345,7 @@ public partial class TimelineUI : Godot.Control
                 btn.Modulate = Colors.White;
                 btn.Text = "—";
                 detail.Text = "";
+                if (_prophecyCardStyles[i] is { } style) style.BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.12f);
                 if (_prophecyArt[i] is { } art) art.Texture = null;
             }
         }
