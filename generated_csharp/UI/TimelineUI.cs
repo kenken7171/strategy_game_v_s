@@ -24,9 +24,9 @@
 //    └──────────────────────────────────────────────────────┘
 //
 //  シグナル購読:
-//    - EconomyChanged    → 残高ラベル再描画
 //    - TimelineChanged   → 3 ボタン再描画 (次予言反映)
 //    - StateInitialized  → 全体再描画
+//  （ポイント残高・年代は GameDirector の固定ヘッダへ集約。本画面では扱わない）
 //
 //  クリーン設計:
 //    - 略称 (BDF/SDF/AB/HL) 完全未使用
@@ -74,8 +74,6 @@ public partial class TimelineUI : Godot.Control
 
     // ─── UI 要素（_Ready でプログラマティック生成） ──────────────────────
 
-    private Label? _balanceLabel;
-    private Label? _turnLabel;
     private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
     private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
@@ -144,14 +142,7 @@ public partial class TimelineUI : Godot.Control
         };
         titleLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-title");
         header.AddChild(titleLabel);
-
-        _balanceLabel = new Label();
-        _balanceLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-balance");
-        header.AddChild(_balanceLabel);
-
-        _turnLabel = new Label();
-        _turnLabel.SetMeta(TestIdMetaKey, "chronicle-timeline-turn");
-        header.AddChild(_turnLabel);
+        // ポイント残高・年代（ターン）は GameDirector の固定ヘッダへ集約済み（重複表示を排除）。
 
         // ── ボディ：3 予言ボタン ───────────────────────────────────
         var body = new HBoxContainer();
@@ -275,7 +266,6 @@ public partial class TimelineUI : Godot.Control
     private void SubscribeSignals()
     {
         if (_chronicleGlobal is null) return;
-        _chronicleGlobal.EconomyChanged    += OnEconomyChanged;
         _chronicleGlobal.TimelineChanged   += OnTimelineChanged;
         _chronicleGlobal.StateInitialized  += OnStateInitialized;
     }
@@ -285,7 +275,6 @@ public partial class TimelineUI : Godot.Control
         if (_chronicleGlobal is null) return;
         try
         {
-            _chronicleGlobal.EconomyChanged    -= OnEconomyChanged;
             _chronicleGlobal.TimelineChanged   -= OnTimelineChanged;
             _chronicleGlobal.StateInitialized  -= OnStateInitialized;
         }
@@ -297,7 +286,6 @@ public partial class TimelineUI : Godot.Control
 
     // ─── シグナルハンドラ ─────────────────────────────────────────────────
 
-    private void OnEconomyChanged()    => RenderBalance();
     private void OnStateInitialized()  => RenderAll();
 
     /// <summary>
@@ -314,28 +302,13 @@ public partial class TimelineUI : Godot.Control
 
     private void RenderAll()
     {
-        RenderBalance();
         RenderProphecies();
         RenderNarration();
-    }
-
-    private void RenderBalance()
-    {
-        if (_chronicleGlobal is null || _balanceLabel is null) return;
-        var balance = _chronicleGlobal.CurrentEconomy.CurrentBalance;
-        _balanceLabel.Text = $"💰 残高: {balance} pt";
     }
 
     private void RenderProphecies()
     {
         if (_chronicleGlobal is null) return;
-
-        // ターン番号
-        if (_turnLabel is not null)
-        {
-            var turn = _chronicleGlobal.CurrentTimeline?.Turn ?? 0;
-            _turnLabel.Text = $"⏰ ターン {turn}";
-        }
 
         // 新しい予言を描き直すたびに、選択待ち状態はリセットする（前ターンの選択を持ち越さない）。
         _pendingProphecyIndex = -1;

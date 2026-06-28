@@ -27,7 +27,7 @@
 //   └────────────────────────────────────────────────────┘
 //
 //  シグナル購読:
-//    - EconomyChanged   → 残高 / 見積もり / 実行ボタン活性を再描画
+//    - EconomyChanged   → 見積もり / 実行ボタン活性を再描画（残高表示は固定ヘッダへ集約）
 //    - RosterChanged    → 父母セレクタ / 家系図リストを再描画
 //    - StateInitialized → 全体再描画
 //
@@ -93,7 +93,6 @@ public partial class MarriageUI : Godot.Control
 
     // ─── UI 要素 ──────────────────────────────────────────────────────────
 
-    private Label? _balanceLabel;
 
     // 今年の行動（出撃 / 休息）トグル — 編成より上流のこの拠点フェーズで決定する。
     private VBoxContainer? _actionContainer;
@@ -205,9 +204,7 @@ public partial class MarriageUI : Godot.Control
         var headerTitle = new Label { Text = "💞 婚姻・スカウト・家系図" };
         headerTitle.SetMeta(TestIdMetaKey, "marriage-header-title");
         header.AddChild(headerTitle);
-        _balanceLabel = new Label();
-        _balanceLabel.SetMeta(TestIdMetaKey, "marriage-balance");
-        header.AddChild(_balanceLabel);
+        // ポイント残高は GameDirector の固定ヘッダへ集約済み（重複表示を排除）。
 
         // ─ 今年の行動（出撃 / 休息）─────────────────────────────
         //   行動決定は編成より上流のこの拠点フェーズで行う。出撃を選べば編成画面へ入場し、
@@ -427,7 +424,7 @@ public partial class MarriageUI : Godot.Control
 
     private void OnEconomyChanged()
     {
-        RenderBalance();
+        // 残高そのものは GameDirector の固定ヘッダが表示。ここでは残高依存の見積り・活性のみ更新。
         RenderQuote(); // 残高変動で affordable が変わる可能性
         RenderScoutButton();
         RenderShop();  // 残高変動で購入・強化ボタンの活性が変わる
@@ -459,7 +456,6 @@ public partial class MarriageUI : Godot.Control
 
     private void RenderAll()
     {
-        RenderBalance();
         RenderActionChoice();
         RenderUnitSelectors();
         RenderQuote();
@@ -512,12 +508,6 @@ public partial class MarriageUI : Godot.Control
         caption.AddThemeColorOverride("font_color", Colors.Gold);
         caption.SetMeta(TestIdMetaKey, "marriage-action-caption");
         _actionContainer.AddChild(caption);
-    }
-
-    private void RenderBalance()
-    {
-        if (_chronicleGlobal is null || _balanceLabel is null) return;
-        _balanceLabel.Text = $"💰 残高: {_chronicleGlobal.CurrentEconomy.CurrentBalance} pt";
     }
 
     private void RenderUnitSelectors()
