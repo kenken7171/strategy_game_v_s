@@ -310,13 +310,14 @@ public partial class TimelineUI : Godot.Control
     }
 
     /// <summary>
-    /// 予言カードのレア度に応じた色味（Modulate）。ブロンズは無着色（標準）、シルバーは
-    /// 涼やかな白銀、ゴールドは黄金色。色は装飾でありゲームロジックには一切関与しない。
+    /// 予言カードのレア度に応じた枠色。ブロンズは銅色（茶）、シルバーは涼やかな白銀、ゴールドは
+    /// 黄金色。色は装飾でありゲームロジックには一切関与しない。未知レア度は白へ安全フォールバック。
     /// </summary>
     private static Color RarityColor(ProphecyRarity rarity) => rarity switch
     {
         ProphecyRarity.Gold   => new Color(1.0f, 0.86f, 0.35f),
         ProphecyRarity.Silver => new Color(0.82f, 0.88f, 1.0f),
+        ProphecyRarity.Bronze => new Color(0.80f, 0.52f, 0.25f),
         _                     => Colors.White,
     };
 
