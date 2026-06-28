@@ -64,7 +64,6 @@ public partial class TimelineUI : Godot.Control
 
     // ─── UI 要素（_Ready でプログラマティック生成） ──────────────────────
 
-    private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
     private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
     // 画像そのものに巻く枠（レア度色＋選択強調）のスタイル。RenderProphecies / ApplyPendingHighlight が差し替える。
@@ -167,36 +166,33 @@ public partial class TimelineUI : Godot.Control
             artStyle.SetContentMarginAll(6);
             _prophecyCardStyles[i] = artStyle;
 
+            // 画像フレームがクリックの的（選択は画像で行う）。枠＝レア度色、押下で OnProphecyCardSelected。
             var artFrame = new PanelContainer();
             artFrame.AddThemeStyleboxOverride("panel", artStyle);
             artFrame.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter; // 枠を画像幅にぴったり・中央寄せ
+            artFrame.MouseFilter = Control.MouseFilterEnum.Stop;                // クリックを拾う的
+            artFrame.MouseDefaultCursorShape = Control.CursorShape.PointingHand; // 押せると分かるカーソル
+            artFrame.GuiInput += (InputEvent ev) => OnProphecyArtGuiInput(captured, ev);
             artFrame.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-frame-{captured}");
 
             // カードのイラスト（予言種別ごと・縦長）。未配置なら null = 非表示（従来の文字表示のまま）。
+            // クリックは親フレームへ通すため MouseFilter=Ignore。
             var art = new TextureRect
             {
                 CustomMinimumSize = new Vector2(CardArtWidth, CardArtHeight),
                 StretchMode       = TextureRect.StretchModeEnum.KeepAspectCentered,
                 ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
+                MouseFilter       = Control.MouseFilterEnum.Ignore,
             };
             art.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-{captured}");
             artFrame.AddChild(art);
             card.AddChild(artFrame);
             _prophecyArt[i] = art;
 
-            // 画像の下：種別／レア度／効果量を出すボタン（クリックで選択→確定）。
-            var btn = new Button
-            {
-                CustomMinimumSize = new Vector2(CardArtWidth, 64),
-            };
-            btn.SetMeta(TestIdMetaKey, $"chronicle-prophecy-button-{captured}");
-            btn.Pressed += () => OnProphecyButtonPressed(captured);
-            card.AddChild(btn);
-
-            // 1 回目クリックで選択中になったことを示すバッジ（既定は非表示）。
+            // 1 回目クリックで選択中になったことを示すバッジ（既定は非表示）。画像クリックで切り替わる。
             var badge = new Label
             {
-                Text                = "👆 もう一度クリックで決定",
+                Text                = "👆 画像をもう一度クリックで決定",
                 HorizontalAlignment = HorizontalAlignment.Center,
                 AutowrapMode        = TextServer.AutowrapMode.WordSmart,
                 CustomMinimumSize   = new Vector2(CardArtWidth, 0),
@@ -207,7 +203,7 @@ public partial class TimelineUI : Godot.Control
             card.AddChild(badge);
             _prophecySelectedBadges[i] = badge;
 
-            // 画像の下の補助情報（タイムスキップ年数のみ。フレーバー文は表示しない）。
+            // 画像の下の情報（種別＋効果量＋タイムスキップ年数）。レア度は枠色で示すため明記しない。
             var detail = new Label
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -217,7 +213,6 @@ public partial class TimelineUI : Godot.Control
             detail.SetMeta(TestIdMetaKey, $"chronicle-prophecy-detail-{captured}");
             card.AddChild(detail);
 
-            _prophecyButtons[i] = btn;
             _prophecyDetailLabels[i] = detail;
             body.AddChild(card);
         }
@@ -273,25 +268,22 @@ public partial class TimelineUI : Godot.Control
         // 新しい予言を描き直すたびに、選択待ち状態はリセットする（前ターンの選択を持ち越さない）。
         _pendingProphecyIndex = -1;
 
-        // 3 予言ボタン
+        // 3 予言（選択は画像クリック・レア度は枠色で表現）
         var options = _chronicleGlobal.GetCurrentProphecies();
         for (int i = 0; i < ProphecyOptionCount; i++)
         {
-            var btn = _prophecyButtons[i];
             var detail = _prophecyDetailLabels[i];
-            if (btn is null || detail is null) continue;
+            if (detail is null) continue;
 
             if (i < options.Count)
             {
                 var p = options[i];
-                btn.Disabled = false;
-                // 上段＝レア度バッジ（銅/銀/金）、中段＝予言種別、下段＝効果量。
-                btn.Text =
-                    $"{_chronicleGlobal.ResolveProphecyRarityIcon(p.Rarity)} {_chronicleGlobal.ResolveProphecyRarityName(p.Rarity)}\n" +
+                // 画像の下：予言種別＋効果量＋タイムスキップ年数（レア度は明記せず枠色で示す）。
+                detail.Text =
                     $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)} {_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
-                    $"値: {p.Value}";
-                // レア度はカードの枠色で示す（ボタンは白のまま＝文字を読みやすく）。選択中表示はリセット。
-                btn.Modulate = Colors.White;
+                    $"値: {p.Value}\n" +
+                    $"⏳ {p.SkipYears} 年経過";
+                // レア度（銅/銀/金）は画像を巻く枠の色で示す。選択中強調はリセット。
                 if (_prophecyCardStyles[i] is { } style)
                 {
                     style.BorderColor = RarityColor(p.Rarity);
@@ -301,15 +293,10 @@ public partial class TimelineUI : Godot.Control
                 if (_prophecySelectedBadges[i] is { } badge) badge.Visible = false;
                 // カードのイラスト（予言種別ごと）。未配置なら null = 非表示。
                 if (_prophecyArt[i] is { } art) art.Texture = ProphecyTextureLibrary.TryLoad(p.Kind);
-                // 詳細：タイムスキップ年数のみ（フレーバー文は表示しない）。
-                detail.Text = $"⏳ {p.SkipYears} 年経過";
             }
             else
             {
-                btn.Disabled = true;
-                btn.Modulate = Colors.White;
-                btn.Text = "—";
-                detail.Text = "";
+                detail.Text = "—";
                 if (_prophecyCardStyles[i] is { } style)
                 {
                     style.BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.12f);
@@ -333,9 +320,22 @@ public partial class TimelineUI : Godot.Control
         _                     => Colors.White,
     };
 
-    // ─── ボタンアクション ─────────────────────────────────────────────────
+    // ─── 選択アクション（画像クリック＝選択の的） ─────────────────────────────
 
-    private void OnProphecyButtonPressed(int index)
+    /// <summary>
+    /// 予言カードの画像（フレーム）への GUI 入力ハンドラ。左クリックの押下のみを選択操作として拾い、
+    /// 二段階選択（1 回目＝選択中／2 回目＝確定）の <see cref="OnProphecyCardSelected"/> へ橋渡しする。
+    /// クリックは画像で行う（画像下のラベルは情報表示のみで、クリックの的ではない）。
+    /// </summary>
+    private void OnProphecyArtGuiInput(int index, InputEvent @event)
+    {
+        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+        {
+            OnProphecyCardSelected(index);
+        }
+    }
+
+    private void OnProphecyCardSelected(int index)
     {
         if (_chronicleGlobal is null) return;
         var options = _chronicleGlobal.GetCurrentProphecies();
