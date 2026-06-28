@@ -602,35 +602,24 @@ public partial class GameDirector : Godot.Control
         AddChild(_backgroundRect);
         RefreshBackground();
 
-        // ── コンテンツカード（全画面ではない半透明カード） ───────────────
-        //  画面端から ContentCardMarginPx だけ離した枠（MarginContainer）の中に、半透明の
-        //  カード（PanelContainer）を置き、その上にヘッダ＋画面を載せる。余白から最背面の
-        //  共通背景が額縁のように覗き、カード地は薄く背景を透かす（「背景の上にカード」の土台）。
-        var cardMargin = new MarginContainer { Name = "ContentCardMargin" };
-        cardMargin.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        cardMargin.AddThemeConstantOverride("margin_left", ContentCardMarginPx);
-        cardMargin.AddThemeConstantOverride("margin_top", ContentCardMarginPx);
-        cardMargin.AddThemeConstantOverride("margin_right", ContentCardMarginPx);
-        cardMargin.AddThemeConstantOverride("margin_bottom", ContentCardMarginPx);
-        AddChild(cardMargin);
+        // ── 画面を縦 1 列に分割：上端に固定ヘッダーバー、その下にコンテンツカード ───────
+        //  GameDirector 直下を VBox（outer）にし、ヘッダーは「カードの外・画面上端にくっつく
+        //  全幅の帯」として置く。カードはその下の残り領域を埋める（全フェーズ共通で固定）。
+        var outer = new VBoxContainer { Name = "DirectorOuter" };
+        outer.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        outer.AddThemeConstantOverride("separation", 0);
+        AddChild(outer);
 
-        var card = new PanelContainer { Name = "ContentCard" };
-        card.AddThemeStyleboxOverride("panel", BuildContentCardStyleBox());
-        card.SetMeta(TestIdMetaKey, "game-director-content-card");
-        cardMargin.AddChild(card);
+        // ── 固定ヘッダーバー（全幅・画面上端にくっつくほぼ不透明の帯） ──
+        var headerBar = new PanelContainer { Name = "DirectorHeaderBar" };
+        headerBar.AddThemeStyleboxOverride("panel", BuildHeaderBarStyleBox());
+        headerBar.SetMeta(TestIdMetaKey, "game-director-header-bar");
+        outer.AddChild(headerBar);
 
-        // root（ヘッダ＋画面コンテナ）はカードの子。サイズは PanelContainer が司るので
-        // FullRect アンカーは不要（カードの内側パディングぶん詰めて配置される）。
-        var root = new VBoxContainer { Name = "DirectorRoot" };
-        root.AddThemeConstantOverride("separation", 8);
-        root.SetMeta(TestIdMetaKey, "game-director-root");
-        card.AddChild(root);
-
-        // ── 常設ヘッダー：フェーズインジケータ + 次へボタン ──────────
         var header = new HBoxContainer { Name = "DirectorHeader" };
         header.AddThemeConstantOverride("separation", 16);
         header.SetMeta(TestIdMetaKey, "game-director-header");
-        root.AddChild(header);
+        headerBar.AddChild(header);
 
         // ── 常時表示の情報トリオ（ポイント／年代／フェーズ）。全フェーズ共通で固定。 ──
         _pointsLabel = new Label { Name = "PointsIndicator" };
@@ -662,12 +651,54 @@ public partial class GameDirector : Godot.Control
         _advanceButton.SetMeta(TestIdMetaKey, "game-director-advance-button");
         header.AddChild(_advanceButton);
 
+        // ── コンテンツカード（ヘッダーの下・残り領域を埋める半透明カード） ───────────
+        //  画面端から ContentCardMarginPx だけ離した枠（MarginContainer）の中に半透明カードを
+        //  置く。余白から最背面の共通背景が額縁のように覗く（「背景の上にカード」の土台）。
+        var cardMargin = new MarginContainer { Name = "ContentCardMargin" };
+        cardMargin.SizeFlagsVertical = SizeFlags.ExpandFill;
+        cardMargin.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        cardMargin.AddThemeConstantOverride("margin_left", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_top", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_right", ContentCardMarginPx);
+        cardMargin.AddThemeConstantOverride("margin_bottom", ContentCardMarginPx);
+        outer.AddChild(cardMargin);
+
+        var card = new PanelContainer { Name = "ContentCard" };
+        card.AddThemeStyleboxOverride("panel", BuildContentCardStyleBox());
+        card.SetMeta(TestIdMetaKey, "game-director-content-card");
+        cardMargin.AddChild(card);
+
+        // root（フェーズ画面コンテナの器）はカードの子。
+        var root = new VBoxContainer { Name = "DirectorRoot" };
+        root.AddThemeConstantOverride("separation", 8);
+        root.SetMeta(TestIdMetaKey, "game-director-root");
+        card.AddChild(root);
+
         // ── 画面コンテナ：4 フェーズ画面をぶら下げ、1 つだけ Visible にする ──
         _screenContainer = new Control { Name = "ScreenContainer" };
         _screenContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         _screenContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _screenContainer.SetMeta(TestIdMetaKey, "game-director-screen-container");
         root.AddChild(_screenContainer);
+    }
+
+    /// <summary>
+    /// 画面上端に貼り付く固定ヘッダーバーの地（ほぼ不透明の暗帯 + 下辺の細い境界線 + 内側パディング）。
+    /// 角丸なし・全幅で上端にくっつくことで「Web のヘッダ」的な帯になる。
+    /// </summary>
+    private static StyleBoxFlat BuildHeaderBarStyleBox()
+    {
+        var box = new StyleBoxFlat
+        {
+            BgColor     = new Color(0.05f, 0.06f, 0.09f, 0.96f),
+            BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.12f),
+        };
+        box.BorderWidthBottom = 2;          // 下辺だけ境界線を引いて本文と分ける
+        box.ContentMarginTop = 8;
+        box.ContentMarginBottom = 8;
+        box.ContentMarginLeft = 16;
+        box.ContentMarginRight = 16;
+        return box;
     }
 
     /// <summary>
@@ -882,12 +913,12 @@ public partial class GameDirector : Godot.Control
             _pointsLabel.Text = $"💰 {_chronicleGlobal.CurrentEconomy.CurrentBalance} pt";
         }
 
-        // 年代（暦の年＋章名）。未初期化時は 0 年でフォールバック。
+        // 年代（継続年数＝旅団が続いた年数＋章名）。未初期化時は 0 年でフォールバック。
         if (_eraLabel is not null)
         {
-            var year = _chronicleGlobal.CurrentTimeline?.Turn ?? 0;
-            var epoch = ChronicleTimelineConfig.EpochForYear(year);
-            _eraLabel.Text = $"📅 {year}年 〔{_chronicleGlobal.ResolveEpochName(epoch.NameKey)}〕";
+            var years = _chronicleGlobal.CurrentTimeline?.Turn ?? 0;
+            var epoch = ChronicleTimelineConfig.EpochForYear(years);
+            _eraLabel.Text = $"📅 継続 {years}年 〔{_chronicleGlobal.ResolveEpochName(epoch.NameKey)}〕";
         }
 
         // インジケータ更新：現在フェーズの日本語名を表示する。
