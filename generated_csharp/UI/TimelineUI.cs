@@ -77,6 +77,9 @@ public partial class TimelineUI : Godot.Control
     private const int CardArtWidth = 190;
     private const int CardArtHeight = 250;
 
+    /// <summary>予言カード 3 枚を横に並べるときのカード間隔（px）。広めに空けて 1 枚ずつを際立たせる。</summary>
+    private const int ProphecyCardSeparationPx = 40;
+
     /// <summary>カードの通常／選択中の地色（選択中は明るく浮かせる）。</summary>
     private static readonly Color CardBgColor = new(0.13f, 0.14f, 0.19f, 0.98f);
     private static readonly Color CardSelectedBgColor = new(0.26f, 0.30f, 0.40f, 1.0f);
@@ -133,8 +136,11 @@ public partial class TimelineUI : Godot.Control
         // （旅団年代記はヘッダの「📜 旅団年代記」ボタンから ChronicleLogOverlay として開く）。
 
         // ── ボディ：3 予言ボタン ───────────────────────────────────
+        //  画面幅いっぱいの HBox 内でカード群を中央寄せ（左端詰めをやめる）。間隔はパラメータ化。
         var body = new HBoxContainer();
-        body.AddThemeConstantOverride("separation", 12);
+        body.Alignment = BoxContainer.AlignmentMode.Center;
+        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        body.AddThemeConstantOverride("separation", ProphecyCardSeparationPx);
         body.SetMeta(TestIdMetaKey, "chronicle-prophecy-body");
         root.AddChild(body);
 
