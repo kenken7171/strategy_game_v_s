@@ -67,6 +67,7 @@ public partial class TimelineUI : Godot.Control
     private readonly Button[] _prophecyButtons = new Button[ProphecyOptionCount];
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
     private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
+    // 画像そのものに巻く枠（レア度色＋選択強調）のスタイル。RenderProphecies / ApplyPendingHighlight が差し替える。
     private readonly StyleBoxFlat[] _prophecyCardStyles = new StyleBoxFlat[ProphecyOptionCount];
     private readonly Label[] _prophecySelectedBadges = new Label[ProphecyOptionCount];
 
@@ -148,25 +149,28 @@ public partial class TimelineUI : Godot.Control
         {
             int captured = i; // closure capture safety
 
-            // カードは「背景から浮く」よう、ほぼ不透明の枠付きパネルにする（背景・コンテンツカードと差を出す）。
-            var cardStyle = new StyleBoxFlat
+            // カード自体は枠なし・透明の縦並び。枠（レア度色＋選択強調）は画像そのものに付ける。
+            var card = new VBoxContainer();
+            card.AddThemeConstantOverride("separation", 6);
+            card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
+            card.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin; // 縦に伸ばさず中身ぴったりの縦長カードに
+
+            // 画像のフレーム：レア度色の枠を画像そのものに巻く PanelContainer。描画時に枠色・太さ・
+            // 地色（選択強調）を差し替える。地色を少し覗かせる余白（ContentMargin）で枠が読みやすい。
+            var artStyle = new StyleBoxFlat
             {
                 BgColor     = CardBgColor,
                 BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.20f), // 既定枠色。描画時にレア度色へ差し替え。
             };
-            cardStyle.SetBorderWidthAll(CardBorderWidth);
-            cardStyle.SetCornerRadiusAll(12);
-            cardStyle.SetContentMarginAll(10);
-            _prophecyCardStyles[i] = cardStyle;
+            artStyle.SetBorderWidthAll(CardBorderWidth);
+            artStyle.SetCornerRadiusAll(12);
+            artStyle.SetContentMarginAll(6);
+            _prophecyCardStyles[i] = artStyle;
 
-            var card = new PanelContainer();
-            card.AddThemeStyleboxOverride("panel", cardStyle);
-            card.SetMeta(TestIdMetaKey, $"chronicle-prophecy-card-{captured}");
-            card.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin; // 縦に伸ばさず中身ぴったりの縦長カードに
-
-            var col = new VBoxContainer();
-            col.AddThemeConstantOverride("separation", 6);
-            card.AddChild(col);
+            var artFrame = new PanelContainer();
+            artFrame.AddThemeStyleboxOverride("panel", artStyle);
+            artFrame.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter; // 枠を画像幅にぴったり・中央寄せ
+            artFrame.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-frame-{captured}");
 
             // カードのイラスト（予言種別ごと・縦長）。未配置なら null = 非表示（従来の文字表示のまま）。
             var art = new TextureRect
@@ -176,16 +180,18 @@ public partial class TimelineUI : Godot.Control
                 ExpandMode        = TextureRect.ExpandModeEnum.IgnoreSize,
             };
             art.SetMeta(TestIdMetaKey, $"chronicle-prophecy-art-{captured}");
-            col.AddChild(art);
+            artFrame.AddChild(art);
+            card.AddChild(artFrame);
             _prophecyArt[i] = art;
 
+            // 画像の下：種別／レア度／効果量を出すボタン（クリックで選択→確定）。
             var btn = new Button
             {
                 CustomMinimumSize = new Vector2(CardArtWidth, 64),
             };
             btn.SetMeta(TestIdMetaKey, $"chronicle-prophecy-button-{captured}");
             btn.Pressed += () => OnProphecyButtonPressed(captured);
-            col.AddChild(btn);
+            card.AddChild(btn);
 
             // 1 回目クリックで選択中になったことを示すバッジ（既定は非表示）。
             var badge = new Label
@@ -198,9 +204,10 @@ public partial class TimelineUI : Godot.Control
             };
             badge.AddThemeColorOverride("font_color", new Color(1.0f, 0.93f, 0.55f));
             badge.SetMeta(TestIdMetaKey, $"chronicle-prophecy-selected-badge-{captured}");
-            col.AddChild(badge);
+            card.AddChild(badge);
             _prophecySelectedBadges[i] = badge;
 
+            // 画像の下の補助情報（タイムスキップ年数のみ。フレーバー文は表示しない）。
             var detail = new Label
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -208,7 +215,7 @@ public partial class TimelineUI : Godot.Control
                 CustomMinimumSize   = new Vector2(CardArtWidth, 0),
             };
             detail.SetMeta(TestIdMetaKey, $"chronicle-prophecy-detail-{captured}");
-            col.AddChild(detail);
+            card.AddChild(detail);
 
             _prophecyButtons[i] = btn;
             _prophecyDetailLabels[i] = detail;
@@ -294,9 +301,8 @@ public partial class TimelineUI : Godot.Control
                 if (_prophecySelectedBadges[i] is { } badge) badge.Visible = false;
                 // カードのイラスト（予言種別ごと）。未配置なら null = 非表示。
                 if (_prophecyArt[i] is { } art) art.Texture = ProphecyTextureLibrary.TryLoad(p.Kind);
-                // 詳細：フレーバー文 ＋ タイムスキップ年数。
-                var flavor = _chronicleGlobal.ResolveProphecyDescription(p.DescriptionKey);
-                detail.Text = $"{flavor}\n⏳ {p.SkipYears} 年経過";
+                // 詳細：タイムスキップ年数のみ（フレーバー文は表示しない）。
+                detail.Text = $"⏳ {p.SkipYears} 年経過";
             }
             else
             {
