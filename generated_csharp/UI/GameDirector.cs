@@ -88,6 +88,8 @@ public partial class GameDirector : Godot.Control
 
     // ─── UI 要素 ──────────────────────────────────────────────────────────
 
+    private Label? _pointsLabel;
+    private Label? _eraLabel;
     private Label? _phaseIndicatorLabel;
     private Button? _advanceButton;
     private Control? _screenContainer;
@@ -630,10 +632,23 @@ public partial class GameDirector : Godot.Control
         header.SetMeta(TestIdMetaKey, "game-director-header");
         root.AddChild(header);
 
+        // ── 常時表示の情報トリオ（ポイント／年代／フェーズ）。全フェーズ共通で固定。 ──
+        _pointsLabel = new Label { Name = "PointsIndicator" };
+        _pointsLabel.SetMeta(TestIdMetaKey, "game-director-points-indicator");
+        header.AddChild(_pointsLabel);
+
+        _eraLabel = new Label { Name = "EraIndicator" };
+        _eraLabel.SetMeta(TestIdMetaKey, "game-director-era-indicator");
+        header.AddChild(_eraLabel);
+
         _phaseIndicatorLabel = new Label { Name = "PhaseIndicator" };
-        _phaseIndicatorLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _phaseIndicatorLabel.SetMeta(TestIdMetaKey, "game-director-phase-indicator");
         header.AddChild(_phaseIndicatorLabel);
+
+        // 情報トリオを左、ボタン群を右へ寄せるための伸縮スペーサ。
+        var headerSpacer = new Control { Name = "HeaderSpacer" };
+        headerSpacer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        header.AddChild(headerSpacer);
 
         // 常設「ジョブマニュアル」ボタン。全フェーズ共通でヘッダに在駐し、押下で全ジョブ解説
         // カタログ（JobManualOverlay）を最前面へ overlay する（家系図・予言と同型の overlay 窓口）。
@@ -761,6 +776,8 @@ public partial class GameDirector : Godot.Control
         if (_chronicleGlobal is null) return;
         _chronicleGlobal.PhaseChanged     += OnPhaseChanged;
         _chronicleGlobal.StateInitialized += OnStateInitialized;
+        // ポイント残高の変化（スカウト/婚姻/購入/報酬等）で固定ヘッダのポイント表示を更新。
+        _chronicleGlobal.EconomyChanged   += OnEconomyChanged;
         // 暦が進んで章をまたいだら共通背景を張り替える（全フェーズに効く戦場背景の更新）。
         _chronicleGlobal.TimelineChanged  += OnTimelineChanged;
         // 編成変化で「次へ（出撃）」ボタンの可否を即時に再評価する（無人出撃の提示層ガード）。
@@ -778,6 +795,7 @@ public partial class GameDirector : Godot.Control
         {
             _chronicleGlobal.PhaseChanged     -= OnPhaseChanged;
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
+            _chronicleGlobal.EconomyChanged   -= OnEconomyChanged;
             _chronicleGlobal.TimelineChanged  -= OnTimelineChanged;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.BattleChanged    -= OnBattleChanged;
@@ -805,7 +823,13 @@ public partial class GameDirector : Godot.Control
     private void OnBattleChanged() => RenderHeader();
 
     // 暦の前進（世代交代で年が進む）で章が変わりうるため、共通背景を張り替える。
-    private void OnTimelineChanged() => RefreshBackground();
+    private void OnEconomyChanged() => RenderHeader();
+
+    private void OnTimelineChanged()
+    {
+        RefreshBackground();
+        RenderHeader(); // 年代（年＋章）の固定表示を更新
+    }
 
     /// <summary>
     /// 世界が初期化された（新規 Initialize / セーブ LoadGame のいずれか）瞬間のハンドラ。
@@ -852,10 +876,24 @@ public partial class GameDirector : Godot.Control
 
         var current = _chronicleGlobal.CurrentPhase;
 
+        // ポイント（共通通貨の残高）。全フェーズ共通で常時表示。
+        if (_pointsLabel is not null)
+        {
+            _pointsLabel.Text = $"💰 {_chronicleGlobal.CurrentEconomy.CurrentBalance} pt";
+        }
+
+        // 年代（暦の年＋章名）。未初期化時は 0 年でフォールバック。
+        if (_eraLabel is not null)
+        {
+            var year = _chronicleGlobal.CurrentTimeline?.Turn ?? 0;
+            var epoch = ChronicleTimelineConfig.EpochForYear(year);
+            _eraLabel.Text = $"📅 {year}年 〔{_chronicleGlobal.ResolveEpochName(epoch.NameKey)}〕";
+        }
+
         // インジケータ更新：現在フェーズの日本語名を表示する。
         if (_phaseIndicatorLabel is not null)
         {
-            _phaseIndicatorLabel.Text = $"🧭 現在: {_chronicleGlobal.ResolveCurrentPhaseName()}";
+            _phaseIndicatorLabel.Text = $"🧭 {_chronicleGlobal.ResolveCurrentPhaseName()}";
         }
 
         // 次へボタン更新：次フェーズ名を出し、年代記では隠す（予言選択が前進契機）。
