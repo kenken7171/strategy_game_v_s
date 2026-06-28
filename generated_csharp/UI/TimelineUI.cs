@@ -80,10 +80,20 @@ public partial class TimelineUI : Godot.Control
     private readonly Label[] _prophecyDetailLabels = new Label[ProphecyOptionCount];
     private readonly TextureRect[] _prophecyArt = new TextureRect[ProphecyOptionCount];
     private readonly StyleBoxFlat[] _prophecyCardStyles = new StyleBoxFlat[ProphecyOptionCount];
+    private readonly Label[] _prophecySelectedBadges = new Label[ProphecyOptionCount];
+
+    /// <summary>選択待ち（1 回目クリック済み）のカード番号。-1 = 未選択。2 回目の同カードで確定。</summary>
+    private int _pendingProphecyIndex = -1;
 
     /// <summary>縦長カードのイラスト枠サイズ（約 3:4 のポートレート）。</summary>
     private const int CardArtWidth = 190;
     private const int CardArtHeight = 250;
+
+    /// <summary>カードの通常／選択中の地色（選択中は明るく浮かせる）。</summary>
+    private static readonly Color CardBgColor = new(0.13f, 0.14f, 0.19f, 0.98f);
+    private static readonly Color CardSelectedBgColor = new(0.26f, 0.30f, 0.40f, 1.0f);
+    private const int CardBorderWidth = 3;
+    private const int CardSelectedBorderWidth = 5;
 
     /// <summary>年代記ナレーションの各行を収める器（無状態：毎回 SoT から丸ごと再描画）。</summary>
     private VBoxContainer? _narrationLinesBox;
@@ -156,10 +166,10 @@ public partial class TimelineUI : Godot.Control
             // カードは「背景から浮く」よう、ほぼ不透明の枠付きパネルにする（背景・コンテンツカードと差を出す）。
             var cardStyle = new StyleBoxFlat
             {
-                BgColor     = new Color(0.13f, 0.14f, 0.19f, 0.98f),
+                BgColor     = CardBgColor,
                 BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.20f), // 既定枠色。描画時にレア度色へ差し替え。
             };
-            cardStyle.SetBorderWidthAll(3);
+            cardStyle.SetBorderWidthAll(CardBorderWidth);
             cardStyle.SetCornerRadiusAll(12);
             cardStyle.SetContentMarginAll(10);
             _prophecyCardStyles[i] = cardStyle;
@@ -191,6 +201,20 @@ public partial class TimelineUI : Godot.Control
             btn.SetMeta(TestIdMetaKey, $"chronicle-prophecy-button-{captured}");
             btn.Pressed += () => OnProphecyButtonPressed(captured);
             col.AddChild(btn);
+
+            // 1 回目クリックで選択中になったことを示すバッジ（既定は非表示）。
+            var badge = new Label
+            {
+                Text                = "👆 もう一度クリックで決定",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                AutowrapMode        = TextServer.AutowrapMode.WordSmart,
+                CustomMinimumSize   = new Vector2(CardArtWidth, 0),
+                Visible             = false,
+            };
+            badge.AddThemeColorOverride("font_color", new Color(1.0f, 0.93f, 0.55f));
+            badge.SetMeta(TestIdMetaKey, $"chronicle-prophecy-selected-badge-{captured}");
+            col.AddChild(badge);
+            _prophecySelectedBadges[i] = badge;
 
             var detail = new Label
             {
@@ -313,6 +337,9 @@ public partial class TimelineUI : Godot.Control
             _turnLabel.Text = $"⏰ ターン {turn}";
         }
 
+        // 新しい予言を描き直すたびに、選択待ち状態はリセットする（前ターンの選択を持ち越さない）。
+        _pendingProphecyIndex = -1;
+
         // 3 予言ボタン
         var options = _chronicleGlobal.GetCurrentProphecies();
         for (int i = 0; i < ProphecyOptionCount; i++)
@@ -330,9 +357,15 @@ public partial class TimelineUI : Godot.Control
                     $"{_chronicleGlobal.ResolveProphecyRarityIcon(p.Rarity)} {_chronicleGlobal.ResolveProphecyRarityName(p.Rarity)}\n" +
                     $"{_chronicleGlobal.ResolveProphecyKindIcon(p.Kind)} {_chronicleGlobal.ResolveProphecyKindName(p.Kind)}\n" +
                     $"値: {p.Value}";
-                // レア度はカードの枠色で示す（ボタンは白のまま＝文字を読みやすく）。
+                // レア度はカードの枠色で示す（ボタンは白のまま＝文字を読みやすく）。選択中表示はリセット。
                 btn.Modulate = Colors.White;
-                if (_prophecyCardStyles[i] is { } style) style.BorderColor = RarityColor(p.Rarity);
+                if (_prophecyCardStyles[i] is { } style)
+                {
+                    style.BorderColor = RarityColor(p.Rarity);
+                    style.BgColor = CardBgColor;
+                    style.SetBorderWidthAll(CardBorderWidth);
+                }
+                if (_prophecySelectedBadges[i] is { } badge) badge.Visible = false;
                 // カードのイラスト（予言種別ごと）。未配置なら null = 非表示。
                 if (_prophecyArt[i] is { } art) art.Texture = ProphecyTextureLibrary.TryLoad(p.Kind);
                 // 詳細：フレーバー文 ＋ タイムスキップ年数。
@@ -345,7 +378,13 @@ public partial class TimelineUI : Godot.Control
                 btn.Modulate = Colors.White;
                 btn.Text = "—";
                 detail.Text = "";
-                if (_prophecyCardStyles[i] is { } style) style.BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.12f);
+                if (_prophecyCardStyles[i] is { } style)
+                {
+                    style.BorderColor = new Color(1.0f, 1.0f, 1.0f, 0.12f);
+                    style.BgColor = CardBgColor;
+                    style.SetBorderWidthAll(CardBorderWidth);
+                }
+                if (_prophecySelectedBadges[i] is { } badge) badge.Visible = false;
                 if (_prophecyArt[i] is { } art) art.Texture = null;
             }
         }
@@ -481,13 +520,41 @@ public partial class TimelineUI : Godot.Control
         var options = _chronicleGlobal.GetCurrentProphecies();
         if (index < 0 || index >= options.Count) return;
 
+        // 1 回目クリック（または別カードへの切替）＝「選択中」にするだけで、まだ次へ進めない。
+        if (_pendingProphecyIndex != index)
+        {
+            _pendingProphecyIndex = index;
+            ApplyPendingHighlight(index);
+            return;
+        }
+
+        // 2 回目（同じカード）クリック＝確定して次へ進む。
+        _pendingProphecyIndex = -1;
         var prophecyId = options[index].Id;
         var selected = _chronicleGlobal.SelectProphecyAndAdvance(prophecyId);
 
         // 結果ログ（再描画はシグナル経由で自動）
         if (selected is not null)
         {
-            GD.Print($"[TimelineUI] 予言選択: {selected.Kind} (+{selected.SkipYears}年, 値={selected.Value})");
+            GD.Print($"[TimelineUI] 予言確定: {selected.Kind} (+{selected.SkipYears}年, 値={selected.Value})");
+        }
+    }
+
+    /// <summary>
+    /// 選択中（1 回目クリック済み）のカードを地色・枠太さ・バッジで強調し、他カードは通常表示へ戻す。
+    /// 「一度クリックされたことが一目で分かる」ための視覚フィードバック。
+    /// </summary>
+    private void ApplyPendingHighlight(int selectedIndex)
+    {
+        for (int i = 0; i < ProphecyOptionCount; i++)
+        {
+            bool on = i == selectedIndex;
+            if (_prophecyCardStyles[i] is { } style)
+            {
+                style.BgColor = on ? CardSelectedBgColor : CardBgColor;
+                style.SetBorderWidthAll(on ? CardSelectedBorderWidth : CardBorderWidth);
+            }
+            if (_prophecySelectedBadges[i] is { } badge) badge.Visible = on;
         }
     }
 
