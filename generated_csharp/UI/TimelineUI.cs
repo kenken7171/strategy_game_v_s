@@ -144,6 +144,9 @@ public partial class TimelineUI : Godot.Control
         header.AddChild(titleLabel);
         // ポイント残高・年代（ターン）は GameDirector の固定ヘッダへ集約済み（重複表示を排除）。
 
+        // ── 旅団年代記（ナレーション）を最上段へ：予言カードより上に置き、まず歴史を見せる。
+        BuildNarrationPanel(root);
+
         // ── ボディ：3 予言ボタン ───────────────────────────────────
         var body = new HBoxContainer();
         body.AddThemeConstantOverride("separation", 12);
@@ -220,8 +223,6 @@ public partial class TimelineUI : Godot.Control
             _prophecyDetailLabels[i] = detail;
             body.AddChild(card);
         }
-
-        BuildNarrationPanel(root);
     }
 
     /// <summary>
@@ -234,7 +235,9 @@ public partial class TimelineUI : Godot.Control
     {
         var panel = new VBoxContainer();
         panel.AddThemeConstantOverride("separation", 6);
-        panel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        // 最上段へ移したため縦には伸ばさず、固定高のスクロールでコンパクトに収める
+        // （ExpandFill だと上段でスラックを食って予言カードを下へ押しやってしまう）。
+        panel.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
         panel.SetMeta(TestIdMetaKey, "chronicle-narration-panel");
         root.AddChild(panel);
 
