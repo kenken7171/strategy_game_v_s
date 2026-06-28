@@ -137,6 +137,14 @@ public partial class GameDirector : Godot.Control
     private JobManualOverlay? _jobManualOverlay;
 
     /// <summary>
+    /// 現在前面に展開中の旅団年代記オーバーレイ（全フェーズ共通の歴史ビューア）。ヘッダの
+    /// 「📜 旅団年代記」押下で開き、CLOSE 押下（CloseRequested）または退場時に QueueFree する
+    /// 自己崩壊型ライフサイクル。年代記ログは静的スナップショットなので SoT 購読は不要
+    /// （オーバーレイ自身が _Ready で GetChronicleLog を一度読むだけ）。未展開時は null。
+    /// </summary>
+    private ChronicleLogOverlay? _chronicleLogOverlay;
+
+    /// <summary>
     /// 現在前面に展開中のユニット詳細モーダル。CLOSE 押下（CloseRequested）または退場時に
     /// QueueFree する自己崩壊型ライフサイクル。未展開時は null。
     /// </summary>
@@ -196,6 +204,7 @@ public partial class GameDirector : Godot.Control
         DismissPedigreeOverlay();
         DismissProphecyOverlay();
         DismissJobManualOverlay();
+        DismissChronicleLogOverlay();
         DismissUnitDetailOverlay();
         DismissRestResultOverlay();
         DismissEquipmentDropOverlay();
@@ -447,6 +456,51 @@ public partial class GameDirector : Godot.Control
         _jobManualOverlay = null;
     }
 
+    // ─── 旅団年代記オーバーレイ（全フェーズ共通の歴史ビューア） ────────────────
+    //  ヘッダの常設「📜 旅団年代記」押下を受け、引退/戦死/昇級/解雇のナレーション一覧を
+    //  無状態オーバーレイ ChronicleLogOverlay として最前面へ overlay する。かつて年代記画面
+    //  （TimelineUI）にインラインで常駐していたパネルを、全フェーズから開ける overlay へ移管した。
+    //  ジョブマニュアルと同型の自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）。
+
+    /// <summary>ヘッダの「📜 旅団年代記」押下ハンドラ。年代記ビューアを最前面へマウントする。</summary>
+    private void OnChronicleLogPressed() => MountChronicleLogOverlay();
+
+    /// <summary>旅団年代記の「閉じる」意思表示ハンドラ。前面のオーバーレイを解放する。</summary>
+    private void OnChronicleLogCloseRequested() => DismissChronicleLogOverlay();
+
+    /// <summary>
+    /// 旅団年代記オーバーレイ（ChronicleLogOverlay）を最前面へ展開する。多重展開・取り残しを避ける
+    /// ため、生存中の旧オーバーレイがあれば先に確実に解放してから展開する。年代記ログはオーバーレイ
+    /// 自身が _Ready で SoT（GetChronicleLog）から読むため、ここでは注入しない（無状態の徹底）。
+    /// </summary>
+    private void MountChronicleLogOverlay()
+    {
+        DismissChronicleLogOverlay();
+
+        var overlay = new ChronicleLogOverlay();
+        overlay.CloseRequested += OnChronicleLogCloseRequested;
+        overlay.SetMeta(TestIdMetaKey, "game-director-chronicle-log-overlay");
+        _chronicleLogOverlay = overlay;
+
+        AddChild(overlay); // root（および各フェーズ画面）の後に追加 = 最前面 overlay
+    }
+
+    /// <summary>
+    /// 前面展開中の旅団年代記オーバーレイがあれば購読を解いて確実に解放する。閉じる意思表示
+    /// （OnChronicleLogCloseRequested）および退場時（_ExitTree）に呼び、ゾンビノード・購読二重接続を根絶する。
+    /// </summary>
+    private void DismissChronicleLogOverlay()
+    {
+        if (_chronicleLogOverlay is null) return;
+
+        if (GodotObject.IsInstanceValid(_chronicleLogOverlay))
+        {
+            _chronicleLogOverlay.CloseRequested -= OnChronicleLogCloseRequested;
+            _chronicleLogOverlay.QueueFree();
+        }
+        _chronicleLogOverlay = null;
+    }
+
     // ─── ユニット詳細モーダル（編成画面の「Details」から開く） ────────────────
     //  編成画面の名簿カード「Details」押下を受け、対象ユニットの完全プロファイル
     //  （ステータス/性別/血統/現在の陣形スロット番号 + ジョブ解説）を無状態モーダル
@@ -638,6 +692,13 @@ public partial class GameDirector : Godot.Control
         var headerSpacer = new Control { Name = "HeaderSpacer" };
         headerSpacer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         header.AddChild(headerSpacer);
+
+        // 常設「旅団年代記」ボタン。全フェーズ共通でヘッダに在駐し、押下で歴史ナレーション一覧
+        // （ChronicleLogOverlay）を最前面へ overlay する（かつて年代記画面に常駐していたパネルの移管先）。
+        var chronicleLogButton = new Button { Name = "ChronicleLogButton", Text = "📜 旅団年代記" };
+        chronicleLogButton.Pressed += OnChronicleLogPressed;
+        chronicleLogButton.SetMeta(TestIdMetaKey, "game-director-chronicle-log-button");
+        header.AddChild(chronicleLogButton);
 
         // 常設「ジョブマニュアル」ボタン。全フェーズ共通でヘッダに在駐し、押下で全ジョブ解説
         // カタログ（JobManualOverlay）を最前面へ overlay する（家系図・予言と同型の overlay 窓口）。
