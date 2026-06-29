@@ -81,6 +81,10 @@ public partial class MarriageUI : Godot.Control
     /// 巨大なため、小さく制限しないと文字が見えなくなる（OptionButton は icon_max_width で制限）。</summary>
     private const int UnitIconSize = 28;
 
+    /// <summary>ユニットリストタブの立ち絵アイコンの一辺サイズ（px）。1 行を大きく見やすくするため
+    /// 共有の小アイコン（<see cref="UnitIconSize"/>）より大きくする（一度に見える件数は自然と減る）。</summary>
+    private const int UnitListIconSize = 96;
+
     // ─── 意思表示イベント（オーバーレイのマウントは購読側 = GameDirector が引く） ──
 
     /// <summary>
@@ -296,7 +300,7 @@ public partial class MarriageUI : Godot.Control
         panel.AddChild(title);
 
         _unitListContainer = new VBoxContainer();
-        _unitListContainer.AddThemeConstantOverride("separation", 6);
+        _unitListContainer.AddThemeConstantOverride("separation", 12);
         _unitListContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _unitListContainer.SetMeta(TestIdMetaKey, "guild-unit-list");
         panel.AddChild(_unitListContainer);
@@ -692,11 +696,12 @@ public partial class MarriageUI : Godot.Control
             var capturedId = unit.Id;
 
             var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 8);
+            row.AddThemeConstantOverride("separation", 12);
             row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             row.SetMeta(TestIdMetaKey, $"guild-unit-row-{capturedId}");
 
-            var icon = MakeUnitIcon(unit);
+            // ユニットリストは見やすさ優先で大きめの立ち絵を使う（共有の小アイコンとは別サイズ）。
+            var icon = MakeUnitListIcon(unit);
             if (icon is not null) row.AddChild(icon);
 
             var info = new Label
@@ -706,9 +711,12 @@ public partial class MarriageUI : Godot.Control
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            info.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+            info.AddThemeFontSizeOverride("font_size", 18); // 1 行を大きく＝見やすく
             row.AddChild(info);
 
             var detailBtn = new Button { Text = "詳細" };
+            detailBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
             detailBtn.SetMeta(TestIdMetaKey, $"guild-unit-detail-button-{capturedId}");
             detailBtn.Pressed += () => OnUnitDetailsPressed(capturedId);
             row.AddChild(detailBtn);
@@ -1129,6 +1137,24 @@ public partial class MarriageUI : Godot.Control
             CustomMinimumSize  = new Vector2(UnitIconSize, UnitIconSize),
             StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
             ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
+        };
+    }
+
+    /// <summary>
+    /// ユニットリスト行用の大きめ立ち絵アイコン（<see cref="UnitListIconSize"/> 角）。見やすさ優先で
+    /// 共有の小アイコンより大きくする。資産欠落時のみ null。
+    /// </summary>
+    private static TextureRect? MakeUnitListIcon(Unit unit)
+    {
+        var tex = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (tex is null) return null;
+        return new TextureRect
+        {
+            Texture           = tex,
+            CustomMinimumSize  = new Vector2(UnitListIconSize, UnitListIconSize),
+            StretchMode        = TextureRect.StretchModeEnum.KeepAspectCentered,
+            ExpandMode         = TextureRect.ExpandModeEnum.IgnoreSize,
+            SizeFlagsVertical  = Control.SizeFlags.ShrinkCenter,
         };
     }
 
