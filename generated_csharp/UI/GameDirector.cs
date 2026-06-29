@@ -815,6 +815,7 @@ public partial class GameDirector : Godot.Control
         {
             case MarriageUI marriage:
                 marriage.PedigreeRequested += OnPedigreeRequested;
+                marriage.UnitInspectRequested += OnUnitInspectRequested;
                 break;
             case FormationUI formation:
                 formation.UnitInspectRequested += OnUnitInspectRequested;
@@ -847,6 +848,7 @@ public partial class GameDirector : Godot.Control
             {
                 case MarriageUI marriage:
                     marriage.PedigreeRequested -= OnPedigreeRequested;
+                    marriage.UnitInspectRequested -= OnUnitInspectRequested;
                     break;
                 case FormationUI formation:
                     formation.UnitInspectRequested -= OnUnitInspectRequested;

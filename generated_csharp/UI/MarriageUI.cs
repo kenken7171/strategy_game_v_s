@@ -65,11 +65,14 @@ public partial class MarriageUI : Godot.Control
     /// <summary>戦闘・婚姻に参加可能となる成人年齢。</summary>
     private const int AdultAge = 15;
 
-    /// <summary>外様スカウトの固定コスト (pt)。</summary>
-    private const int ScoutCost = 3;
-
     /// <summary>子の既定寿命（newborn 生成時のデフォルト）。</summary>
     private const int ChildDefaultMaxAge = 60;
+
+    /// <summary>右タブナビのボタン横幅（px）。固定幅で左の内容と分ける。</summary>
+    private const int TabNavWidthPx = 180;
+
+    /// <summary>人事フェーズの 4 タブ（右ナビで切り替え・左にアクティブタブの内容を出す）。</summary>
+    private enum GuildTab { UnitList, Scout, Item, Marriage }
 
     /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
     private const string TestIdMetaKey = "data_testid";
@@ -87,6 +90,12 @@ public partial class MarriageUI : Godot.Control
     /// </summary>
     public event Action<Guid>? PedigreeRequested;
 
+    /// <summary>
+    /// ユニット詳細オーバーレイを開く意思表示。ユニットリストタブの各行 ［詳細］押下で、購読側
+    /// （GameDirector）が UnitDetailOverlay を最前面へマウントする（FormationUI と同じ窓口）。
+    /// </summary>
+    public event Action<Guid>? UnitInspectRequested;
+
     // ─── Autoload 参照 ────────────────────────────────────────────────────
 
     private ChronicleGlobal? _chronicleGlobal;
@@ -94,18 +103,25 @@ public partial class MarriageUI : Godot.Control
     // ─── UI 要素 ──────────────────────────────────────────────────────────
 
 
-    // 今年の行動（出撃 / 休息）トグル — 編成より上流のこの拠点フェーズで決定する。
+    // タブ基盤（右ナビ＋4パネル。アクティブのみ Visible）
+    private GuildTab _activeTab = GuildTab.UnitList;
+    private readonly Dictionary<GuildTab, Button> _tabButtons = new();
+    private readonly Dictionary<GuildTab, Control> _tabPanels = new();
+
+    // 今年の行動（出撃 / 休息）の提示 — 編成より上流のこの拠点フェーズで確定済み。全タブ共通で上部表示。
     private VBoxContainer? _actionContainer;
+
+    // ユニットリストタブ
+    private VBoxContainer? _unitListContainer;
+
+    // スカウトタブ（候補プールを並べて選んで採用）
+    private VBoxContainer? _scoutCandidatesContainer;
 
     // 婚姻セクション
     private OptionButton? _fatherSelect;
     private OptionButton? _motherSelect;
     private Label? _quoteLabel;
     private Button? _marriageExecuteButton;
-
-    // スカウトセクション
-    private Button? _scoutButton;
-    private Label? _scoutHintLabel;
 
     // 家系図セクション
     private VBoxContainer? _readyChildrenContainer;
@@ -182,66 +198,215 @@ public partial class MarriageUI : Godot.Control
 
     private void BuildUI()
     {
-        // 全画面スクロール: ルート VBox を画面いっぱいの縦 ScrollContainer で包む。
-        // 画面(this)は非コンテナ Control。FullRect の ScrollContainer がその高さに束縛され、
-        // 内容が画面高を超えると縦スクロールが効く。横スクロールは無効化し子幅を画面幅へ伸張する。
-        var scroll = new ScrollContainer();
-        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        scroll.SetMeta(TestIdMetaKey, "marriage-scroll");
-        AddChild(scroll);
+        // 画面全体を左右に分割: 左＝アクティブタブの内容（縦スクロール）／右＝タブナビ。
+        var split = new HBoxContainer();
+        split.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        split.AddThemeConstantOverride("separation", 16);
+        split.SetMeta(TestIdMetaKey, "guild-split");
+        AddChild(split);
 
-        var root = new VBoxContainer();
-        root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        root.AddThemeConstantOverride("separation", 20);
-        root.SetMeta(TestIdMetaKey, "marriage-root");
-        scroll.AddChild(root);
+        // ── 左: タブ内容（縦スクロール。横は無効化し子幅を伸張） ──
+        var leftScroll = new ScrollContainer();
+        leftScroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        leftScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        leftScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        leftScroll.SetMeta(TestIdMetaKey, "guild-content-scroll");
+        split.AddChild(leftScroll);
 
-        // ─ ヘッダー ─────────────────────────────────────────────
-        var header = new HBoxContainer();
-        header.SetMeta(TestIdMetaKey, "marriage-header");
-        root.AddChild(header);
-        var headerTitle = new Label { Text = "💞 婚姻・スカウト・家系図" };
-        headerTitle.SetMeta(TestIdMetaKey, "marriage-header-title");
-        header.AddChild(headerTitle);
-        // ポイント残高は GameDirector の固定ヘッダへ集約済み（重複表示を排除）。
+        var content = new VBoxContainer();
+        content.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        content.AddThemeConstantOverride("separation", 12);
+        content.SetMeta(TestIdMetaKey, "guild-content");
+        leftScroll.AddChild(content);
 
-        // ─ 今年の行動（出撃 / 休息）─────────────────────────────
-        //   行動決定は編成より上流のこの拠点フェーズで行う。出撃を選べば編成画面へ入場し、
-        //   休息を選べば編成・戦闘の両画面を一切経由せず休息報酬画面へ直行する（GameDirector が分岐）。
-        var actionSection = new VBoxContainer();
-        actionSection.SetMeta(TestIdMetaKey, "marriage-action-section");
-        root.AddChild(actionSection);
-        var actionTitle = new Label { Text = "── ☾⚔ 今年の行動 ──" };
-        actionTitle.SetMeta(TestIdMetaKey, "marriage-action-title");
-        actionSection.AddChild(actionTitle);
-
+        // 今年の行動（出撃 / 休息）の提示は全タブ共通で内容の最上段に出す（行動はこの上流で確定済み）。
         _actionContainer = new VBoxContainer();
         _actionContainer.AddThemeConstantOverride("separation", 4);
         _actionContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _actionContainer.SetMeta(TestIdMetaKey, "marriage-action");
-        actionSection.AddChild(_actionContainer);
+        content.AddChild(_actionContainer);
 
-        // ─ 婚姻セクション ───────────────────────────────────────
-        var marriageSection = new VBoxContainer();
-        marriageSection.SetMeta(TestIdMetaKey, "marriage-pairing-section");
-        root.AddChild(marriageSection);
+        // 4 タブパネル（アクティブのみ Visible）。
+        _tabPanels[GuildTab.UnitList] = BuildUnitListPanel();
+        _tabPanels[GuildTab.Scout]    = BuildScoutPanel();
+        _tabPanels[GuildTab.Item]     = BuildItemPanel();
+        _tabPanels[GuildTab.Marriage] = BuildMarriagePanel();
+        foreach (var panel in _tabPanels.Values) content.AddChild(panel);
+
+        // ── 右: タブナビ ──
+        split.AddChild(BuildTabNav());
+
+        ApplyActiveTab();
+    }
+
+    // ─── タブナビ・パネル ─────────────────────────────────────────────────
+
+    private VBoxContainer BuildTabNav()
+    {
+        var nav = new VBoxContainer();
+        nav.CustomMinimumSize = new Vector2(TabNavWidthPx, 0);
+        nav.AddThemeConstantOverride("separation", 8);
+        nav.SetMeta(TestIdMetaKey, "guild-tab-nav");
+
+        AddTabButton(nav, GuildTab.UnitList, "👥 ユニットリスト");
+        AddTabButton(nav, GuildTab.Scout,    "⚔ スカウト");
+        AddTabButton(nav, GuildTab.Item,     "🎒 アイテム");
+        AddTabButton(nav, GuildTab.Marriage, "💞 結婚");
+        return nav;
+    }
+
+    private void AddTabButton(VBoxContainer nav, GuildTab tab, string label)
+    {
+        var btn = new Button { Text = label };
+        btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        btn.SetMeta(TestIdMetaKey, $"guild-tab-button-{tab.ToString().ToLowerInvariant()}");
+        btn.Pressed += () => OnTabPressed(tab);
+        _tabButtons[tab] = btn;
+        nav.AddChild(btn);
+    }
+
+    private void OnTabPressed(GuildTab tab)
+    {
+        _activeTab = tab;
+        ApplyActiveTab();
+    }
+
+    /// <summary>アクティブタブのパネルだけを表示し、ナビのアクティブボタンを金色で強調する。</summary>
+    private void ApplyActiveTab()
+    {
+        foreach (var (tab, panel) in _tabPanels) panel.Visible = tab == _activeTab;
+        foreach (var (tab, btn) in _tabButtons)
+        {
+            btn.Modulate = tab == _activeTab
+                ? new Color(1.0f, 0.9f, 0.45f)        // アクティブ＝金
+                : new Color(1.0f, 1.0f, 1.0f, 0.7f);  // 非アクティブ＝淡色
+        }
+    }
+
+    // ── タブ1: ユニットリスト（各行 ［詳細］。解雇・家系図は当面併設＝Phase 3 で詳細へ移設） ──
+    private Control BuildUnitListPanel()
+    {
+        var panel = new VBoxContainer();
+        panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        panel.AddThemeConstantOverride("separation", 10);
+        panel.SetMeta(TestIdMetaKey, "guild-tab-unit-list");
+
+        var title = new Label { Text = "── 👥 ユニットリスト ──" };
+        title.SetMeta(TestIdMetaKey, "guild-unit-list-title");
+        panel.AddChild(title);
+
+        _unitListContainer = new VBoxContainer();
+        _unitListContainer.AddThemeConstantOverride("separation", 6);
+        _unitListContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _unitListContainer.SetMeta(TestIdMetaKey, "guild-unit-list");
+        panel.AddChild(_unitListContainer);
+
+        // 暫定併設: 解雇・家系図は Phase 3 で ［詳細］ オーバーレイへ移設予定。機能維持のため当面ここに残す。
+        var dismissTitle = new Label { Text = "── 🛡 人事（戦力外通告） ──" };
+        dismissTitle.SetMeta(TestIdMetaKey, "marriage-dismiss-title");
+        panel.AddChild(dismissTitle);
+        _dismissListContainer = new VBoxContainer();
+        _dismissListContainer.SetMeta(TestIdMetaKey, "marriage-dismiss-list");
+        panel.AddChild(_dismissListContainer);
+
+        var pedigreeTitle = new Label { Text = "── 🌳 家系図ビューア ──" };
+        pedigreeTitle.SetMeta(TestIdMetaKey, "marriage-pedigree-title");
+        panel.AddChild(pedigreeTitle);
+        _pedigreeListContainer = new VBoxContainer();
+        _pedigreeListContainer.SetMeta(TestIdMetaKey, "marriage-pedigree-list");
+        panel.AddChild(_pedigreeListContainer);
+
+        return panel;
+    }
+
+    // ── タブ2: スカウト（候補プールから選んで採用） ──
+    private Control BuildScoutPanel()
+    {
+        var panel = new VBoxContainer();
+        panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        panel.AddThemeConstantOverride("separation", 10);
+        panel.SetMeta(TestIdMetaKey, "guild-tab-scout");
+
+        var title = new Label { Text = "── ⚔ スカウト（候補から採用） ──" };
+        title.SetMeta(TestIdMetaKey, "guild-scout-title");
+        panel.AddChild(title);
+
+        var hint = new Label
+        {
+            Text = "血縁なしの外様候補。コストは強さ（総合値）に連動。選んで採用する（世代ごとに更新）。",
+        };
+        hint.SetMeta(TestIdMetaKey, "guild-scout-hint");
+        panel.AddChild(hint);
+
+        _scoutCandidatesContainer = new VBoxContainer();
+        _scoutCandidatesContainer.AddThemeConstantOverride("separation", 6);
+        _scoutCandidatesContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _scoutCandidatesContainer.SetMeta(TestIdMetaKey, "guild-scout-list");
+        panel.AddChild(_scoutCandidatesContainer);
+
+        return panel;
+    }
+
+    // ── タブ3: アイテム（兵器廠 購入・強化 ＋ 持ち物 装備させる） ──
+    private Control BuildItemPanel()
+    {
+        var panel = new VBoxContainer();
+        panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        panel.AddThemeConstantOverride("separation", 10);
+        panel.SetMeta(TestIdMetaKey, "guild-tab-item");
+
+        var shopTitle = new Label { Text = "── 🛡️ 兵器廠（購入・強化） ──" };
+        shopTitle.SetMeta(TestIdMetaKey, "shop-title");
+        panel.AddChild(shopTitle);
+        var shopHint = new Label
+        {
+            Text = $"装備の購入は {ShopService.BuyCost} pt 固定 / 強化は現Lvに比例（Lv1→2 で {ShopService.UpgradeCostFor(1)} pt）",
+        };
+        shopHint.SetMeta(TestIdMetaKey, "shop-hint");
+        panel.AddChild(shopHint);
+        _shopListContainer = new VBoxContainer();
+        _shopListContainer.SetMeta(TestIdMetaKey, "shop-list");
+        panel.AddChild(_shopListContainer);
+
+        var inventoryTitle = new Label { Text = "── 🎒 持ち物（装備させる・付け替え） ──" };
+        inventoryTitle.SetMeta(TestIdMetaKey, "inventory-title");
+        panel.AddChild(inventoryTitle);
+        var inventoryHint = new Label
+        {
+            Text = "ドロップ等で得た装備は持ち物に貯まる。外しても消えず持ち物へ戻る（無償・付け替え自由）。",
+        };
+        inventoryHint.SetMeta(TestIdMetaKey, "inventory-hint");
+        panel.AddChild(inventoryHint);
+        _inventoryListContainer = new VBoxContainer();
+        _inventoryListContainer.SetMeta(TestIdMetaKey, "inventory-list");
+        panel.AddChild(_inventoryListContainer);
+
+        return panel;
+    }
+
+    // ── タブ4: 結婚（父母選択 → 結婚 ＋ 子供たち） ──
+    private Control BuildMarriagePanel()
+    {
+        var panel = new VBoxContainer();
+        panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        panel.AddThemeConstantOverride("separation", 10);
+        panel.SetMeta(TestIdMetaKey, "guild-tab-marriage");
+
         var marriageTitle = new Label { Text = "── 💞 手動婚姻 ──" };
         marriageTitle.SetMeta(TestIdMetaKey, "marriage-pairing-title");
-        marriageSection.AddChild(marriageTitle);
+        panel.AddChild(marriageTitle);
 
         var pairRow = new HBoxContainer();
         pairRow.AddThemeConstantOverride("separation", 12);
         pairRow.SetMeta(TestIdMetaKey, "marriage-pairing-row");
-        marriageSection.AddChild(pairRow);
+        panel.AddChild(pairRow);
 
         var fatherLabel = new Label { Text = "父:" };
         fatherLabel.SetMeta(TestIdMetaKey, "marriage-father-label");
         pairRow.AddChild(fatherLabel);
         _fatherSelect = new OptionButton();
         _fatherSelect.SetMeta(TestIdMetaKey, "marriage-father-select");
-        // 立ち絵アイコンは縦長で巨大なため、ドロップダウンのアイコン幅を小さく制限する
-        // （これをしないと項目が立ち絵で埋まり文字が見えなくなる）。
+        // 立ち絵アイコンは縦長で巨大なため、ドロップダウンのアイコン幅を小さく制限する。
         _fatherSelect.AddThemeConstantOverride("icon_max_width", UnitIconSize);
         _fatherSelect.ItemSelected += OnFatherSelectionChanged;
         pairRow.AddChild(_fatherSelect);
@@ -257,136 +422,32 @@ public partial class MarriageUI : Godot.Control
 
         _quoteLabel = new Label { Text = "💡 父・母を選択してください" };
         _quoteLabel.SetMeta(TestIdMetaKey, "marriage-quote");
-        marriageSection.AddChild(_quoteLabel);
+        panel.AddChild(_quoteLabel);
 
         _marriageExecuteButton = new Button { Text = "💞 結婚させる", Disabled = true };
         _marriageExecuteButton.SetMeta(TestIdMetaKey, "marriage-execute-button");
         _marriageExecuteButton.Pressed += OnMarriageExecutePressed;
-        marriageSection.AddChild(_marriageExecuteButton);
+        panel.AddChild(_marriageExecuteButton);
 
-        // ─ スカウトセクション ───────────────────────────────────
-        var scoutSection = new VBoxContainer();
-        scoutSection.SetMeta(TestIdMetaKey, "marriage-scout-section");
-        root.AddChild(scoutSection);
-        var scoutTitle = new Label { Text = "── ⚔ 外様スカウト ──" };
-        scoutTitle.SetMeta(TestIdMetaKey, "marriage-scout-title");
-        scoutSection.AddChild(scoutTitle);
-
-        _scoutHintLabel = new Label
-        {
-            Text = $"血縁関係のない外様を {ScoutCost} pt で雇用",
-        };
-        _scoutHintLabel.SetMeta(TestIdMetaKey, "marriage-scout-hint");
-        scoutSection.AddChild(_scoutHintLabel);
-
-        _scoutButton = new Button { Text = $"⚔ スカウトする ({ScoutCost} pt)" };
-        _scoutButton.SetMeta(TestIdMetaKey, "marriage-scout-button");
-        _scoutButton.Pressed += OnScoutPressed;
-        scoutSection.AddChild(_scoutButton);
-
-        // ─ 家系図セクション ─────────────────────────────────────
-        var familySection = new VBoxContainer();
-        familySection.SetMeta(TestIdMetaKey, "marriage-family-section");
-        root.AddChild(familySection);
         var familyTitle = new Label { Text = "── 👶 家系図（子供たち） ──" };
         familyTitle.SetMeta(TestIdMetaKey, "marriage-family-title");
-        familySection.AddChild(familyTitle);
+        panel.AddChild(familyTitle);
 
         var readyLabel = new Label { Text = "🎓 入団待ち" };
         readyLabel.SetMeta(TestIdMetaKey, "marriage-family-ready-label");
-        familySection.AddChild(readyLabel);
+        panel.AddChild(readyLabel);
         _readyChildrenContainer = new VBoxContainer();
         _readyChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-ready-list");
-        familySection.AddChild(_readyChildrenContainer);
+        panel.AddChild(_readyChildrenContainer);
 
         var minorLabel = new Label { Text = "👶 成長中" };
         minorLabel.SetMeta(TestIdMetaKey, "marriage-family-minor-label");
-        familySection.AddChild(minorLabel);
+        panel.AddChild(minorLabel);
         _minorChildrenContainer = new VBoxContainer();
         _minorChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-minor-list");
-        familySection.AddChild(_minorChildrenContainer);
+        panel.AddChild(_minorChildrenContainer);
 
-        // ─ 旅団兵器廠（商店・強化）セクション ───────────────────
-        // 共通サイフ (pt) を消費して、現役へ新品装備を購入／現装備を 1 段階強化する。
-        var shopSection = new VBoxContainer();
-        shopSection.SetMeta(TestIdMetaKey, "shop-section");
-        root.AddChild(shopSection);
-        var shopTitle = new Label { Text = "── 🛡️ 旅団兵器廠（商店・強化） ──" };
-        shopTitle.SetMeta(TestIdMetaKey, "shop-title");
-        shopSection.AddChild(shopTitle);
-
-        var shopHint = new Label
-        {
-            Text = $"装備の購入は {ShopService.BuyCost} pt 固定 / 強化は現Lvに比例（Lv1→2 で {ShopService.UpgradeCostFor(1)} pt）",
-        };
-        shopHint.SetMeta(TestIdMetaKey, "shop-hint");
-        shopSection.AddChild(shopHint);
-
-        _shopListContainer = new VBoxContainer();
-        _shopListContainer.SetMeta(TestIdMetaKey, "shop-list");
-        shopSection.AddChild(_shopListContainer);
-
-        // ─ 持ち物（装備の付け替え）セクション ───────────────────
-        // 旅団共有の持ち物（未装着の装備）とユニット装備の間で、無償・非破壊に付け替える。
-        var inventorySection = new VBoxContainer();
-        inventorySection.SetMeta(TestIdMetaKey, "inventory-section");
-        root.AddChild(inventorySection);
-        var inventoryTitle = new Label { Text = "── 🎒 持ち物（装備の付け替え） ──" };
-        inventoryTitle.SetMeta(TestIdMetaKey, "inventory-title");
-        inventorySection.AddChild(inventoryTitle);
-
-        var inventoryHint = new Label
-        {
-            Text = "ドロップ等で得た装備は持ち物に貯まる。外しても消えず持ち物へ戻る（無償・付け替え自由）。",
-        };
-        inventoryHint.SetMeta(TestIdMetaKey, "inventory-hint");
-        inventorySection.AddChild(inventoryHint);
-
-        _inventoryListContainer = new VBoxContainer();
-        _inventoryListContainer.SetMeta(TestIdMetaKey, "inventory-list");
-        inventorySection.AddChild(_inventoryListContainer);
-
-        // ─ 人事（戦力外通告）セクション ─────────────────────────
-        // 旅団の新陳代謝をプレイヤーの手に戻す。寿命前の現役を任意に外す手動解雇。
-        var dismissSection = new VBoxContainer();
-        dismissSection.SetMeta(TestIdMetaKey, "marriage-dismiss-section");
-        root.AddChild(dismissSection);
-        var dismissTitle = new Label { Text = "── 🛡 人事（戦力外通告） ──" };
-        dismissTitle.SetMeta(TestIdMetaKey, "marriage-dismiss-title");
-        dismissSection.AddChild(dismissTitle);
-
-        var dismissHint = new Label
-        {
-            Text = "現役を任意に解雇して席を空ける（不可逆・払い戻しなし）",
-        };
-        dismissHint.SetMeta(TestIdMetaKey, "marriage-dismiss-hint");
-        dismissSection.AddChild(dismissHint);
-
-        _dismissListContainer = new VBoxContainer();
-        _dismissListContainer.SetMeta(TestIdMetaKey, "marriage-dismiss-list");
-        dismissSection.AddChild(_dismissListContainer);
-
-        // ─ 家系図ビューア セクション ─────────────────────────────
-        // 現役 1 名を起点に、祖先（英霊）と子孫を縦の血統樹で一望する入口。
-        // 各行の [🌳 家系図] 押下で PedigreeRequested を発火し、購読側が
-        // PedigreeOverlay を最前面へマウントする（本 UI はオーバーレイを持たない）。
-        var pedigreeSection = new VBoxContainer();
-        pedigreeSection.SetMeta(TestIdMetaKey, "marriage-pedigree-section");
-        root.AddChild(pedigreeSection);
-        var pedigreeTitle = new Label { Text = "── 🌳 家系図ビューア ──" };
-        pedigreeTitle.SetMeta(TestIdMetaKey, "marriage-pedigree-title");
-        pedigreeSection.AddChild(pedigreeTitle);
-
-        var pedigreeHint = new Label
-        {
-            Text = "現役を起点に祖先（英霊）と子孫を縦の血統樹で一望する",
-        };
-        pedigreeHint.SetMeta(TestIdMetaKey, "marriage-pedigree-hint");
-        pedigreeSection.AddChild(pedigreeHint);
-
-        _pedigreeListContainer = new VBoxContainer();
-        _pedigreeListContainer.SetMeta(TestIdMetaKey, "marriage-pedigree-list");
-        pedigreeSection.AddChild(_pedigreeListContainer);
+        return panel;
     }
 
     // ─── シグナル購読 / 解除 ──────────────────────────────────────────────
@@ -401,6 +462,8 @@ public partial class MarriageUI : Godot.Control
         _chronicleGlobal.FormationChanged += OnFormationChanged;
         // 持ち物の増減（ドロップ取得・付け替え）で持ち物パネルを再描画する。
         _chronicleGlobal.InventoryChanged += OnInventoryChanged;
+        // スカウト候補プールの変化（採用・世代更新）でスカウトタブを再描画する。
+        _chronicleGlobal.ScoutCandidatesChanged += OnScoutCandidatesChanged;
     }
 
     private void UnsubscribeSignals()
@@ -413,6 +476,7 @@ public partial class MarriageUI : Godot.Control
             _chronicleGlobal.StateInitialized -= OnStateInitialized;
             _chronicleGlobal.FormationChanged -= OnFormationChanged;
             _chronicleGlobal.InventoryChanged -= OnInventoryChanged;
+            _chronicleGlobal.ScoutCandidatesChanged -= OnScoutCandidatesChanged;
         }
         catch
         {
@@ -426,12 +490,13 @@ public partial class MarriageUI : Godot.Control
     {
         // 残高そのものは GameDirector の固定ヘッダが表示。ここでは残高依存の見積り・活性のみ更新。
         RenderQuote(); // 残高変動で affordable が変わる可能性
-        RenderScoutButton();
+        RenderScoutCandidates(); // 残高変動で各候補の採用ボタン活性が変わる
         RenderShop();  // 残高変動で購入・強化ボタンの活性が変わる
     }
 
     private void OnRosterChanged()
     {
+        RenderUnitList();
         RenderUnitSelectors();
         RenderQuote();
         RenderChildrenLists();
@@ -446,6 +511,9 @@ public partial class MarriageUI : Godot.Control
     /// <summary>持ち物が増減した（ドロップ取得・付け替え）ときのハンドラ。持ち物パネルだけを狙い撃ち再描画。</summary>
     private void OnInventoryChanged() => RenderInventory();
 
+    /// <summary>スカウト候補プールが変化した（採用・世代更新）ときのハンドラ。候補リストを再描画。</summary>
+    private void OnScoutCandidatesChanged() => RenderScoutCandidates();
+
     /// <summary>
     /// 今年の行動が変わった（SetPlannedAction が FormationChanged を発火）ときのハンドラ。
     /// 行動トグルの選択強調のみを再描画する（婚姻の父母選択などを巻き込まない狙い撃ち）。
@@ -457,9 +525,10 @@ public partial class MarriageUI : Godot.Control
     private void RenderAll()
     {
         RenderActionChoice();
+        RenderUnitList();
+        RenderScoutCandidates();
         RenderUnitSelectors();
         RenderQuote();
-        RenderScoutButton();
         RenderChildrenLists();
         RenderShop();
         RenderInventory();
@@ -599,10 +668,113 @@ public partial class MarriageUI : Godot.Control
         _marriageExecuteButton.Disabled = !quote.IsAffordable;
     }
 
-    private void RenderScoutButton()
+    /// <summary>
+    /// ユニットリストタブの旅団員一覧を、毎回 GetAliveUnits を読み直して無状態に再構築する。
+    /// 各行＝立ち絵 ＋ 種別/Lv/年齢/氏名 ＋ パラメータ ＋ ［詳細］。詳細押下で UnitInspectRequested。
+    /// </summary>
+    private void RenderUnitList()
     {
-        if (_chronicleGlobal is null || _scoutButton is null) return;
-        _scoutButton.Disabled = !_chronicleGlobal.CurrentEconomy.CanAfford(ScoutCost);
+        if (_chronicleGlobal is null || _unitListContainer is null) return;
+
+        foreach (var c in _unitListContainer.GetChildren()) c.QueueFree();
+
+        var alive = _chronicleGlobal.GetAliveUnits();
+        if (alive.Count == 0)
+        {
+            var empty = new Label { Text = "（旅団員がいません）" };
+            empty.SetMeta(TestIdMetaKey, "guild-unit-list-empty");
+            _unitListContainer.AddChild(empty);
+            return;
+        }
+
+        foreach (var unit in alive)
+        {
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.SetMeta(TestIdMetaKey, $"guild-unit-row-{capturedId}");
+
+            var icon = MakeUnitIcon(unit);
+            if (icon is not null) row.AddChild(icon);
+
+            var info = new Label
+            {
+                Text = $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}\n"
+                       + $"パラメータ: {UnitParamLine(unit.Job)}",
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            };
+            info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.AddChild(info);
+
+            var detailBtn = new Button { Text = "詳細" };
+            detailBtn.SetMeta(TestIdMetaKey, $"guild-unit-detail-button-{capturedId}");
+            detailBtn.Pressed += () => OnUnitDetailsPressed(capturedId);
+            row.AddChild(detailBtn);
+
+            _unitListContainer.AddChild(row);
+        }
+    }
+
+    /// <summary>
+    /// スカウトタブの候補プール（<see cref="ChronicleGlobal.ScoutCandidates"/>）を無状態に再構築する。
+    /// 各行＝立ち絵 ＋ 種別/年齢/氏名 ＋ パラメータ ＋ ［スカウト (cost pt)］（残高不足は Disabled）。
+    /// </summary>
+    private void RenderScoutCandidates()
+    {
+        if (_chronicleGlobal is null || _scoutCandidatesContainer is null) return;
+
+        foreach (var c in _scoutCandidatesContainer.GetChildren()) c.QueueFree();
+
+        var candidates = _chronicleGlobal.ScoutCandidates;
+        if (candidates.Count == 0)
+        {
+            var empty = new Label { Text = "（スカウト候補がいません）" };
+            empty.SetMeta(TestIdMetaKey, "guild-scout-empty");
+            _scoutCandidatesContainer.AddChild(empty);
+            return;
+        }
+
+        var economy = _chronicleGlobal.CurrentEconomy;
+        foreach (var cand in candidates)
+        {
+            var unit = cand.Unit;
+            var capturedId = unit.Id;
+
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+            row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.SetMeta(TestIdMetaKey, $"guild-scout-row-{capturedId}");
+
+            var icon = MakeUnitIcon(unit);
+            if (icon is not null) row.AddChild(icon);
+
+            var info = new Label
+            {
+                Text = $"{JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}\n"
+                       + $"パラメータ: {UnitParamLine(unit.Job)}",
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            };
+            info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.AddChild(info);
+
+            var canAfford = economy.CanAfford(cand.Cost);
+            var scoutBtn = new Button { Text = $"スカウト ({cand.Cost} pt)", Disabled = !canAfford };
+            scoutBtn.SetMeta(TestIdMetaKey, $"guild-scout-button-{capturedId}");
+            scoutBtn.Pressed += () => OnScoutCandidatePressed(capturedId);
+            row.AddChild(scoutBtn);
+
+            _scoutCandidatesContainer.AddChild(row);
+        }
+    }
+
+    /// <summary>ジョブの素ステ（HP/前/後/速）＋総合値を 1 行へ。数値 SoT は JobMaster のみ。</summary>
+    private static string UnitParamLine(JobId job)
+    {
+        var s = JobMaster.All[job].Stats;
+        var rating = JobMaster.TargetRating[job];
+        return $"HP{s.MaxHp} 前{s.FrontAttack} 後{s.RearAttack} 速{s.Speed}（総合{rating}）";
     }
 
     private void RenderChildrenLists()
@@ -1196,25 +1368,31 @@ public partial class MarriageUI : Godot.Control
         // 画面再描画はシグナル経由で自動
     }
 
-    private void OnScoutPressed()
+    /// <summary>
+    /// スカウト候補行の ［スカウト］ 押下ハンドラ。ChronicleGlobal.RecruitScoutCandidate が
+    /// 残高検証・消費・ロスタ追加・候補除去・シグナル発火を一括で行う。失敗時は null。
+    /// </summary>
+    private void OnScoutCandidatePressed(Guid candidateId)
     {
         if (_chronicleGlobal is null) return;
 
-        // ChronicleGlobal.ExecuteScout がポイント検証・消費・外様生成・ロスタ追加・
-        // シグナル発火までを一括で行う。残高不足や失敗時は null が返る。
-        var recruited = _chronicleGlobal.ExecuteScout(ScoutCost);
-
+        var recruited = _chronicleGlobal.RecruitScoutCandidate(candidateId);
         if (recruited is null)
         {
-            GD.Print($"[MarriageUI] 💸 スカウト失敗: 残高不足／状態未初期化 (need {ScoutCost} pt)");
+            GD.Print($"[MarriageUI] 💸 スカウト失敗: 残高不足／候補不在 Id={candidateId}");
             return;
         }
 
         GD.Print(
-            $"[MarriageUI] ⚔ 外様スカウト成立 ({ScoutCost} pt) / " +
-            $"{JobName(recruited.Job)} (Age {recruited.Age}) Id={recruited.Id}");
-        // 残高・父母セレクタ・家系図の再描画はシグナル経由で自動
+            $"[MarriageUI] ⚔ スカウト成立 / {JobName(recruited.Job)} (Age {recruited.Age}) Id={recruited.Id}");
+        // 残高・各リストの再描画は EconomyChanged/RosterChanged/ScoutCandidatesChanged シグナル経由で自動。
     }
+
+    /// <summary>
+    /// ユニットリスト行の ［詳細］ 押下ハンドラ。当該ユニットの詳細オーバーレイのマウント意思
+    /// （<see cref="UnitInspectRequested"/>）を発火する（オーバーレイの生死は GameDirector が握る）。
+    /// </summary>
+    private void OnUnitDetailsPressed(Guid unitId) => UnitInspectRequested?.Invoke(unitId);
 
     /// <summary>
     /// 家系図ビューア各行の [🌳 家系図] 押下ハンドラ。当該ユニットを根とする家系図
