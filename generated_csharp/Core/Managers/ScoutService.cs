@@ -50,6 +50,21 @@ public sealed record ScoutResult
     public required Unit Recruit { get; init; }
 }
 
+// ─── スカウト候補（人事フェーズのスカウトタブに並ぶ 1 名） ───────────────────
+
+/// <summary>
+/// スカウト候補プールの 1 件＝生成済みの外様ユニットと、その採用コスト（TargetRating 連動）の束。
+/// プールは ChronicleGlobal が SoT として保持し、UI はこれを並べて 1 名を選んで採用する。
+/// </summary>
+public sealed record ScoutCandidate
+{
+    /// <summary>生成済みの外様候補ユニット（採用するとこの実体がそのままロスタへ入る）。</summary>
+    public required Unit Unit { get; init; }
+
+    /// <summary>採用に必要なポイント（<see cref="ScoutService.ComputeScoutCost"/> で算出）。</summary>
+    public required int Cost { get; init; }
+}
+
 // ─── スカウト本体（純粋・静的） ─────────────────────────────────────────────
 
 /// <summary>
@@ -71,6 +86,105 @@ public static class ScoutService
 
     /// <summary>外様スカウトで生成する新ユニットの寿命の上限。</summary>
     public const int ScoutMaxLifespan = 75;
+
+    // ─── 候補プール・コストのパラメータ ───────────────────────────────────
+
+    /// <summary>スカウトタブに並べる候補の既定数。最小 <see cref="MinScoutCandidateCount"/> を下回らない。</summary>
+    public const int DefaultScoutCandidateCount = 3;
+
+    /// <summary>候補数の下限（仕様: 3 名以上は並べられるようにする）。</summary>
+    public const int MinScoutCandidateCount = 3;
+
+    /// <summary>採用コスト算出の除数（婚姻の CostDivisor と揃える）。式: ceil(TargetRating / 本値)。</summary>
+    public const int ScoutCostDivisor = 20;
+
+    /// <summary>採用コストの下限（安すぎる即戦力を防ぐ床）。</summary>
+    public const int MinScoutCost = 3;
+
+    // ─── 採用コスト（ジョブの TargetRating 連動） ─────────────────────────
+
+    /// <summary>
+    /// 候補ジョブの強さ（<see cref="JobMaster.TargetRating"/>）に連動した採用コストを算出する。
+    /// 式: max(<see cref="MinScoutCost"/>, ceil(TargetRating / <see cref="ScoutCostDivisor"/>))。
+    /// 強い職ほど高コストになり、床で下限を保証する（数値は SoT 定数のみ・ハードコード回避）。
+    /// </summary>
+    public static int ComputeScoutCost(JobId job)
+    {
+        var rating = JobMaster.TargetRating[job];
+        var scaled = (int)Math.Ceiling(rating / (double)ScoutCostDivisor);
+        return Math.Max(MinScoutCost, scaled);
+    }
+
+    // ─── 候補プール生成 ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// 血縁なしの外様候補を <paramref name="count"/> 名（<see cref="MinScoutCandidateCount"/> を下回らない）
+    /// 生成し、各々に TargetRating 連動コストを付けた不変プールを返す純粋関数。候補同士でも名前が
+    /// 衝突しないよう、払い出すたびに使用済みキー集合へ加えながら生成する。副作用なし（rng のみ消費）。
+    /// </summary>
+    /// <param name="count">生成する候補数（最小 3 にクランプ）。</param>
+    /// <param name="rng">候補生成に使う乱数発生器（seeded で再現可能）。</param>
+    /// <param name="usedFirstNameKeys">名前重複回避用の既使用キー集合（通常は現ロスタ由来）。</param>
+    public static ImmutableList<ScoutCandidate> CreateCandidatePool(
+        int count,
+        Random rng,
+        IReadOnlySet<string> usedFirstNameKeys)
+    {
+        ArgumentNullException.ThrowIfNull(rng);
+        ArgumentNullException.ThrowIfNull(usedFirstNameKeys);
+
+        var n = Math.Max(MinScoutCandidateCount, count);
+        var used = new HashSet<string>(usedFirstNameKeys, StringComparer.Ordinal);
+
+        var builder = ImmutableList.CreateBuilder<ScoutCandidate>();
+        for (int i = 0; i < n; i++)
+        {
+            var unit = CreateOutsiderUnit(rng, used);
+            used.Add(unit.FirstNameKey); // 次の候補と名前が衝突しないように
+            builder.Add(new ScoutCandidate { Unit = unit, Cost = ComputeScoutCost(unit.Job) });
+        }
+        return builder.ToImmutable();
+    }
+
+    // ─── 候補の採用（プールから 1 名を雇う） ───────────────────────────────
+
+    /// <summary>
+    /// 既に生成済みの候補 1 名を、その候補固有のコストで採用する純粋関数。残高検証 → 消費 →
+    /// 候補ユニットをロスタへ追加した <see cref="ScoutResult"/> を返す。失敗（負コスト・残高不足）は null。
+    /// 候補ユニットは新規生成せず、プールに並んでいた実体をそのまま使う（表示と採用の一致を保証）。
+    /// </summary>
+    /// <param name="economy">現在のポイント経済。</param>
+    /// <param name="roster">現在の旅団員リスト。</param>
+    /// <param name="candidate">採用する候補（コストを内包）。</param>
+    public static ScoutResult? TryRecruit(
+        PointsEconomy economy,
+        ImmutableList<Unit> roster,
+        ScoutCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(economy);
+        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (candidate.Cost < 0) return null;
+        if (!economy.CanAfford(candidate.Cost)) return null;
+
+        PointsEconomy nextEconomy;
+        try
+        {
+            nextEconomy = economy.SpendPoints(candidate.Cost);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+
+        return new ScoutResult
+        {
+            NewEconomy = nextEconomy,
+            NewRoster  = roster.Add(candidate.Unit),
+            Recruit    = candidate.Unit,
+        };
+    }
 
     // ─── スカウト試行 ─────────────────────────────────────────────────────
 

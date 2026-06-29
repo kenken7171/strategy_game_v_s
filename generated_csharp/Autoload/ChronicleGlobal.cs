@@ -84,6 +84,7 @@ public partial class ChronicleGlobal : Godot.Node
     public const string SignalBattleChanged     = "BattleChanged";
     public const string SignalInventoryChanged  = "InventoryChanged";
     public const string SignalDropChoicePending = "DropChoicePending";
+    public const string SignalScoutCandidatesChanged = "ScoutCandidatesChanged";
 
     // ════════════════════════════════════════════════════════════════════════
     //  Signal 宣言
@@ -133,6 +134,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// </summary>
     [Signal] public delegate void DropChoicePendingEventHandler();
 
+    /// <summary>
+    /// スカウト候補プール（<see cref="ScoutCandidates"/>）が変化した時に発火するシグナル。
+    /// 1 名採用してプールから除いた時・初期化／ロードで再生成した時に流れ、人事フェーズの
+    /// スカウトタブが候補リストを読み直して再描画する。
+    /// </summary>
+    [Signal] public delegate void ScoutCandidatesChangedEventHandler();
+
     // ════════════════════════════════════════════════════════════════════════
     //  状態保持プロパティ（SoT、外部からは読み取り専用）
     // ════════════════════════════════════════════════════════════════════════
@@ -168,6 +176,13 @@ public partial class ChronicleGlobal : Godot.Node
     /// 永続化しない（claim 前にセーブ・終了した場合は失われる＝その年の運）。
     /// </summary>
     public ImmutableArray<Equipment> PendingDropCandidates { get; private set; } = ImmutableArray<Equipment>.Empty;
+
+    /// <summary>
+    /// スカウト候補プール（人事フェーズのスカウトタブが並べる外様候補と各採用コスト）。世代送り・
+    /// 初期化・ロードで再生成し、1 名採用すると当該候補をプールから除く。<see cref="PendingDropCandidates"/>
+    /// と同様に「選択待ちの提示状態」なので永続化しない（ロードは新しい乱数で再生成する）。
+    /// </summary>
+    public ImmutableList<ScoutCandidate> ScoutCandidates { get; private set; } = ImmutableList<ScoutCandidate>.Empty;
 
     /// <summary>Initialize が呼ばれて状態が有効化されているか。</summary>
     public bool IsInitialized { get; private set; } = false;
@@ -449,6 +464,7 @@ public partial class ChronicleGlobal : Godot.Node
             LastRestOutcome  = RestOutcome.None;        // 新規開始時は休息成果なし
             _chronicleLog = ImmutableArray<ChronicleLogEntry>.Empty; // 旅団史も白紙から
             _ancestralArchive = ImmutableDictionary<Guid, Unit>.Empty; // 英霊アーカイブも更地から
+            RegenerateScoutCandidatesLocked(); // スカウト候補プールを初期生成（rng・ロスタ確定後）
             IsInitialized = true;
         }
 
@@ -458,6 +474,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
         SafeEmit(SignalInventoryChanged);
+        SafeEmit(SignalScoutCandidatesChanged);
         SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
     }
@@ -482,6 +499,7 @@ public partial class ChronicleGlobal : Godot.Node
             BattalionRoster          = ImmutableList<Unit>.Empty;
             BrigadeInventory         = ImmutableList<Equipment>.Empty;
             PendingDropCandidates    = ImmutableArray<Equipment>.Empty;
+            ScoutCandidates          = ImmutableList<ScoutCandidate>.Empty;
             CurrentTimeline          = null;
             CurrentPhase             = GamePhaseFlow.InitialPhase;
             CurrentAction            = PlannedAction.March;
@@ -755,6 +773,68 @@ public partial class ChronicleGlobal : Godot.Node
 
         SafeEmit(SignalEconomyChanged);
         SafeEmit(SignalRosterChanged);
+
+        return recruited;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  スカウト候補プール（人事フェーズのスカウトタブが並べる候補・選んで採用）
+    // ════════════════════════════════════════════════════════════════════════
+    //  ExecuteScout（即時 1 名生成）に対し、こちらは「あらかじめ並べた候補から 1 名を選ぶ」方式。
+    //  候補は SoT (ScoutCandidates) が保持し、世代送り・初期化・ロードで再生成する（非永続）。
+
+    /// <summary>
+    /// スカウト候補プールを現在の乱数・ロスタから作り直す（必ず <see cref="_stateLock"/> 保持中に呼ぶ）。
+    /// 名前重複回避のため現ロスタのファーストネームキーを除外集合として渡す。候補数は
+    /// <see cref="ScoutService.DefaultScoutCandidateCount"/>（最小 3）。シグナル発火は呼び出し側が行う。
+    /// </summary>
+    private void RegenerateScoutCandidatesLocked()
+    {
+        var usedFirstNameKeys = BattalionRoster
+            .Select(u => u.FirstNameKey)
+            .ToHashSet(StringComparer.Ordinal);
+
+        ScoutCandidates = ScoutService.CreateCandidatePool(
+            ScoutService.DefaultScoutCandidateCount, _rng, usedFirstNameKeys);
+    }
+
+    /// <summary>
+    /// スカウト候補プールの 1 名（<paramref name="candidateId"/>＝候補ユニットの Id）を、その候補固有の
+    /// コストで採用する。残高検証 → 消費 → ロスタ追加 → 当該候補をプールから除去を一括で行う。
+    ///
+    /// 実行内容:
+    ///   1. ScoutService.TryRecruit で残高検証 → 消費 → 候補ユニットをロスタへ追加。
+    ///   2. 成功時のみ CurrentEconomy / BattalionRoster を差し替え、ScoutCandidates から当該候補を除く。
+    ///   3. EconomyChanged / RosterChanged / ScoutCandidatesChanged を発火。
+    ///
+    /// 戻り値:
+    ///   - Unit: 採用された候補ユニット（UI の「○○が加入！」演出に使う）。
+    ///   - null: 未初期化・候補不在・残高不足。
+    /// </summary>
+    /// <param name="candidateId">採用する候補ユニットの Id。</param>
+    public Unit? RecruitScoutCandidate(Guid candidateId)
+    {
+        Unit? recruited;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            var candidate = ScoutCandidates.FirstOrDefault(c => c.Unit.Id == candidateId);
+            if (candidate is null) return null;
+
+            var result = ScoutService.TryRecruit(CurrentEconomy, BattalionRoster, candidate);
+            if (result is null) return null;
+
+            CurrentEconomy  = result.NewEconomy;
+            BattalionRoster = result.NewRoster;
+            ScoutCandidates = ScoutCandidates.Remove(candidate);
+            recruited       = result.Recruit;
+        }
+
+        SafeEmit(SignalEconomyChanged);
+        SafeEmit(SignalRosterChanged);
+        SafeEmit(SignalScoutCandidatesChanged);
 
         return recruited;
     }
@@ -1230,6 +1310,10 @@ public partial class ChronicleGlobal : Godot.Node
             CurrentTimeline = CurrentTimeline.AdvanceToNextTurn(
                 ProphecyMaster.Generate, _rng, years);
         }
+
+        // 4.5 スカウト候補プールを次世代ぶん更新（去った者の名前枠が空くので重複回避も更新される）。
+        //     人事フェーズ（Guild）はこの後の Chronicle→Guild 入場時にマウントされ、新候補を読む。
+        RegenerateScoutCandidatesLocked();
 
         // 5. 保留年数・保留予言をリセット（次の Chronicle 選択で改めて設定される）。
         //    予言報酬は休息決算（ExecuteRest）で既に消費済みのため、ここでは取りこぼし防止の
@@ -2167,6 +2251,7 @@ public partial class ChronicleGlobal : Godot.Node
             _pendingGenerationSkipYears = 0;     // 保留年数は保存しない（Chronicle 再開で再設定）
             _pendingProphecy = null;             // 保留予言も保存しない
             _chronicleLog   = loaded.ChronicleLog; // ★ 旅団史を永続化セーブから復元（v1 は空配列）
+            RegenerateScoutCandidatesLocked(); // 候補は非永続。新しい乱数・復元ロスタから再生成する。
             IsInitialized   = true;
         }
 
@@ -2175,6 +2260,7 @@ public partial class ChronicleGlobal : Godot.Node
         SafeEmit(SignalTimelineChanged);
         SafeEmit(SignalRosterChanged);
         SafeEmit(SignalInventoryChanged);
+        SafeEmit(SignalScoutCandidatesChanged);
         SafeEmit(SignalFormationChanged);
         SafeEmit(SignalPhaseChanged);
 
