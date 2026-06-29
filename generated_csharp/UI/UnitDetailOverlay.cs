@@ -14,12 +14,15 @@
 // =============================================================================
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using ChronicleKnights.Autoload;
 using ChronicleKnights.Core.Formation;
 using ChronicleKnights.Core.Job;
 using ChronicleKnights.Core.Managers;
 using ChronicleKnights.Core.Naming;
+using ChronicleKnights.Core.Pedigree;        // PedigreeBuilder / PedigreeGraph（家系図のインライン表示）
 using ChronicleKnights.Core.Units;
 using ChronicleKnights.UserInterface; // JobTextureLibrary
 using Godot;
@@ -42,12 +45,9 @@ public partial class UnitDetailOverlay : Godot.Control
     /// <summary>Raised when 戦力外通告（解雇）が確定したとき。購読側（GameDirector）が ExecuteDismiss を呼ぶ。</summary>
     public event Action<Guid>? DismissRequested;
 
-    /// <summary>Raised when 家系図 を開く意思表示。購読側（GameDirector）が PedigreeOverlay をマウントする。</summary>
-    public event Action<Guid>? PedigreeRequested;
-
     private ChronicleGlobal? _chronicleGlobal;
 
-    /// <summary>操作ボタン行（家系図／戦力外通告）。解雇の 2 段階確認で中身を組み直すため保持する。</summary>
+    /// <summary>戦力外通告ボタン行。解雇の 2 段階確認で中身を組み直すため保持する。</summary>
     private HBoxContainer? _actionsRow;
 
     /// <summary>解雇の確認待ち（武装）状態。true なら ［解雇する］／［やめる］を出す（不可逆操作の誤爆防止）。</summary>
@@ -141,9 +141,6 @@ public partial class UnitDetailOverlay : Godot.Control
         slot.SetMeta(TestIdMetaKey, "unit-detail-formation-slot");
         body.AddChild(slot);
 
-        // ── 操作（家系図 / 戦力外通告）。人事の per-unit アクションをここへ集約。 ──
-        BuildActions(body);
-
         // ── Stats + lineage (BBCode) ─────────────────────────────────────────
         var stats = new RichTextLabel
         {
@@ -166,37 +163,158 @@ public partial class UnitDetailOverlay : Godot.Control
         {
             body.AddChild(jobBlock);
         }
+
+        // ── 家系図（インライン・常時表示。ボタン不要） ＋ その下に戦力外通告 ──
+        BuildPedigreeInline(body);
+        BuildDismissAction(body);
     }
 
+    // ─── 家系図（インライン・常時表示） ───────────────────────────────────
+
     /// <summary>
-    /// 操作ボタン行（🌳 家系図 ／ 🛡 戦力外通告）を組む器を置き、<see cref="RenderActions"/> で中身を描く。
-    /// 解雇は不可逆なため行内 2 段階確認（［戦力外通告］→［解雇する］／［やめる］）にする。
+    /// 本人を根とする家系図を、ボタンを介さず詳細モーダル最下部へ直接描く。世代帯（祖父母／父母／
+    /// 本人・配偶者・兄弟／子／孫）ごとに小カードを横並びにする。データは血統宇宙
+    /// （<see cref="ChronicleGlobal.GetPedigreeUniverse"/>）＋現役 Id 集合から純粋層 <see cref="PedigreeBuilder"/> が構築する。
     /// </summary>
-    private void BuildActions(VBoxContainer body)
+    private void BuildPedigreeInline(VBoxContainer body)
+    {
+        if (_chronicleGlobal is null) return;
+
+        var header = new Label { Text = "― 家系図 ―" };
+        header.SetMeta(TestIdMetaKey, "unit-detail-pedigree-header");
+        body.AddChild(header);
+
+        var universe = _chronicleGlobal.GetPedigreeUniverse();
+        var currentIds = _chronicleGlobal.BattalionRoster.Select(u => u.Id).ToHashSet();
+        var graph = PedigreeBuilder.Build(universe, currentIds, TargetUnitId);
+
+        // 本人 1 ノードしか無い＝血縁リンクなし（創設メンバー）。
+        if (!graph.HasNodes || graph.Nodes.Length <= 1)
+        {
+            var none = new Label { Text = "血統情報なし（創設メンバー）" };
+            none.AddThemeColorOverride("font_color", new Color(0.6f, 0.6f, 0.6f));
+            none.SetMeta(TestIdMetaKey, "unit-detail-pedigree-empty");
+            body.AddChild(none);
+            return;
+        }
+
+        // 祖先（上）→ 子孫（下）の順に世代帯を縦に積む。
+        foreach (var gen in new[] { -2, -1, 0, 1, 2 })
+        {
+            var nodes = graph.Nodes.Where(n => n.Generation == gen).ToArray();
+            if (nodes.Length == 0) continue;
+
+            var band = new VBoxContainer();
+            band.AddThemeConstantOverride("separation", 2);
+            band.SetMeta(TestIdMetaKey, $"unit-detail-pedigree-gen-{gen}");
+
+            var genLabel = new Label { Text = GenerationLabel(gen) };
+            genLabel.AddThemeColorOverride("font_color", new Color(0.5f, 0.82f, 1.0f));
+            band.AddChild(genLabel);
+
+            var iconsRow = new HBoxContainer();
+            iconsRow.AddThemeConstantOverride("separation", 12);
+            foreach (var node in nodes) iconsRow.AddChild(BuildPedigreeCard(node));
+            band.AddChild(iconsRow);
+
+            body.AddChild(band);
+        }
+    }
+
+    /// <summary>家系図 1 ノードの小カード（立ち絵 ＋ 氏名 ＋ 関係/職）。去った者は遺影風に淡色、本人は金字。</summary>
+    private Control BuildPedigreeCard(PedigreeNode node)
+    {
+        var unit = node.Unit;
+
+        var card = new VBoxContainer();
+        card.AddThemeConstantOverride("separation", 2);
+        card.SetMeta(TestIdMetaKey, $"unit-detail-pedigree-card-{unit.Id}");
+
+        var tex = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
+        if (tex is not null)
+        {
+            var icon = new TextureRect
+            {
+                Texture = tex,
+                CustomMinimumSize = new Vector2(56, 56),
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
+            };
+            // 去った祖先（非現役）は遺影風に淡いセピアで沈める。
+            if (!node.IsCurrentMember) icon.Modulate = new Color(0.62f, 0.56f, 0.50f);
+            card.AddChild(icon);
+        }
+
+        var name = new Label
+        {
+            Text = _chronicleGlobal?.ResolveDisplayName(unit) ?? unit.Id.ToString(),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        if (node.Relation == PedigreeRelation.Self)
+        {
+            name.AddThemeColorOverride("font_color", new Color(1.0f, 0.82f, 0.29f)); // 本人＝金
+        }
+        name.SetMeta(TestIdMetaKey, $"unit-detail-pedigree-name-{unit.Id}");
+        card.AddChild(name);
+
+        var sub = new Label
+        {
+            Text = $"{RelationLabel(node.Relation)}・{(_chronicleGlobal?.ResolveJobName(unit.Job) ?? unit.Job.ToString())}",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        sub.AddThemeFontSizeOverride("font_size", 12);
+        sub.AddThemeColorOverride("font_color", new Color(0.8f, 0.8f, 0.8f));
+        card.AddChild(sub);
+
+        return card;
+    }
+
+    private static string GenerationLabel(int generation) => generation switch
+    {
+        -2 => "祖父母",
+        -1 => "父母",
+        0  => "本人・配偶者・兄弟",
+        1  => "子",
+        2  => "孫",
+        _  => $"世代 {generation}",
+    };
+
+    private static string RelationLabel(PedigreeRelation relation) => relation switch
+    {
+        PedigreeRelation.Grandparent => "祖父母",
+        PedigreeRelation.Parent      => "親",
+        PedigreeRelation.Self        => "本人",
+        PedigreeRelation.Spouse      => "配偶者",
+        PedigreeRelation.Sibling     => "兄弟姉妹",
+        PedigreeRelation.Child       => "子",
+        PedigreeRelation.Grandchild  => "孫",
+        _ => relation.ToString(),
+    };
+
+    // ─── 戦力外通告（家系図の下に置く・2 段階確認） ───────────────────────
+
+    /// <summary>戦力外通告ボタン行を家系図の下に置き、<see cref="RenderDismissAction"/> で中身を描く。</summary>
+    private void BuildDismissAction(VBoxContainer body)
     {
         _actionsRow = new HBoxContainer();
         _actionsRow.AddThemeConstantOverride("separation", 10);
         _actionsRow.SetMeta(TestIdMetaKey, "unit-detail-actions");
         body.AddChild(_actionsRow);
-        RenderActions();
+        RenderDismissAction();
     }
 
-    /// <summary>操作ボタン行を現在の武装状態から組み直す（家系図は常設、解雇は確認待ちで切替）。</summary>
-    private void RenderActions()
+    /// <summary>戦力外通告（解雇）の 2 段階確認（［戦力外通告］→［解雇する］／［やめる］）を組み直す。</summary>
+    private void RenderDismissAction()
     {
         if (_actionsRow is null) return;
         foreach (var c in _actionsRow.GetChildren()) c.QueueFree();
-
-        var pedigreeBtn = new Button { Text = "🌳 家系図" };
-        pedigreeBtn.SetMeta(TestIdMetaKey, "unit-detail-pedigree-button");
-        pedigreeBtn.Pressed += () => PedigreeRequested?.Invoke(TargetUnitId);
-        _actionsRow.AddChild(pedigreeBtn);
 
         if (!_dismissArmed)
         {
             var dismissBtn = new Button { Text = "🛡 戦力外通告" };
             dismissBtn.SetMeta(TestIdMetaKey, "unit-detail-dismiss-button");
-            dismissBtn.Pressed += () => { _dismissArmed = true; RenderActions(); };
+            dismissBtn.Pressed += () => { _dismissArmed = true; RenderDismissAction(); };
             _actionsRow.AddChild(dismissBtn);
         }
         else
@@ -212,7 +330,7 @@ public partial class UnitDetailOverlay : Godot.Control
 
             var cancelBtn = new Button { Text = "やめる" };
             cancelBtn.SetMeta(TestIdMetaKey, "unit-detail-dismiss-cancel-button");
-            cancelBtn.Pressed += () => { _dismissArmed = false; RenderActions(); };
+            cancelBtn.Pressed += () => { _dismissArmed = false; RenderDismissAction(); };
             _actionsRow.AddChild(cancelBtn);
         }
     }

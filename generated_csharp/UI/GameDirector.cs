@@ -507,16 +507,6 @@ public partial class GameDirector : Godot.Control
     private void OnUnitDetailCloseRequested() => DismissUnitDetailOverlay();
 
     /// <summary>
-    /// 詳細モーダルの「🌳 家系図」意思表示。詳細モーダルを閉じてから、当該ユニットを根とする
-    /// 家系図オーバーレイを最前面へ展開する（モーダルの上に重ねず、入れ替える）。
-    /// </summary>
-    private void OnUnitDetailPedigreeRequested(Guid unitId)
-    {
-        DismissUnitDetailOverlay();
-        MountPedigreeOverlay(unitId);
-    }
-
-    /// <summary>
     /// 詳細モーダルの「🛡 戦力外通告（確定）」意思表示。ロスタから即時解雇し（ExecuteDismiss）、
     /// 当該ユニットは消えるため詳細モーダルを閉じる。再描画は RosterChanged シグナル経由で各画面が行う。
     /// </summary>
@@ -536,7 +526,6 @@ public partial class GameDirector : Godot.Control
 
         var overlay = new UnitDetailOverlay { TargetUnitId = unitId };
         overlay.CloseRequested += OnUnitDetailCloseRequested;
-        overlay.PedigreeRequested += OnUnitDetailPedigreeRequested;
         overlay.DismissRequested += OnUnitDetailDismissRequested;
         overlay.SetMeta(TestIdMetaKey, "game-director-unit-detail-overlay");
         _unitDetailOverlay = overlay;
@@ -555,7 +544,6 @@ public partial class GameDirector : Godot.Control
         if (GodotObject.IsInstanceValid(_unitDetailOverlay))
         {
             _unitDetailOverlay.CloseRequested -= OnUnitDetailCloseRequested;
-            _unitDetailOverlay.PedigreeRequested -= OnUnitDetailPedigreeRequested;
             _unitDetailOverlay.DismissRequested -= OnUnitDetailDismissRequested;
             _unitDetailOverlay.QueueFree();
         }
