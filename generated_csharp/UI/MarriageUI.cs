@@ -88,15 +88,9 @@ public partial class MarriageUI : Godot.Control
     // ─── 意思表示イベント（オーバーレイのマウントは購読側 = GameDirector が引く） ──
 
     /// <summary>
-    /// 家系図オーバーレイを開く意思表示。指定ユニットを根として、購読側（GameDirector）が
-    /// PedigreeOverlay を最前面へマウントする。本 UI はオーバーレイの生死を一切持たない
-    /// （無状態の徹底。SoT 手繰りと描画はオーバーレイ自身が担う）。
-    /// </summary>
-    public event Action<Guid>? PedigreeRequested;
-
-    /// <summary>
     /// ユニット詳細オーバーレイを開く意思表示。ユニットリストタブの各行 ［詳細］押下で、購読側
     /// （GameDirector）が UnitDetailOverlay を最前面へマウントする（FormationUI と同じ窓口）。
+    /// 家系図・戦力外通告（解雇）はその詳細オーバーレイ内から行う（per-unit アクションの集約先）。
     /// </summary>
     public event Action<Guid>? UnitInspectRequested;
 
@@ -137,12 +131,6 @@ public partial class MarriageUI : Godot.Control
     // 持ち物（装備の付け替え）セクション
     private VBoxContainer? _inventoryListContainer;
 
-    // 人事（戦力外通告）セクション
-    private VBoxContainer? _dismissListContainer;
-
-    // 家系図ビューアセクション（現役を起点に血統樹オーバーレイを開く入口）
-    private VBoxContainer? _pedigreeListContainer;
-
     // ─── 内部状態 ─────────────────────────────────────────────────────────
 
     /// <summary>OptionButton index → Unit.Id のマッピング（父選択用）</summary>
@@ -156,13 +144,6 @@ public partial class MarriageUI : Godot.Control
     /// 側のロスタには既に居るため、これは表示フィルタ用）。
     /// </summary>
     private readonly HashSet<Guid> _ceremoniallyEnlisted = new();
-
-    /// <summary>
-    /// 戦力外通告の確認待ち対象 ID。解雇は不可逆なため、行内 2 段階確認
-    /// （[戦力外通告] → [解雇する]／[やめる]）の「武装」状態をこの 1 件で表す。
-    /// null なら確認待ちなし。Roster 再描画をまたいでも保持する（誤爆防止）。
-    /// </summary>
-    private Guid? _pendingDismissId;
 
     /// <summary>
     /// 装備強化の確認待ち対象 ID。購入と同じく行内 2 段階確認（[強化] → [強化する]／[やめる]）の
@@ -305,20 +286,9 @@ public partial class MarriageUI : Godot.Control
         _unitListContainer.SetMeta(TestIdMetaKey, "guild-unit-list");
         panel.AddChild(_unitListContainer);
 
-        // 暫定併設: 解雇・家系図は Phase 3 で ［詳細］ オーバーレイへ移設予定。機能維持のため当面ここに残す。
-        var dismissTitle = new Label { Text = "── 🛡 人事（戦力外通告） ──" };
-        dismissTitle.SetMeta(TestIdMetaKey, "marriage-dismiss-title");
-        panel.AddChild(dismissTitle);
-        _dismissListContainer = new VBoxContainer();
-        _dismissListContainer.SetMeta(TestIdMetaKey, "marriage-dismiss-list");
-        panel.AddChild(_dismissListContainer);
-
-        var pedigreeTitle = new Label { Text = "── 🌳 家系図ビューア ──" };
-        pedigreeTitle.SetMeta(TestIdMetaKey, "marriage-pedigree-title");
-        panel.AddChild(pedigreeTitle);
-        _pedigreeListContainer = new VBoxContainer();
-        _pedigreeListContainer.SetMeta(TestIdMetaKey, "marriage-pedigree-list");
-        panel.AddChild(_pedigreeListContainer);
+        var hint = new Label { Text = "各行の ［詳細］ から ステータス・家系図・戦力外通告（解雇）を行えます。" };
+        hint.SetMeta(TestIdMetaKey, "guild-unit-list-hint");
+        panel.AddChild(hint);
 
         return panel;
     }
@@ -506,8 +476,6 @@ public partial class MarriageUI : Godot.Control
         RenderChildrenLists();
         RenderShop();
         RenderInventory();
-        RenderDismissList();
-        RenderPedigreeList();
     }
 
     private void OnStateInitialized() => RenderAll();
@@ -536,8 +504,6 @@ public partial class MarriageUI : Godot.Control
         RenderChildrenLists();
         RenderShop();
         RenderInventory();
-        RenderDismissList();
-        RenderPedigreeList();
     }
 
     /// <summary>
@@ -1237,125 +1203,6 @@ public partial class MarriageUI : Godot.Control
         RenderInventory();
     }
 
-    /// <summary>
-    /// 人事（戦力外通告）セクションのロスタ一覧を、現在の生存者から無状態に再構築する。
-    /// 各行は「[戦力外通告]」ボタンを持ち、押下で当該行のみ確認状態（[解雇する]／[やめる]）
-    /// へ切り替わる（<see cref="_pendingDismissId"/> による行内 2 段階確認）。
-    /// SoT を一切キャッシュせず、毎回 GetAliveUnits を読み直す（ロスタ変更に追従）。
-    /// </summary>
-    private void RenderDismissList()
-    {
-        if (_chronicleGlobal is null || _dismissListContainer is null) return;
-
-        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない）。
-        foreach (var c in _dismissListContainer.GetChildren()) c.QueueFree();
-
-        var alive = _chronicleGlobal.GetAliveUnits();
-        if (alive.Count == 0)
-        {
-            var empty = new Label { Text = "（解雇できる現役がいません）" };
-            empty.SetMeta(TestIdMetaKey, "marriage-dismiss-empty");
-            _dismissListContainer.AddChild(empty);
-            return;
-        }
-
-        foreach (var unit in alive)
-        {
-            var capturedId = unit.Id;
-
-            var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 8);
-            row.SetMeta(TestIdMetaKey, $"marriage-dismiss-row-{capturedId}");
-
-            var dismissIcon = MakeUnitIcon(unit);
-            if (dismissIcon is not null) row.AddChild(dismissIcon);
-
-            var name = new Label
-            {
-                Text = $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) "
-                       + _chronicleGlobal.ResolveDisplayName(unit),
-            };
-            name.SetMeta(TestIdMetaKey, $"marriage-dismiss-name-{capturedId}");
-            row.AddChild(name);
-
-            if (_pendingDismissId == capturedId)
-            {
-                // 武装状態: 確認ラベル + [解雇する] + [やめる]（不可逆操作の誤爆防止）。
-                var confirmLabel = new Label { Text = "⚠ 本当に解雇しますか？" };
-                confirmLabel.SetMeta(TestIdMetaKey, $"marriage-dismiss-confirm-label-{capturedId}");
-                row.AddChild(confirmLabel);
-
-                var confirmBtn = new Button { Text = "解雇する" };
-                confirmBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-confirm-button-{capturedId}");
-                confirmBtn.Pressed += () => OnDismissConfirmPressed(capturedId);
-                row.AddChild(confirmBtn);
-
-                var cancelBtn = new Button { Text = "やめる" };
-                cancelBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-cancel-button-{capturedId}");
-                cancelBtn.Pressed += OnDismissCancelPressed;
-                row.AddChild(cancelBtn);
-            }
-            else
-            {
-                var armBtn = new Button { Text = "戦力外通告" };
-                armBtn.SetMeta(TestIdMetaKey, $"marriage-dismiss-button-{capturedId}");
-                armBtn.Pressed += () => OnDismissArmPressed(capturedId);
-                row.AddChild(armBtn);
-            }
-
-            _dismissListContainer.AddChild(row);
-        }
-    }
-
-    /// <summary>
-    /// 家系図ビューアの現役一覧を、毎回 GetAliveUnits を読み直して無状態に再構築する。
-    /// 各行は [🌳 家系図] ボタンを持ち、押下で当該ユニットを根とする家系図オーバーレイの
-    /// マウント意思（<see cref="PedigreeRequested"/>）を発火する。SoT を一切キャッシュしない。
-    /// </summary>
-    private void RenderPedigreeList()
-    {
-        if (_chronicleGlobal is null || _pedigreeListContainer is null) return;
-
-        // 既存行を破棄してから現在の生存者で組み直す（ゾンビ行を残さない）。
-        foreach (var c in _pedigreeListContainer.GetChildren()) c.QueueFree();
-
-        var alive = _chronicleGlobal.GetAliveUnits();
-        if (alive.Count == 0)
-        {
-            var empty = new Label { Text = "（家系図を開ける現役がいません）" };
-            empty.SetMeta(TestIdMetaKey, "marriage-pedigree-empty");
-            _pedigreeListContainer.AddChild(empty);
-            return;
-        }
-
-        foreach (var unit in alive)
-        {
-            var capturedId = unit.Id;
-
-            var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 8);
-            row.SetMeta(TestIdMetaKey, $"marriage-pedigree-row-{capturedId}");
-
-            var pedigreeIcon = MakeUnitIcon(unit);
-            if (pedigreeIcon is not null) row.AddChild(pedigreeIcon);
-
-            var name = new Label
-            {
-                Text = $"{JobName(unit.Job)} (Age {unit.Age}) "
-                       + _chronicleGlobal.ResolveDisplayName(unit),
-            };
-            name.SetMeta(TestIdMetaKey, $"marriage-pedigree-name-{capturedId}");
-            row.AddChild(name);
-
-            var openBtn = new Button { Text = "🌳 家系図" };
-            openBtn.SetMeta(TestIdMetaKey, $"marriage-pedigree-open-button-{capturedId}");
-            openBtn.Pressed += () => OnPedigreeOpenPressed(capturedId);
-            row.AddChild(openBtn);
-
-            _pedigreeListContainer.AddChild(row);
-        }
-    }
-
     // ─── アクションハンドラ ───────────────────────────────────────────────
 
     private void OnFatherSelectionChanged(long _) => RenderQuote();
@@ -1420,18 +1267,6 @@ public partial class MarriageUI : Godot.Control
     /// </summary>
     private void OnUnitDetailsPressed(Guid unitId) => UnitInspectRequested?.Invoke(unitId);
 
-    /// <summary>
-    /// 家系図ビューア各行の [🌳 家系図] 押下ハンドラ。当該ユニットを根とする家系図
-    /// オーバーレイのマウント意思（<see cref="PedigreeRequested"/>）を 1 度だけ発火する。
-    /// 本 UI はオーバーレイの生死を一切持たず、購読側（GameDirector）が PedigreeOverlay を
-    /// 最前面へ展開・解放する（無状態の徹底・単一責務）。
-    /// </summary>
-    private void OnPedigreeOpenPressed(Guid unitId)
-    {
-        GD.Print($"[MarriageUI] 🌳 家系図を開く要求 Id={unitId}");
-        PedigreeRequested?.Invoke(unitId);
-    }
-
     private void OnEnlistChildPressed(Guid childId)
     {
         // 子は既に BattalionRoster に居る（marriage で追加済み）。
@@ -1440,52 +1275,6 @@ public partial class MarriageUI : Godot.Control
         _ceremoniallyEnlisted.Add(childId);
         GD.Print($"[MarriageUI] 🎓 0 pt で正式入団: {childId}");
         RenderChildrenLists();
-    }
-
-    // ─── 人事（戦力外通告）ハンドラ ───────────────────────────────────────
-
-    /// <summary>
-    /// 解雇ボタン押下: 当該ユニットを確認待ち（武装）状態にして行を組み直す。
-    /// 実際の解雇はまだ起きない（次の [解雇する] 押下で確定する）。
-    /// </summary>
-    private void OnDismissArmPressed(Guid unitId)
-    {
-        _pendingDismissId = unitId;
-        RenderDismissList();
-    }
-
-    /// <summary>[やめる] 押下: 確認待ちを解除して通常表示へ戻す（何も外さない）。</summary>
-    private void OnDismissCancelPressed()
-    {
-        _pendingDismissId = null;
-        RenderDismissList();
-    }
-
-    /// <summary>
-    /// [解雇する] 押下: ChronicleGlobal.ExecuteDismiss でロスタから即時に外す。
-    /// 成功時はロスタ変更シグナル経由で OnRosterChanged → RenderDismissList が自動再描画
-    /// するため、ここでは武装解除だけ行う。失敗（対象不在）時はシグナルが飛ばないので
-    /// 手動で再描画して武装状態を畳む。
-    /// </summary>
-    private void OnDismissConfirmPressed(Guid unitId)
-    {
-        if (_chronicleGlobal is null) return;
-
-        // 確認待ちは結果に関わらず解除（成功なら行ごと消え、失敗なら通常表示に戻る）。
-        _pendingDismissId = null;
-
-        var dismissed = _chronicleGlobal.ExecuteDismiss(unitId);
-        if (dismissed is null)
-        {
-            GD.Print($"[MarriageUI] 🛡 戦力外通告 失敗: 対象不在／未初期化 Id={unitId}");
-            RenderDismissList(); // 失敗時はシグナル無し → 手動で武装解除を反映
-            return;
-        }
-
-        GD.Print(
-            $"[MarriageUI] 🛡 戦力外通告 成立 / {JobName(dismissed.Job)} " +
-            $"(Age {dismissed.Age}) Id={dismissed.Id}");
-        // 残高・父母セレクタ・家系図・解雇一覧の再描画はシグナル経由で自動。
     }
 
     // ─── 旅団兵器廠（商店・強化）ハンドラ ─────────────────────────────────

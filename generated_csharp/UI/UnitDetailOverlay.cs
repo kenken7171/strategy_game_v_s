@@ -39,7 +39,19 @@ public partial class UnitDetailOverlay : Godot.Control
     /// <summary>Raised when the player presses the close button.</summary>
     public event Action? CloseRequested;
 
+    /// <summary>Raised when 戦力外通告（解雇）が確定したとき。購読側（GameDirector）が ExecuteDismiss を呼ぶ。</summary>
+    public event Action<Guid>? DismissRequested;
+
+    /// <summary>Raised when 家系図 を開く意思表示。購読側（GameDirector）が PedigreeOverlay をマウントする。</summary>
+    public event Action<Guid>? PedigreeRequested;
+
     private ChronicleGlobal? _chronicleGlobal;
+
+    /// <summary>操作ボタン行（家系図／戦力外通告）。解雇の 2 段階確認で中身を組み直すため保持する。</summary>
+    private HBoxContainer? _actionsRow;
+
+    /// <summary>解雇の確認待ち（武装）状態。true なら ［解雇する］／［やめる］を出す（不可逆操作の誤爆防止）。</summary>
+    private bool _dismissArmed;
 
     public override void _Ready()
     {
@@ -129,6 +141,9 @@ public partial class UnitDetailOverlay : Godot.Control
         slot.SetMeta(TestIdMetaKey, "unit-detail-formation-slot");
         body.AddChild(slot);
 
+        // ── 操作（家系図 / 戦力外通告）。人事の per-unit アクションをここへ集約。 ──
+        BuildActions(body);
+
         // ── Stats + lineage (BBCode) ─────────────────────────────────────────
         var stats = new RichTextLabel
         {
@@ -150,6 +165,55 @@ public partial class UnitDetailOverlay : Godot.Control
         if (jobBlock is not null)
         {
             body.AddChild(jobBlock);
+        }
+    }
+
+    /// <summary>
+    /// 操作ボタン行（🌳 家系図 ／ 🛡 戦力外通告）を組む器を置き、<see cref="RenderActions"/> で中身を描く。
+    /// 解雇は不可逆なため行内 2 段階確認（［戦力外通告］→［解雇する］／［やめる］）にする。
+    /// </summary>
+    private void BuildActions(VBoxContainer body)
+    {
+        _actionsRow = new HBoxContainer();
+        _actionsRow.AddThemeConstantOverride("separation", 10);
+        _actionsRow.SetMeta(TestIdMetaKey, "unit-detail-actions");
+        body.AddChild(_actionsRow);
+        RenderActions();
+    }
+
+    /// <summary>操作ボタン行を現在の武装状態から組み直す（家系図は常設、解雇は確認待ちで切替）。</summary>
+    private void RenderActions()
+    {
+        if (_actionsRow is null) return;
+        foreach (var c in _actionsRow.GetChildren()) c.QueueFree();
+
+        var pedigreeBtn = new Button { Text = "🌳 家系図" };
+        pedigreeBtn.SetMeta(TestIdMetaKey, "unit-detail-pedigree-button");
+        pedigreeBtn.Pressed += () => PedigreeRequested?.Invoke(TargetUnitId);
+        _actionsRow.AddChild(pedigreeBtn);
+
+        if (!_dismissArmed)
+        {
+            var dismissBtn = new Button { Text = "🛡 戦力外通告" };
+            dismissBtn.SetMeta(TestIdMetaKey, "unit-detail-dismiss-button");
+            dismissBtn.Pressed += () => { _dismissArmed = true; RenderActions(); };
+            _actionsRow.AddChild(dismissBtn);
+        }
+        else
+        {
+            var confirmLabel = new Label { Text = "⚠ 本当に解雇？" };
+            confirmLabel.SetMeta(TestIdMetaKey, "unit-detail-dismiss-confirm-label");
+            _actionsRow.AddChild(confirmLabel);
+
+            var confirmBtn = new Button { Text = "解雇する" };
+            confirmBtn.SetMeta(TestIdMetaKey, "unit-detail-dismiss-confirm-button");
+            confirmBtn.Pressed += () => DismissRequested?.Invoke(TargetUnitId);
+            _actionsRow.AddChild(confirmBtn);
+
+            var cancelBtn = new Button { Text = "やめる" };
+            cancelBtn.SetMeta(TestIdMetaKey, "unit-detail-dismiss-cancel-button");
+            cancelBtn.Pressed += () => { _dismissArmed = false; RenderActions(); };
+            _actionsRow.AddChild(cancelBtn);
         }
     }
 

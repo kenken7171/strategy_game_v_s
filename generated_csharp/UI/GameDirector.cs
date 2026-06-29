@@ -312,15 +312,9 @@ public partial class GameDirector : Godot.Control
     }
 
     // ─── 家系図オーバーレイ（血統の縦軸ビューア） ─────────────────────────
-    //  拠点B の家系図ビューア各行の「家系図を開く」押下を受け、指定ユニットを根とする
-    //  無状態オーバーレイ PedigreeOverlay を最前面へ overlay する。タイトルゲートと同じ
-    //  自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）で後始末を一元化する。
-
-    /// <summary>
-    /// 家系図ビューアの「家系図を開く」意思表示ハンドラ。指定ユニットを根に
-    /// PedigreeOverlay を最前面へマウントする（婚姻画面が発火する唯一の窓口）。
-    /// </summary>
-    private void OnPedigreeRequested(Guid targetUnitId) => MountPedigreeOverlay(targetUnitId);
+    //  ユニット詳細モーダルの「🌳 家系図」押下を受け、指定ユニットを根とする無状態オーバーレイ
+    //  PedigreeOverlay を最前面へ overlay する（OnUnitDetailPedigreeRequested が窓口）。タイトル
+    //  ゲートと同じ自己崩壊型ライフサイクル（CloseRequested / _ExitTree で QueueFree）で後始末を一元化する。
 
     /// <summary>家系図オーバーレイの「閉じる」意思表示ハンドラ。前面のオーバーレイを解放する。</summary>
     private void OnPedigreeCloseRequested() => DismissPedigreeOverlay();
@@ -513,6 +507,26 @@ public partial class GameDirector : Godot.Control
     private void OnUnitDetailCloseRequested() => DismissUnitDetailOverlay();
 
     /// <summary>
+    /// 詳細モーダルの「🌳 家系図」意思表示。詳細モーダルを閉じてから、当該ユニットを根とする
+    /// 家系図オーバーレイを最前面へ展開する（モーダルの上に重ねず、入れ替える）。
+    /// </summary>
+    private void OnUnitDetailPedigreeRequested(Guid unitId)
+    {
+        DismissUnitDetailOverlay();
+        MountPedigreeOverlay(unitId);
+    }
+
+    /// <summary>
+    /// 詳細モーダルの「🛡 戦力外通告（確定）」意思表示。ロスタから即時解雇し（ExecuteDismiss）、
+    /// 当該ユニットは消えるため詳細モーダルを閉じる。再描画は RosterChanged シグナル経由で各画面が行う。
+    /// </summary>
+    private void OnUnitDetailDismissRequested(Guid unitId)
+    {
+        _chronicleGlobal?.ExecuteDismiss(unitId);
+        DismissUnitDetailOverlay();
+    }
+
+    /// <summary>
     /// 指定ユニットの詳細モーダルを最前面へ展開する。多重展開・取り残しを避けるため、生存中の
     /// 旧モーダルがあれば先に確実に解放してから展開する。TargetUnitId は AddChild 前に注入する。
     /// </summary>
@@ -522,6 +536,8 @@ public partial class GameDirector : Godot.Control
 
         var overlay = new UnitDetailOverlay { TargetUnitId = unitId };
         overlay.CloseRequested += OnUnitDetailCloseRequested;
+        overlay.PedigreeRequested += OnUnitDetailPedigreeRequested;
+        overlay.DismissRequested += OnUnitDetailDismissRequested;
         overlay.SetMeta(TestIdMetaKey, "game-director-unit-detail-overlay");
         _unitDetailOverlay = overlay;
 
@@ -539,6 +555,8 @@ public partial class GameDirector : Godot.Control
         if (GodotObject.IsInstanceValid(_unitDetailOverlay))
         {
             _unitDetailOverlay.CloseRequested -= OnUnitDetailCloseRequested;
+            _unitDetailOverlay.PedigreeRequested -= OnUnitDetailPedigreeRequested;
+            _unitDetailOverlay.DismissRequested -= OnUnitDetailDismissRequested;
             _unitDetailOverlay.QueueFree();
         }
         _unitDetailOverlay = null;
@@ -814,7 +832,6 @@ public partial class GameDirector : Godot.Control
         switch (screen)
         {
             case MarriageUI marriage:
-                marriage.PedigreeRequested += OnPedigreeRequested;
                 marriage.UnitInspectRequested += OnUnitInspectRequested;
                 break;
             case FormationUI formation:
@@ -847,7 +864,6 @@ public partial class GameDirector : Godot.Control
             switch (_currentScreen)
             {
                 case MarriageUI marriage:
-                    marriage.PedigreeRequested -= OnPedigreeRequested;
                     marriage.UnitInspectRequested -= OnUnitInspectRequested;
                     break;
                 case FormationUI formation:
