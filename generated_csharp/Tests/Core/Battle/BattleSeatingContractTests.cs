@@ -79,7 +79,7 @@ public class BattleSeatingContractTests
 
         var snapshot = BattleResolver.CreateInitial(board, roster, Enemy(), new Random(1));
 
-        Assert.Equal(1, snapshot.Combatants.Count);
-        Assert.True(snapshot.Combatants.ContainsKey(live.Id));
+        var only = Assert.Single(snapshot.Combatants);
+        Assert.Equal(live.Id, only.Key);
     }
 }

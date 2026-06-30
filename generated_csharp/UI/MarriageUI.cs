@@ -779,11 +779,14 @@ public partial class MarriageUI : Godot.Control
             ("総合", rating.ToString()),
         };
 
+        // 固有パラメータは Core の JobCodex.Passives（数値 SoT は JobMaster）から引く。
+        // 数値を持たない binary パッシブ（二の矢＝ConsecutiveStrike）は Value=null なので表に出さない。
         var unique = new List<(string Head, string Value)>();
-        if (s.BattalionDefense > 0) unique.Add(("大隊守", s.BattalionDefense.ToString()));
-        if (s.SquadDefense > 0)     unique.Add(("分隊守", s.SquadDefense.ToString()));
-        if (s.InitiativeBuff > 0)   unique.Add(("号令", s.InitiativeBuff.ToString()));
-        if (s.TurnEndSquadHeal > 0) unique.Add(("治癒", s.TurnEndSquadHeal.ToString()));
+        foreach (var p in JobCodex.Passives(job))
+        {
+            if (p.Value is not int v) continue;
+            unique.Add((ShortPassiveLabel(p.Key), v.ToString()));
+        }
 
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 16); // 共通表と固有表の間にはっきり間を空ける
@@ -794,6 +797,19 @@ public partial class MarriageUI : Godot.Control
 
         return row;
     }
+
+    /// <summary>
+    /// JobCodex の固有パッシブ Key を、狭い表に収まる短い見出しへ写す
+    /// （フル名称「大隊総守護力」等は JobManual/詳細側で表示する）。未知キーは生キー。
+    /// </summary>
+    private static string ShortPassiveLabel(string passiveKey) => passiveKey switch
+    {
+        "bdf" => "大隊守", // 大隊総守護力
+        "sdf" => "分隊守", // 分隊守護力
+        "ab"  => "号令",   // 突撃号令
+        "hl"  => "治癒",   // ターン末分隊治癒
+        _      => passiveKey,
+    };
 
     /// <summary>
     /// 列リストを「上段＝見出し／下段＝値」の 2 段・灰色格子付きの表（PanelContainer）に組む。
