@@ -717,11 +717,12 @@ public partial class MarriageUI : Godot.Control
             var capturedId = unit.Id;
 
             var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 8);
+            row.AddThemeConstantOverride("separation", 12);
             row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             row.SetMeta(TestIdMetaKey, $"guild-scout-row-{capturedId}");
 
-            var icon = MakeUnitIcon(unit);
+            // スカウト候補もユニットリストと同じ大きめの立ち絵で見やすくする。
+            var icon = MakeUnitListIcon(unit);
             if (icon is not null) row.AddChild(icon);
 
             var info = new Label
@@ -731,10 +732,13 @@ public partial class MarriageUI : Godot.Control
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            info.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+            info.AddThemeFontSizeOverride("font_size", 18); // ユニットリストと同じ大きさ
             row.AddChild(info);
 
             var canAfford = economy.CanAfford(cand.Cost);
             var scoutBtn = new Button { Text = $"スカウト ({cand.Cost} pt)", Disabled = !canAfford };
+            scoutBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
             scoutBtn.SetMeta(TestIdMetaKey, $"guild-scout-button-{capturedId}");
             scoutBtn.Pressed += () => OnScoutCandidatePressed(capturedId);
             row.AddChild(scoutBtn);
