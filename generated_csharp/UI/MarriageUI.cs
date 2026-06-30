@@ -755,34 +755,65 @@ public partial class MarriageUI : Godot.Control
         return col;
     }
 
+    private static readonly Color ParamGridLineColor = new(0.55f, 0.58f, 0.62f, 0.55f); // 控えめな灰色の格子線
+
     /// <summary>
-    /// ジョブの素ステを小さな表（GridContainer）で見せる。ラベルと値を横に並べ、
+    /// ジョブの素ステを灰色の格子付きの小さな表で見せる。ラベルと値を横に並べ、
     /// 2 ペア/行＝5 項目で 3 段に区切る（HP・速／前・後／総合）。数値 SoT は JobMaster のみ。
+    /// 格子線は「外枠が上・左、各セルが右・下」を 1px ずつ持ち、合わせて単線グリッドになる。
     /// </summary>
-    private static GridContainer BuildParamTable(JobId job)
+    private static PanelContainer BuildParamTable(JobId job)
     {
         var s = JobMaster.All[job].Stats;
         var rating = JobMaster.TargetRating[job];
 
+        // 外枠＝上・左の格子線（各セルの右・下と合わさって閉じたグリッドになる）。
+        var frameStyle = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = ParamGridLineColor };
+        frameStyle.SetBorderWidthAll(0);
+        frameStyle.BorderWidthTop = 1;
+        frameStyle.BorderWidthLeft = 1;
+
+        var frame = new PanelContainer();
+        frame.AddThemeStyleboxOverride("panel", frameStyle);
+        frame.SizeFlagsHorizontal = SizeFlags.ShrinkBegin; // 内容ぶんだけの幅に収める
+        frame.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+
         var grid = new GridContainer { Columns = 4 };
-        grid.AddThemeConstantOverride("h_separation", 14);
-        grid.AddThemeConstantOverride("v_separation", 2);
+        grid.AddThemeConstantOverride("h_separation", 0);
+        grid.AddThemeConstantOverride("v_separation", 0);
+        frame.AddChild(grid);
+
+        void AddCell(string text, bool isValue)
+        {
+            var cellStyle = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = ParamGridLineColor };
+            cellStyle.SetBorderWidthAll(0);
+            cellStyle.BorderWidthRight = 1;
+            cellStyle.BorderWidthBottom = 1;
+            cellStyle.ContentMarginLeft = 8;
+            cellStyle.ContentMarginRight = 8;
+            cellStyle.ContentMarginTop = 3;
+            cellStyle.ContentMarginBottom = 3;
+
+            var cell = new PanelContainer();
+            cell.AddThemeStyleboxOverride("panel", cellStyle);
+
+            var label = new Label
+            {
+                Text = text,
+                HorizontalAlignment = isValue ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            };
+            label.AddThemeFontSizeOverride("font_size", isValue ? 16 : 14);
+            if (isValue) label.CustomMinimumSize = new Vector2(46, 0); // 数値カラムを揃える
+            else label.Modulate = new Color(0.72f, 0.76f, 0.85f);     // 見出しは控えめな色
+            cell.AddChild(label);
+
+            grid.AddChild(cell);
+        }
 
         void AddPair(string label, int value)
         {
-            var name = new Label { Text = label };
-            name.AddThemeFontSizeOverride("font_size", 14);
-            name.Modulate = new Color(0.72f, 0.76f, 0.85f); // 見出しは控えめな色
-            grid.AddChild(name);
-
-            var val = new Label
-            {
-                Text = value.ToString(),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                CustomMinimumSize = new Vector2(46, 0), // 数値カラムを揃える
-            };
-            val.AddThemeFontSizeOverride("font_size", 16);
-            grid.AddChild(val);
+            AddCell(label, isValue: false);
+            AddCell(value.ToString(), isValue: true);
         }
 
         AddPair("HP", s.MaxHp);
@@ -791,7 +822,7 @@ public partial class MarriageUI : Godot.Control
         AddPair("後", s.RearAttack);
         AddPair("総合", rating);
 
-        return grid;
+        return frame;
     }
 
     private void RenderChildrenLists()
