@@ -670,15 +670,9 @@ public partial class MarriageUI : Godot.Control
             var icon = MakeUnitListIcon(unit);
             if (icon is not null) row.AddChild(icon);
 
-            var info = new Label
-            {
-                Text = $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}\n"
-                       + $"パラメータ: {UnitParamLine(unit.Job)}",
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            info.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-            info.AddThemeFontSizeOverride("font_size", 18); // 1 行を大きく＝見やすく
+            var info = BuildUnitInfoColumn(
+                $"{JobName(unit.Job)} Lv{unit.Level} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}",
+                unit.Job);
             row.AddChild(info);
 
             var detailBtn = new Button { Text = "詳細" };
@@ -725,15 +719,9 @@ public partial class MarriageUI : Godot.Control
             var icon = MakeUnitListIcon(unit);
             if (icon is not null) row.AddChild(icon);
 
-            var info = new Label
-            {
-                Text = $"{JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}\n"
-                       + $"パラメータ: {UnitParamLine(unit.Job)}",
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            info.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            info.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-            info.AddThemeFontSizeOverride("font_size", 18); // ユニットリストと同じ大きさ
+            var info = BuildUnitInfoColumn(
+                $"{JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}",
+                unit.Job);
             row.AddChild(info);
 
             var canAfford = economy.CanAfford(cand.Cost);
@@ -747,12 +735,63 @@ public partial class MarriageUI : Godot.Control
         }
     }
 
-    /// <summary>ジョブの素ステ（HP/前/後/速）＋総合値を 1 行へ。数値 SoT は JobMaster のみ。</summary>
-    private static string UnitParamLine(JobId job)
+    /// <summary>
+    /// ユニットリスト／スカウト行の情報カラム（見出し 1 行＋パラメータ表）を縦に組む。
+    /// 見出しはジョブ/年齢/氏名、表は <see cref="BuildParamTable"/> による素ステの一覧。
+    /// </summary>
+    private static VBoxContainer BuildUnitInfoColumn(string headline, JobId job)
+    {
+        var col = new VBoxContainer();
+        col.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        col.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        col.AddThemeConstantOverride("separation", 6);
+
+        var head = new Label { Text = headline, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        head.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        head.AddThemeFontSizeOverride("font_size", 18); // 見出しを大きく＝見やすく
+        col.AddChild(head);
+
+        col.AddChild(BuildParamTable(job));
+        return col;
+    }
+
+    /// <summary>
+    /// ジョブの素ステを小さな表（GridContainer）で見せる。ラベルと値を横に並べ、
+    /// 2 ペア/行＝5 項目で 3 段に区切る（HP・速／前・後／総合）。数値 SoT は JobMaster のみ。
+    /// </summary>
+    private static GridContainer BuildParamTable(JobId job)
     {
         var s = JobMaster.All[job].Stats;
         var rating = JobMaster.TargetRating[job];
-        return $"HP{s.MaxHp} 前{s.FrontAttack} 後{s.RearAttack} 速{s.Speed}（総合{rating}）";
+
+        var grid = new GridContainer { Columns = 4 };
+        grid.AddThemeConstantOverride("h_separation", 14);
+        grid.AddThemeConstantOverride("v_separation", 2);
+
+        void AddPair(string label, int value)
+        {
+            var name = new Label { Text = label };
+            name.AddThemeFontSizeOverride("font_size", 14);
+            name.Modulate = new Color(0.72f, 0.76f, 0.85f); // 見出しは控えめな色
+            grid.AddChild(name);
+
+            var val = new Label
+            {
+                Text = value.ToString(),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                CustomMinimumSize = new Vector2(46, 0), // 数値カラムを揃える
+            };
+            val.AddThemeFontSizeOverride("font_size", 16);
+            grid.AddChild(val);
+        }
+
+        AddPair("HP", s.MaxHp);
+        AddPair("速", s.Speed);
+        AddPair("前", s.FrontAttack);
+        AddPair("後", s.RearAttack);
+        AddPair("総合", rating);
+
+        return grid;
     }
 
     private void RenderChildrenLists()
