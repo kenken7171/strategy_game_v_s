@@ -737,7 +737,7 @@ public partial class MarriageUI : Godot.Control
 
     /// <summary>
     /// ユニットリスト／スカウト行の情報カラム（見出し 1 行＋パラメータ表）を縦に組む。
-    /// 見出しはジョブ/年齢/氏名、表は <see cref="BuildParamTable"/> による素ステの一覧。
+    /// 見出しはジョブ/年齢/氏名、表は <see cref="BuildParamTables"/>（共通＋固有の 2 表）。
     /// </summary>
     private static VBoxContainer BuildUnitInfoColumn(string headline, JobId job)
     {
@@ -751,39 +751,56 @@ public partial class MarriageUI : Godot.Control
         head.AddThemeFontSizeOverride("font_size", 18); // 見出しを大きく＝見やすく
         col.AddChild(head);
 
-        col.AddChild(BuildParamTable(job));
+        col.AddChild(BuildParamTables(job));
         return col;
     }
 
     private static readonly Color ParamGridLineColor = new(0.55f, 0.58f, 0.62f, 0.55f); // 控えめな灰色の格子線
+    private static readonly Color ParamCommonHeadColor = new(0.72f, 0.76f, 0.85f);      // 共通ステ見出し（寒色）
+    private static readonly Color ParamUniqueHeadColor = new(0.88f, 0.80f, 0.52f);      // ジョブ固有見出し（金色）
 
     /// <summary>
-    /// ジョブのステータスを灰色の格子付きの表で見せる。上段＝見出し／下段＝値の 2 段で、
-    /// 列は「基礎 4（HP/前/後/速）→ ジョブ固有パッシブ（非ゼロのみ）→ 総合（最後＝右下）」と
-    /// 右へ伸ばす（ジョブが増えるほど列が増える）。数値 SoT は JobMaster のみ。
-    /// 格子線は「外枠が上・左、各セルが右・下」を 1px ずつ持ち、合わせて単線グリッドになる。
+    /// ジョブのステータスを「共通」と「固有」の 2 つの表に分けて横並びにする。
+    /// ・共通: HP/前/後/速/総合（全ジョブ一律。総合は右端＝右下）。
+    /// ・固有: そのジョブが実際に持つパッシブのみ（大隊守/分隊守/号令/治癒）。無ければ表ごと省略。
+    /// 数値 SoT は JobMaster のみ。二の矢のような binary パッシブはパラメータ表に出さない。
     /// </summary>
-    private static PanelContainer BuildParamTable(JobId job)
+    private static HBoxContainer BuildParamTables(JobId job)
     {
         var s = JobMaster.All[job].Stats;
         var rating = JobMaster.TargetRating[job];
 
-        // 列定義（見出し, 値）。基礎ステ → ジョブ固有（その職が持つものだけ）→ 総合。
-        var cols = new List<(string Head, string Value)>
+        var common = new List<(string Head, string Value)>
         {
             ("HP", s.MaxHp.ToString()),
             ("前", s.FrontAttack.ToString()),
             ("後", s.RearAttack.ToString()),
             ("速", s.Speed.ToString()),
+            ("総合", rating.ToString()),
         };
-        if (s.BattalionDefense > 0) cols.Add(("大隊守", s.BattalionDefense.ToString()));
-        if (s.SquadDefense > 0)     cols.Add(("分隊守", s.SquadDefense.ToString()));
-        if (s.InitiativeBuff > 0)   cols.Add(("号令", s.InitiativeBuff.ToString()));
-        if (s.TurnEndSquadHeal > 0) cols.Add(("治癒", s.TurnEndSquadHeal.ToString()));
-        if (JobMaster.HasPassive(job, PassiveKind.ConsecutiveStrike)) cols.Add(("二の矢", "○"));
-        cols.Add(("総合", rating.ToString())); // 最後＝右下
 
-        // 外枠＝上・左の格子線（各セルの右・下と合わさって閉じたグリッドになる）。
+        var unique = new List<(string Head, string Value)>();
+        if (s.BattalionDefense > 0) unique.Add(("大隊守", s.BattalionDefense.ToString()));
+        if (s.SquadDefense > 0)     unique.Add(("分隊守", s.SquadDefense.ToString()));
+        if (s.InitiativeBuff > 0)   unique.Add(("号令", s.InitiativeBuff.ToString()));
+        if (s.TurnEndSquadHeal > 0) unique.Add(("治癒", s.TurnEndSquadHeal.ToString()));
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 16); // 共通表と固有表の間にはっきり間を空ける
+        row.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+
+        row.AddChild(BuildGridTable(common, ParamCommonHeadColor));
+        if (unique.Count > 0) row.AddChild(BuildGridTable(unique, ParamUniqueHeadColor));
+
+        return row;
+    }
+
+    /// <summary>
+    /// 列リストを「上段＝見出し／下段＝値」の 2 段・灰色格子付きの表（PanelContainer）に組む。
+    /// 格子線は「外枠が上・左、各セルが右・下」を 1px ずつ持ち、合わせて単線グリッドになる。
+    /// </summary>
+    private static PanelContainer BuildGridTable(IReadOnlyList<(string Head, string Value)> cols, Color headColor)
+    {
         var frameStyle = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = ParamGridLineColor };
         frameStyle.SetBorderWidthAll(0);
         frameStyle.BorderWidthTop = 1;
@@ -820,14 +837,14 @@ public partial class MarriageUI : Godot.Control
                 CustomMinimumSize = new Vector2(38, 0), // 列幅を揃える（狭すぎ防止）
             };
             label.AddThemeFontSizeOverride("font_size", isHeader ? 14 : 16);
-            if (isHeader) label.Modulate = new Color(0.72f, 0.76f, 0.85f); // 見出しは控えめな色
+            if (isHeader) label.Modulate = headColor; // 見出しは表ごとの色（共通=寒色 / 固有=金色）
             cell.AddChild(label);
 
             grid.AddChild(cell);
         }
 
         foreach (var c in cols) AddCell(c.Head, isHeader: true);   // 上段＝見出し
-        foreach (var c in cols) AddCell(c.Value, isHeader: false); // 下段＝値（総合が右下）
+        foreach (var c in cols) AddCell(c.Value, isHeader: false); // 下段＝値
 
         return frame;
     }
