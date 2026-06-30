@@ -758,14 +758,30 @@ public partial class MarriageUI : Godot.Control
     private static readonly Color ParamGridLineColor = new(0.55f, 0.58f, 0.62f, 0.55f); // 控えめな灰色の格子線
 
     /// <summary>
-    /// ジョブの素ステを灰色の格子付きの小さな表で見せる。ラベルと値を横に並べ、
-    /// 2 ペア/行＝5 項目で 3 段に区切る（HP・速／前・後／総合）。数値 SoT は JobMaster のみ。
+    /// ジョブのステータスを灰色の格子付きの表で見せる。上段＝見出し／下段＝値の 2 段で、
+    /// 列は「基礎 4（HP/前/後/速）→ ジョブ固有パッシブ（非ゼロのみ）→ 総合（最後＝右下）」と
+    /// 右へ伸ばす（ジョブが増えるほど列が増える）。数値 SoT は JobMaster のみ。
     /// 格子線は「外枠が上・左、各セルが右・下」を 1px ずつ持ち、合わせて単線グリッドになる。
     /// </summary>
     private static PanelContainer BuildParamTable(JobId job)
     {
         var s = JobMaster.All[job].Stats;
         var rating = JobMaster.TargetRating[job];
+
+        // 列定義（見出し, 値）。基礎ステ → ジョブ固有（その職が持つものだけ）→ 総合。
+        var cols = new List<(string Head, string Value)>
+        {
+            ("HP", s.MaxHp.ToString()),
+            ("前", s.FrontAttack.ToString()),
+            ("後", s.RearAttack.ToString()),
+            ("速", s.Speed.ToString()),
+        };
+        if (s.BattalionDefense > 0) cols.Add(("大隊守", s.BattalionDefense.ToString()));
+        if (s.SquadDefense > 0)     cols.Add(("分隊守", s.SquadDefense.ToString()));
+        if (s.InitiativeBuff > 0)   cols.Add(("号令", s.InitiativeBuff.ToString()));
+        if (s.TurnEndSquadHeal > 0) cols.Add(("治癒", s.TurnEndSquadHeal.ToString()));
+        if (JobMaster.HasPassive(job, PassiveKind.ConsecutiveStrike)) cols.Add(("二の矢", "○"));
+        cols.Add(("総合", rating.ToString())); // 最後＝右下
 
         // 外枠＝上・左の格子線（各セルの右・下と合わさって閉じたグリッドになる）。
         var frameStyle = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = ParamGridLineColor };
@@ -778,19 +794,19 @@ public partial class MarriageUI : Godot.Control
         frame.SizeFlagsHorizontal = SizeFlags.ShrinkBegin; // 内容ぶんだけの幅に収める
         frame.SizeFlagsVertical = SizeFlags.ShrinkCenter;
 
-        var grid = new GridContainer { Columns = 4 };
+        var grid = new GridContainer { Columns = cols.Count };
         grid.AddThemeConstantOverride("h_separation", 0);
         grid.AddThemeConstantOverride("v_separation", 0);
         frame.AddChild(grid);
 
-        void AddCell(string text, bool isValue)
+        void AddCell(string text, bool isHeader)
         {
             var cellStyle = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = ParamGridLineColor };
             cellStyle.SetBorderWidthAll(0);
             cellStyle.BorderWidthRight = 1;
             cellStyle.BorderWidthBottom = 1;
-            cellStyle.ContentMarginLeft = 8;
-            cellStyle.ContentMarginRight = 8;
+            cellStyle.ContentMarginLeft = 6;
+            cellStyle.ContentMarginRight = 6;
             cellStyle.ContentMarginTop = 3;
             cellStyle.ContentMarginBottom = 3;
 
@@ -800,27 +816,18 @@ public partial class MarriageUI : Godot.Control
             var label = new Label
             {
                 Text = text,
-                HorizontalAlignment = isValue ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                CustomMinimumSize = new Vector2(38, 0), // 列幅を揃える（狭すぎ防止）
             };
-            label.AddThemeFontSizeOverride("font_size", isValue ? 16 : 14);
-            if (isValue) label.CustomMinimumSize = new Vector2(46, 0); // 数値カラムを揃える
-            else label.Modulate = new Color(0.72f, 0.76f, 0.85f);     // 見出しは控えめな色
+            label.AddThemeFontSizeOverride("font_size", isHeader ? 14 : 16);
+            if (isHeader) label.Modulate = new Color(0.72f, 0.76f, 0.85f); // 見出しは控えめな色
             cell.AddChild(label);
 
             grid.AddChild(cell);
         }
 
-        void AddPair(string label, int value)
-        {
-            AddCell(label, isValue: false);
-            AddCell(value.ToString(), isValue: true);
-        }
-
-        AddPair("HP", s.MaxHp);
-        AddPair("速", s.Speed);
-        AddPair("前", s.FrontAttack);
-        AddPair("後", s.RearAttack);
-        AddPair("総合", rating);
+        foreach (var c in cols) AddCell(c.Head, isHeader: true);   // 上段＝見出し
+        foreach (var c in cols) AddCell(c.Value, isHeader: false); // 下段＝値（総合が右下）
 
         return frame;
     }
