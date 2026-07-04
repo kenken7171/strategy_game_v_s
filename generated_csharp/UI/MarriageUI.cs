@@ -12,16 +12,16 @@
 //   │  [結婚させる]                                       │
 //   └────────────────────────────────────────────────────┘
 //
-//   ┌─ ⚔ 外様スカウト ──────────────────────────────────┐
-//   │  血縁関係のない外様ユニットを 3 pt で雇用          │
-//   │  [スカウトする (3 pt)]                              │
+//   ┌─ ⚔ スカウト（候補から採用） ──────────────────────┐
+//   │  血縁なしの外様候補（総合値に連動したコスト）      │
+//   │  🗡 Sniper 22歳   [スカウト (6 pt)]                 │
+//   │  ── 🎓 入団待ち（血縁の子・0 pt で加入） ──         │
+//   │  🎓 Medic  17歳   [加入 (0 pt)]                     │
 //   └────────────────────────────────────────────────────┘
 //
-//   ┌─ 👶 家系図（子供たち） ───────────────────────────┐
-//   │  ── 入団待ち ──                                     │
-//   │  🎓 Sniper 16歳   [0 pt で正式加入]                │
-//   │  🎓 Medic  17歳   [0 pt で正式加入]                │
-//   │  ── 成長中 ──                                       │
+//   ┌─ 👶 家系図（子供たち：結婚タブ） ─────────────────┐
+//   │  成人した子は［スカウト］タブの入団待ちから加入    │
+//   │  ── 👶 成長中 ──                                    │
 //   │  👶 Tactician 3歳                                   │
 //   │  👶 Sorcerer 8歳                                    │
 //   └────────────────────────────────────────────────────┘
@@ -122,6 +122,7 @@ public partial class MarriageUI : Godot.Control
     private Button? _marriageExecuteButton;
 
     // 家系図セクション
+    private Label? _readyChildrenLabel;          // スカウトタブの「入団待ち」見出し（居ないとき隠す）
     private VBoxContainer? _readyChildrenContainer;
     private VBoxContainer? _minorChildrenContainer;
 
@@ -318,6 +319,16 @@ public partial class MarriageUI : Godot.Control
         _scoutCandidatesContainer.SetMeta(TestIdMetaKey, "guild-scout-list");
         panel.AddChild(_scoutCandidatesContainer);
 
+        // 入団待ち（血縁の子・0 pt で加入）を、外様候補と同じ列に並べる。居ないときは隠す。
+        _readyChildrenLabel = new Label { Text = "── 🎓 入団待ち（血縁の子・0 pt で加入） ──" };
+        _readyChildrenLabel.SetMeta(TestIdMetaKey, "guild-ready-children-label");
+        panel.AddChild(_readyChildrenLabel);
+        _readyChildrenContainer = new VBoxContainer();
+        _readyChildrenContainer.AddThemeConstantOverride("separation", 6);
+        _readyChildrenContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _readyChildrenContainer.SetMeta(TestIdMetaKey, "guild-ready-children-list");
+        panel.AddChild(_readyChildrenContainer);
+
         return panel;
     }
 
@@ -407,12 +418,12 @@ public partial class MarriageUI : Godot.Control
         familyTitle.SetMeta(TestIdMetaKey, "marriage-family-title");
         panel.AddChild(familyTitle);
 
-        var readyLabel = new Label { Text = "🎓 入団待ち" };
-        readyLabel.SetMeta(TestIdMetaKey, "marriage-family-ready-label");
-        panel.AddChild(readyLabel);
-        _readyChildrenContainer = new VBoxContainer();
-        _readyChildrenContainer.SetMeta(TestIdMetaKey, "marriage-family-ready-list");
-        panel.AddChild(_readyChildrenContainer);
+        var familyHint = new Label
+        {
+            Text = "成人した子は［スカウト］タブの「入団待ち」から 0 pt で加入させます。",
+        };
+        familyHint.SetMeta(TestIdMetaKey, "marriage-family-hint");
+        panel.AddChild(familyHint);
 
         var minorLabel = new Label { Text = "👶 成長中" };
         minorLabel.SetMeta(TestIdMetaKey, "marriage-family-minor-label");
@@ -874,51 +885,60 @@ public partial class MarriageUI : Godot.Control
         foreach (var c in _readyChildrenContainer.GetChildren()) c.QueueFree();
         foreach (var c in _minorChildrenContainer.GetChildren()) c.QueueFree();
 
+        var readyCount = 0;
         foreach (var unit in _chronicleGlobal.BattalionRoster)
         {
             if (!unit.IsAlive) continue;
 
             // 創設メンバー・スカウト傭兵（血縁なし）は最初から正式な大隊員。
-            // 子ども欄（成長中／入団待ち）に出すのは婚姻で生まれた血縁の子のみ。
+            // 子ども欄（成長中＝結婚タブ／入団待ち＝スカウトタブ）に出すのは血縁の子のみ。
             if (!unit.HasParentage) continue;
 
             if (unit.Age < AdultAge)
             {
-                // 成長中 (0〜14歳)
+                // 成長中 (0〜14歳) — 結婚タブの家系図に情報表示（アクションなし）。
                 var row = new HBoxContainer();
                 row.SetMeta(TestIdMetaKey, $"marriage-family-minor-row-{unit.Id}");
                 var minorIcon = MakeUnitIcon(unit);
                 if (minorIcon is not null) row.AddChild(minorIcon);
-                var minorName = new Label
-                {
-                    Text = $"👶 {JobName(unit.Job)} {unit.Age}歳",
-                };
+                var minorName = new Label { Text = $"👶 {JobName(unit.Job)} {unit.Age}歳" };
                 minorName.SetMeta(TestIdMetaKey, $"marriage-family-minor-name-{unit.Id}");
                 row.AddChild(minorName);
                 _minorChildrenContainer.AddChild(row);
             }
             else if (unit.Age <= AdultAge + 2 && !_ceremoniallyEnlisted.Contains(unit.Id))
             {
-                // 入団待ち（Age 15〜17 で、まだ正式加入の儀式を経ていない子）
+                // 入団待ち（Age 15〜17・未加入の血縁の子）— スカウトタブに候補と並べる（0 pt で加入）。
                 // ※ Age >= 18 は通常成人扱いで本リストから外す
-                var row = new HBoxContainer();
-                row.SetMeta(TestIdMetaKey, $"marriage-family-ready-row-{unit.Id}");
-                var readyIcon = MakeUnitIcon(unit);
-                if (readyIcon is not null) row.AddChild(readyIcon);
-                var readyName = new Label
-                {
-                    Text = $"🎓 {JobName(unit.Job)} {unit.Age}歳",
-                };
-                readyName.SetMeta(TestIdMetaKey, $"marriage-family-ready-name-{unit.Id}");
-                row.AddChild(readyName);
-                var enlistBtn = new Button { Text = "0 pt で正式加入" };
-                enlistBtn.SetMeta(TestIdMetaKey, $"marriage-family-enlist-button-{unit.Id}");
+                readyCount++;
                 var capturedId = unit.Id;
+
+                var row = new HBoxContainer();
+                row.AddThemeConstantOverride("separation", 12);
+                row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+                row.SetMeta(TestIdMetaKey, $"guild-ready-child-row-{capturedId}");
+
+                var icon = MakeUnitListIcon(unit); // スカウト候補と同じ大きめ立ち絵で揃える
+                if (icon is not null) row.AddChild(icon);
+
+                var info = BuildUnitInfoColumn(
+                    $"🎓 {JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}",
+                    unit.Job);
+                row.AddChild(info);
+
+                var enlistBtn = new Button { Text = "加入 (0 pt)" };
+                enlistBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+                enlistBtn.SetMeta(TestIdMetaKey, $"guild-enlist-button-{capturedId}");
                 enlistBtn.Pressed += () => OnEnlistChildPressed(capturedId);
                 row.AddChild(enlistBtn);
+
                 _readyChildrenContainer.AddChild(row);
             }
         }
+
+        // 入団待ちが居ないときは、スカウトタブの見出し・枠ごと隠す（外様候補だけを見せる）。
+        if (_readyChildrenLabel is not null) _readyChildrenLabel.Visible = readyCount > 0;
+        _readyChildrenContainer.Visible = readyCount > 0;
     }
 
     /// <summary>
