@@ -967,6 +967,37 @@ public partial class ChronicleGlobal : Godot.Node
     }
 
     /// <summary>
+    /// 「何を買うか」だけを選ぶ購入。共通サイフから <see cref="ShopService.BuyCost"/> を消費し、新品の
+    /// Lv1 装備（itemId）を旅団の持ち物（<see cref="BrigadeInventory"/>）へ加える（誰に装備するかは
+    /// 後で持ち物から <see cref="EquipFromInventory"/> で決める）。純粋層 <see cref="ShopService.TryBuyEquipmentToInventory"/>
+    /// へ委譲し、成功時のみ経済・持ち物を差し替えて EconomyChanged / InventoryChanged を発火する。
+    ///
+    /// 戻り値: 購入した装備本体（UI の購入通知に使う）。残高不足・未初期化は null（no-op）。
+    /// </summary>
+    public Equipment? BuyEquipmentToInventory(ItemId itemId)
+    {
+        Equipment? purchased;
+
+        lock (_stateLock)
+        {
+            if (!IsInitialized) return null;
+
+            var result = ShopService.TryBuyEquipmentToInventory(
+                CurrentEconomy, BrigadeInventory, itemId, ShopService.BuyCost);
+            if (result is null) return null;
+
+            CurrentEconomy   = result.NewEconomy;
+            BrigadeInventory = result.NewInventory;
+            purchased = result.PurchasedEquipment;
+        }
+
+        SafeEmit(SignalEconomyChanged);
+        SafeEmit(SignalInventoryChanged);
+
+        return purchased;
+    }
+
+    /// <summary>
     /// 共通サイフから <see cref="ShopService.UpgradeCostFor"/>（現レベル比例）を消費して、指定ユニットの
     /// 現装備を 1 段階レベルアップする。上限 (Lv5) では失敗（ポイント浪費を防ぐ）。
     ///

@@ -65,6 +65,24 @@ public sealed record ShopBuyResult
     public Equipment? ReplacedEquipment { get; init; }
 }
 
+// ─── 持ち物への購入結果（不変スナップショット） ─────────────────────────────
+
+/// <summary>
+/// 「何を買うか」を先に選ぶ購入（ユニットを介さず持ち物へ入れる）の成功結果。
+/// 呼び出し側（ChronicleGlobal.BuyEquipmentToInventory）はこの結果で経済・持ち物を差し替える。
+/// </summary>
+public sealed record ShopInventoryBuyResult
+{
+    /// <summary>コスト消費後の新しいポイント経済。</summary>
+    public required PointsEconomy NewEconomy { get; init; }
+
+    /// <summary>新規購入装備を末尾に加えた新しい持ち物（BrigadeInventory）。</summary>
+    public required ImmutableList<Equipment> NewInventory { get; init; }
+
+    /// <summary>新規購入された装備本体（Lv1・固有 Guid・未装着）。</summary>
+    public required Equipment PurchasedEquipment { get; init; }
+}
+
 // ─── 強化結果（不変スナップショット） ───────────────────────────────────────
 
 /// <summary>
@@ -181,6 +199,58 @@ public static class ShopService
             EquippedUnit       = equippedUnit,
             PurchasedEquipment = purchased,
             ReplacedEquipment  = replaced,
+        };
+    }
+
+    // ─── 購入試行（持ち物へ・ユニット非依存） ─────────────────────────────
+
+    /// <summary>
+    /// 指定コストを共通サイフから消費し、新品の Lv1 装備（itemId）を旅団の持ち物へ加える純粋関数。
+    /// 「誰に買うか」ではなく「何を買うか」だけを決める購入経路（装着は後で持ち物から行う）。
+    ///
+    /// 判定順:
+    ///   1. economy / inventory が null → 例外（呼び出し前提の契約違反）。
+    ///   2. cost が負 → null（不正入力）。
+    ///   3. 残高不足 (CanAfford(cost) == false) → null。
+    ///   4. SpendPoints が万一例外を投げた → null。
+    ///   5. 成功 → 新品 Lv1 装備を末尾に加えた持ち物と新経済を返す。
+    ///
+    /// 入力の economy / inventory は一切変更しない（不変・副作用なし）。
+    /// </summary>
+    public static ShopInventoryBuyResult? TryBuyEquipmentToInventory(
+        PointsEconomy economy,
+        ImmutableList<Equipment> inventory,
+        ItemId itemId,
+        int cost)
+    {
+        ArgumentNullException.ThrowIfNull(economy);
+        ArgumentNullException.ThrowIfNull(inventory);
+
+        if (cost < 0) return null;
+        if (!economy.CanAfford(cost)) return null;
+
+        PointsEconomy nextEconomy;
+        try
+        {
+            nextEconomy = economy.SpendPoints(cost);
+        }
+        catch (InvalidOperationException)
+        {
+            return null; // 残高検証直後の競合等は「失敗 = null」へ正規化。
+        }
+
+        var purchased = new Equipment
+        {
+            Id     = Guid.NewGuid(),
+            ItemId = itemId,
+            Level  = Equipment.MinEquipmentLevel,
+        };
+
+        return new ShopInventoryBuyResult
+        {
+            NewEconomy         = nextEconomy,
+            NewInventory       = inventory.Add(purchased),
+            PurchasedEquipment = purchased,
         };
     }
 
