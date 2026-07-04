@@ -71,6 +71,9 @@ public partial class MarriageUI : Godot.Control
     /// <summary>人事フェーズの 4 タブ（右ナビで切り替え・左にアクティブタブの内容を出す）。</summary>
     private enum GuildTab { UnitList, Scout, Item, Marriage }
 
+    /// <summary>アイテムタブ内のサブタブ（🛒 購入 / 🎒 所持中のアイテム）。</summary>
+    private enum ItemSubTab { Buy, Owned }
+
     /// <summary>data-testid を載せる Godot メタデータのキー（テスト自動化の足場）。</summary>
     private const string TestIdMetaKey = "data_testid";
 
@@ -102,6 +105,10 @@ public partial class MarriageUI : Godot.Control
     private GuildTab _activeTab = GuildTab.UnitList;
     private readonly Dictionary<GuildTab, Button> _tabButtons = new();
     private readonly Dictionary<GuildTab, Control> _tabPanels = new();
+
+    private ItemSubTab _activeItemSubTab = ItemSubTab.Buy;
+    private readonly Dictionary<ItemSubTab, Button> _itemSubTabButtons = new();
+    private readonly Dictionary<ItemSubTab, Control> _itemSubPanels = new();
 
     // 今年の行動（出撃 / 休息）の提示 — 編成より上流のこの拠点フェーズで確定済み。全タブ共通で上部表示。
     private VBoxContainer? _actionContainer;
@@ -311,7 +318,7 @@ public partial class MarriageUI : Godot.Control
         return panel;
     }
 
-    // ── タブ3: アイテム（兵器廠 購入・強化 ＋ 持ち物 装備させる） ──
+    // ── タブ3: アイテム（サブタブ 🛒 購入 / 🎒 所持中のアイテム） ──
     private Control BuildItemPanel()
     {
         var panel = new VBoxContainer();
@@ -319,33 +326,96 @@ public partial class MarriageUI : Godot.Control
         panel.AddThemeConstantOverride("separation", 10);
         panel.SetMeta(TestIdMetaKey, "guild-tab-item");
 
+        // サブタブ切替（横並びボタン）: 購入と所持中を切り替える。
+        var subNav = new HBoxContainer();
+        subNav.AddThemeConstantOverride("separation", 8);
+        subNav.SetMeta(TestIdMetaKey, "item-subtab-nav");
+        AddItemSubTabButton(subNav, ItemSubTab.Buy,   "🛒 購入");
+        AddItemSubTabButton(subNav, ItemSubTab.Owned, "🎒 所持中のアイテム");
+        panel.AddChild(subNav);
+
+        _itemSubPanels[ItemSubTab.Buy]   = BuildItemBuySubPanel();
+        _itemSubPanels[ItemSubTab.Owned] = BuildItemOwnedSubPanel();
+        foreach (var sub in _itemSubPanels.Values) panel.AddChild(sub);
+
+        ApplyActiveItemSubTab();
+        return panel;
+    }
+
+    /// <summary>サブタブ「🛒 購入」: 兵器廠（各隊員の装備を購入・強化）。ポイント消費はここだけ。</summary>
+    private Control BuildItemBuySubPanel()
+    {
+        var sub = new VBoxContainer();
+        sub.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        sub.AddThemeConstantOverride("separation", 8);
+        sub.SetMeta(TestIdMetaKey, "item-subtab-buy");
+
         var shopTitle = new Label { Text = "── 🛡️ 兵器廠（購入・強化） ──" };
         shopTitle.SetMeta(TestIdMetaKey, "shop-title");
-        panel.AddChild(shopTitle);
+        sub.AddChild(shopTitle);
         var shopHint = new Label
         {
             Text = $"装備の購入は {ShopService.BuyCost} pt 固定 / 強化は現Lvに比例（Lv1→2 で {ShopService.UpgradeCostFor(1)} pt）",
         };
         shopHint.SetMeta(TestIdMetaKey, "shop-hint");
-        panel.AddChild(shopHint);
+        sub.AddChild(shopHint);
         _shopListContainer = new VBoxContainer();
         _shopListContainer.SetMeta(TestIdMetaKey, "shop-list");
-        panel.AddChild(_shopListContainer);
+        sub.AddChild(_shopListContainer);
 
-        var inventoryTitle = new Label { Text = "── 🎒 持ち物（装備させる・付け替え） ──" };
+        return sub;
+    }
+
+    /// <summary>サブタブ「🎒 所持中のアイテム」: 旅団が持つ装備の一覧（装備中は外す・持ち物は付け替え）。</summary>
+    private Control BuildItemOwnedSubPanel()
+    {
+        var sub = new VBoxContainer();
+        sub.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        sub.AddThemeConstantOverride("separation", 8);
+        sub.SetMeta(TestIdMetaKey, "item-subtab-owned");
+
+        var inventoryTitle = new Label { Text = "── 🎒 所持中のアイテム（装備させる・付け替え） ──" };
         inventoryTitle.SetMeta(TestIdMetaKey, "inventory-title");
-        panel.AddChild(inventoryTitle);
+        sub.AddChild(inventoryTitle);
         var inventoryHint = new Label
         {
-            Text = "ドロップ等で得た装備は持ち物に貯まる。外しても消えず持ち物へ戻る（無償・付け替え自由）。",
+            Text = "旅団が持つ装備の一覧。装備中は外して持ち物へ、持ち物は隊員へ付け替え自由（無償）。",
         };
         inventoryHint.SetMeta(TestIdMetaKey, "inventory-hint");
-        panel.AddChild(inventoryHint);
+        sub.AddChild(inventoryHint);
         _inventoryListContainer = new VBoxContainer();
         _inventoryListContainer.SetMeta(TestIdMetaKey, "inventory-list");
-        panel.AddChild(_inventoryListContainer);
+        sub.AddChild(_inventoryListContainer);
 
-        return panel;
+        return sub;
+    }
+
+    private void AddItemSubTabButton(HBoxContainer nav, ItemSubTab sub, string label)
+    {
+        var btn = new Button { Text = label };
+        btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        btn.SetMeta(TestIdMetaKey, $"item-subtab-button-{sub.ToString().ToLowerInvariant()}");
+        btn.Pressed += () => OnItemSubTabPressed(sub);
+        _itemSubTabButtons[sub] = btn;
+        nav.AddChild(btn);
+    }
+
+    private void OnItemSubTabPressed(ItemSubTab sub)
+    {
+        _activeItemSubTab = sub;
+        ApplyActiveItemSubTab();
+    }
+
+    /// <summary>アイテムタブ内のサブタブを切り替える（選択サブパネルのみ表示・ボタンを金色強調）。</summary>
+    private void ApplyActiveItemSubTab()
+    {
+        foreach (var (sub, panel) in _itemSubPanels) panel.Visible = sub == _activeItemSubTab;
+        foreach (var (sub, btn) in _itemSubTabButtons)
+        {
+            btn.Modulate = sub == _activeItemSubTab
+                ? new Color(1.0f, 0.9f, 0.45f)        // アクティブ＝金
+                : new Color(1.0f, 1.0f, 1.0f, 0.7f);  // 非アクティブ＝淡色
+        }
     }
 
     // ── タブ4: 結婚（父母選択 → 結婚 ＋ 子供たち） ──
