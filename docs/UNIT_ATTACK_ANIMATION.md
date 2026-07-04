@@ -2,15 +2,18 @@
 
 > 各ジョブの立ち絵を「右向き 3/4・攻撃モーション」のドット絵アニメにするための制作ガイド。
 > 既存の正面立ち絵（`Assets/Textures/Jobs/{slug}/{male|female}.png`・512² 高精細ドット絵）を
-> **ベースにして**、アニメ機能付きのドット絵ツール（pixel engine 系）で攻撃コマを作る。
+> **ベースにして**、**Scenario で右向き土台 → Pixel Engine で攻撃アニメ**の2ツール分業で攻撃コマを作る。
 > **同名規則の PNG を1枚置くだけでコード変更なしに即反映**（ローダ・再生機構は実装済み）。
+>
+> 分業の理由: Pixel Engine は「渡した絵の向きを保ったままモーションを付ける」ため**向きは回せない**。
+> 向き（正面→右向き3/4）は Scenario（静止画・画風モデル）で作り、その土台を Pixel Engine で動かす。
 
 ---
 
 ## 0. 全体像（何を作り、どう繋がるか）
 
 ```
-既存の正面立ち絵 ──(ツールで右向き化)──▶ 右向き3/4ベース ──(attackアニメ適用)──▶ 攻撃コマ列
+既存の正面立ち絵 ──(Scenarioで右向き化)──▶ 右向き3/4ベース ──(Pixel Engineでattackアニメ)──▶ 攻撃コマ列
         │                                                                            │
         │                                                     横一列スプライトシートで書き出し
         ▼                                                                            ▼
@@ -48,32 +51,48 @@
 
 ---
 
-## 2. 制作フロー（アニメ機能付きツール前提）
+## 2. 制作フロー（Scenario → Pixel Engine の2ツール分業）
 
-1. **右向きベースを作る**: ツールに既存の `{slug}/{gender}.png` を **参照（base/reference）**として読み込み、
-   「方向回転（direction / rotate）」で **右向き3/4** のベースを1枚生成。
-   - デザイン（装備・色・シルエット）が保たれているか確認。崩れたら短いスタイル指定で寄せる。
-2. **attack アニメを適用**: そのベースに「attack / melee slash（近接）」「shoot（射撃）」等のスケルトンを適用して 4〜6コマ生成。
-   - 武器を持つ手がリードするように。**インパクトのコマ**は踏み込み＋武器を右前方へ大きく。
-3. **書き出し**: 上記「1. シート仕様」に従い、**横一列・正方コマ・透過**の 1 枚 PNG にする。
-4. 置く: `generated_csharp/Assets/Textures/Jobs/{slug}/{gender}_attack.png` へ保存 → 起動して戦闘で確認。
+各ツールの得意が違うため**向きは Scenario／動きは Pixel Engine**と分業する:
 
-### プロンプト雛形（鉄壁騎士・剣／英語推奨・スタイル寄せ）
+- **Scenario**＝狙った構図・**向き**の“静止画”生成（自分の画風モデル/参照で画風を保てる）。回転（正面→右向き）はこちら。
+- **Pixel Engine**＝1枚のスプライトを**なめらかなアニメ**にする（`Give it your sprite, describe the motion`）。ただし**渡した絵の向きは変えられない**ので、必ず「右向きの土台」を先に用意してから渡す。
 
+### 手順
+1. **Scenario で右向き3/4の“土台1枚”を作る**（下のプロンプト）。既存 `{slug}/{gender}.png` を
+   **参照画像（img2img / image reference / IP-Adapter）**に入れて画風・装備を保つ。透過・単体・右向きで生成し、
+   赤マント・盾・十字紋が保たれた1枚を選ぶ（細部は Pixel Engine 内蔵の Piskel エディタで後修正可）。
+2. **Pixel Engine でその土台をアニメ化**。土台をアップロードし、**動きだけ**を英語で説明（見た目は書かない）。
+   向きは土台のまま右向きを保つ。
+3. **書き出し**: Pixel Engine 内蔵 Piskel で「Export → Spritesheet → PNG／**rows = 1（横一列）**」。
+   キャンバスは**正方**（例 128²）にしておくと、こちらの「コマ数＝幅÷高さ」自動判定がそのまま効く。**GIF は不可**（Godot がテクスチャ化できない）。
+4. 置く: `generated_csharp/Assets/Textures/Jobs/{slug}/{gender}_attack.png` → 起動して戦闘で確認。
+   （frame 0＝右向き待機ポーズが、そのまま戦闘中の静止立ち絵にもなる。別途 idle は不要。）
+
+### Scenario 用プロンプト（鉄壁騎士・右向き土台・英語推奨）
+
+**Positive**
 ```
 detailed 16-bit SNES JRPG pixel art, full-body knight in silver plate armor,
-flowing red cape, heater shield with red cross crest, thick dark outline, soft shading,
-limited palette, transparent background, centered, feet on a fixed baseline,
-3/4 view facing RIGHT, identical character across all frames.
-
-Frame 1 (idle):    standing guard, sword lowered, facing right
-Frame 2 (windup):  sword raised back over the shoulder, weight shifted back
-Frame 3 (strike):  sword slashing forward-right, arm extended, motion emphasis
-Frame 4 (recover): returning to the guard pose
+flowing red cape, heater shield with a red cross crest on the left arm,
+sword in the right hand, thick dark outline, soft cel shading, limited palette,
+single character, standing, 3/4 view facing RIGHT,
+transparent background, centered, feet on the bottom baseline
 ```
+**Negative**
+```
+front view, back view, multiple characters, text, watermark, blurry,
+extra limbs, cropped, background scenery, ground shadow
+```
+- 既存立ち絵を**参照画像**に入れ、強度は「デザインは残るが向きは右へ回る」中程度から調整。Scenario 側に学習済みピクセルモデルがあれば base に使う。
+- 他ジョブは被写体だけ差し替え（例 狙撃兵＝`archer holding a bow, light leather armor` / 呪術師＝`sorcerer with a long staff, dark hooded robe`）。①③④相当（画風・透過・`3/4 view facing RIGHT`）は全職で固定して16体を揃える。
 
-- 毎コマに `same character across frames` / 参照画像固定 / seed 固定 / 透過・中心・足元基準を効かせるのがブレ防止のコツ。
-- 射撃職（狙撃兵・呪術師）は `draw and release the bow` / `channel and cast a spell` 等へ差し替え。
+### Pixel Engine 用プロンプト（動きだけ／鉄壁騎士・剣）
+```
+sword slash attack: raise the sword overhead, swing it down diagonally to the right,
+then return to a guard stance
+```
+- 見た目は土台画像が担うので**書かない**。射撃職は `draw the bow and release an arrow` / 呪術師は `channel energy and cast a spell forward` 等の動き記述へ差し替え。
 
 ---
 
