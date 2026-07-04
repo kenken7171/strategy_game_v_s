@@ -878,6 +878,10 @@ public partial class MarriageUI : Godot.Control
         {
             if (!unit.IsAlive) continue;
 
+            // 創設メンバー・スカウト傭兵（血縁なし）は最初から正式な大隊員。
+            // 子ども欄（成長中／入団待ち）に出すのは婚姻で生まれた血縁の子のみ。
+            if (!unit.HasParentage) continue;
+
             if (unit.Age < AdultAge)
             {
                 // 成長中 (0〜14歳)
