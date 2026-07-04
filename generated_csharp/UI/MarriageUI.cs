@@ -953,12 +953,10 @@ public partial class MarriageUI : Godot.Control
     }
 
     /// <summary>
-    /// 兵器廠（購入・強化）を無状態に再構築する。2 段構成:
-    ///   ① 購入カタログ: 「何を買うか」を先に選ぶ。5 大マスターの各行 [購入 (BuyCost pt)] を押すと
-    ///      新品 Lv1 装備が持ち物へ入る（誰に装備するかは所持中タブで後決め・ユニット非依存）。
-    ///   ② 強化: 装備中の隊員だけを並べ、現装備を 1 段階上げる（未上限は [強化]、上限は Lv5 ラベル）。
-    /// 残高不足の実行ボタンは Disabled。コスト SoT は <see cref="ShopService"/>（BuyCost / UpgradeCostFor）。
-    /// SoT を一切キャッシュせず毎回読み直す（残高／ロスタ変更に追従）。
+    /// 購入カタログ（購入サブタブ）を無状態に再構築する。「何を買うか」を先に選ぶ方式で、5 大マスターの
+    /// 各行 [購入 (BuyCost pt)] を押すと新品 Lv1 装備が持ち物へ入る（誰に装備するかは所持中タブで後決め・
+    /// ユニット非依存）。強化は所持中タブの装備中行へ移設済み（本セクションには置かない）。残高不足の
+    /// ボタンは Disabled。コスト SoT は <see cref="ShopService.BuyCost"/>。SoT はキャッシュせず毎回読み直す。
     /// </summary>
     private void RenderShop()
     {
@@ -999,51 +997,14 @@ public partial class MarriageUI : Godot.Control
 
             _shopListContainer.AddChild(row);
         }
-
-        // ── ② 強化（装備中の隊員の装備を 1 段階上げる。装備なしの隊員は出さない） ──
-        var upgradeHeader = new Label { Text = "強化（装備中の隊員）:" };
-        upgradeHeader.SetMeta(TestIdMetaKey, "shop-upgrade-header");
-        _shopListContainer.AddChild(upgradeHeader);
-
-        var anyUpgrade = false;
-        foreach (var unit in _chronicleGlobal.GetAliveUnits())
-        {
-            if (unit.MainEquipment is not { } equip) continue;
-            anyUpgrade = true;
-            var capturedId = unit.Id;
-
-            var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 8);
-            row.SetMeta(TestIdMetaKey, $"shop-row-{capturedId}");
-
-            var shopIcon = MakeUnitIcon(unit);
-            if (shopIcon is not null) row.AddChild(shopIcon);
-
-            var name = new Label
-            {
-                Text = $"{JobName(unit.Job)} {_chronicleGlobal.ResolveDisplayName(unit)}"
-                       + $" — 装備: {ItemName(equip.ItemId)} Lv{equip.Level}",
-            };
-            name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            name.SetMeta(TestIdMetaKey, $"shop-unit-name-{capturedId}");
-            row.AddChild(name);
-
-            RenderShopUpgradeControls(row, capturedId, equip, economy);
-            _shopListContainer.AddChild(row);
-        }
-        if (!anyUpgrade)
-        {
-            var none = new Label { Text = "（強化できる装備中の隊員はいません）" };
-            none.SetMeta(TestIdMetaKey, "shop-upgrade-empty");
-            _shopListContainer.AddChild(none);
-        }
     }
 
     /// <summary>
-    /// 装備ありユニット行へ「強化」操作を組み立てる。上限 (Lv5) は強化不可ラベルのみ。
-    /// 未上限は武装状態（<see cref="_pendingUpgradeId"/>）で [強化する]／[やめる]、未武装で [強化 (cost pt)]。
+    /// 装備ありユニット行へ「強化」操作を組み立てる（所持中タブの装備中行で使う）。上限 (Lv5) は
+    /// 強化不可ラベルのみ。未上限は武装状態（<see cref="_pendingUpgradeId"/>）で [強化する]／[やめる]、
+    /// 未武装で [強化 (cost pt)]。コスト SoT は <see cref="ShopService.UpgradeCostFor"/>。
     /// </summary>
-    private void RenderShopUpgradeControls(
+    private void RenderUpgradeControls(
         HBoxContainer row, Guid unitId, Equipment equip, PointsEconomy economy)
     {
         if (equip.IsAtMaxLevel)
@@ -1102,9 +1063,10 @@ public partial class MarriageUI : Godot.Control
 
         var alive = _chronicleGlobal.GetAliveUnits();
         var inventory = _chronicleGlobal.BrigadeInventory;
+        var economy = _chronicleGlobal.CurrentEconomy;
 
-        // ── 上段: 装備中の生存者（外して持ち物へ） ──
-        var equippedHeader = new Label { Text = "装備中（外して持ち物へ）:" };
+        // ── 上段: 装備中の生存者（強化・外す） ──
+        var equippedHeader = new Label { Text = "装備中（強化 / 外して持ち物へ）:" };
         equippedHeader.SetMeta(TestIdMetaKey, "inventory-equipped-header");
         _inventoryListContainer.AddChild(equippedHeader);
 
@@ -1129,10 +1091,16 @@ public partial class MarriageUI : Godot.Control
             label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             row.AddChild(label);
 
-            var unequipBtn = new Button { Text = "外す → 持ち物" };
-            unequipBtn.SetMeta(TestIdMetaKey, $"inventory-unequip-button-{capturedId}");
-            unequipBtn.Pressed += () => OnUnequipToInventoryPressed(capturedId);
-            row.AddChild(unequipBtn);
+            // 強化（ポイント消費）を装備中行へ併設。武装中は [強化する]／[やめる] に切り替わる。
+            RenderUpgradeControls(row, capturedId, equip, economy);
+
+            if (_pendingUpgradeId != capturedId) // 強化の確認待ち中は付け外しを隠して誤操作を防ぐ
+            {
+                var unequipBtn = new Button { Text = "外す → 持ち物" };
+                unequipBtn.SetMeta(TestIdMetaKey, $"inventory-unequip-button-{capturedId}");
+                unequipBtn.Pressed += () => OnUnequipToInventoryPressed(capturedId);
+                row.AddChild(unequipBtn);
+            }
 
             _inventoryListContainer.AddChild(row);
         }
@@ -1434,14 +1402,14 @@ public partial class MarriageUI : Godot.Control
     private void OnUpgradeArmPressed(Guid unitId)
     {
         _pendingUpgradeId = unitId;
-        RenderShop();
+        RenderInventory(); // 強化は所持中タブの装備中行に置かれている
     }
 
     /// <summary>[やめる] 押下: 強化の武装を解除して通常表示へ戻す（何も強化しない）。</summary>
     private void OnShopCancelPressed()
     {
         _pendingUpgradeId = null;
-        RenderShop();
+        RenderInventory();
     }
 
     /// <summary>
@@ -1460,7 +1428,7 @@ public partial class MarriageUI : Godot.Control
         if (result is null)
         {
             GD.Print($"[MarriageUI] 🛡️ 装備強化 失敗: 残高不足／上限／対象不在 Id={unitId}");
-            RenderShop(); // 失敗時はシグナル無し → 手動で武装解除を反映
+            RenderInventory(); // 失敗時はシグナル無し → 手動で武装解除を反映
             return;
         }
 
