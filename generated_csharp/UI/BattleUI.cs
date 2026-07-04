@@ -282,6 +282,13 @@ public partial class BattleUI : Godot.Control
     /// </summary>
     private readonly Dictionary<Guid, PanelContainer> _unitPanels = new();
 
+    /// <summary>
+    /// ユニット Id → その立ち絵アニメータ（攻撃モーション付きのジョブだけ登録される）。RenderBoard の
+    /// 冒頭で _unitPanels と同時に更地化する。攻撃イベント時に当人のアニメを再生する索引。
+    /// 攻撃シート（{job}/{gender}_attack.png）が無いジョブは登録されない（静止立ち絵のまま）。
+    /// </summary>
+    private readonly Dictionary<Guid, SpriteSheetAnimator> _unitAnimators = new();
+
     /// <summary>ポップアップ testid の機械生成に使う一過性カウンタ（自己崩壊するので回収不要）。</summary>
     private int _popupSpawnCount;
 
@@ -836,6 +843,7 @@ public partial class BattleUI : Godot.Control
         // たびに古い Panel 参照（QueueFree 済み）を掴み続けないよう、ここで必ず更地化する。
         _rowPanels.Clear();
         _unitPanels.Clear();
+        _unitAnimators.Clear(); // 立ち絵アニメータも古い（QueueFree 済み）参照を残さない
 
         var battle = _chronicleGlobal?.CurrentBattle;
         // 非戦闘時も 9 マスの testid を欠かさないよう、空盤面で骨格を描く。
@@ -998,12 +1006,33 @@ public partial class BattleUI : Godot.Control
     };
 
     /// <summary>
-    /// Gendered job-illustration TextureRect, or null when art is absent. MouseFilter
+    /// Gendered job art, or null when absent. When a {job}/{gender}_attack.png sheet
+    /// exists the art is a <see cref="SpriteSheetAnimator"/> (idle = frame 0, its
+    /// right-facing pose) registered in <see cref="_unitAnimators"/> so an attack
+    /// event can play it; otherwise it is the static front illustration. MouseFilter
     /// = Ignore so the card panel keeps ownership of pointer events.
     /// </summary>
-    private static TextureRect? BuildJobArt(Unit? unit, int size)
+    private Control? BuildJobArt(Unit? unit, int size)
     {
         if (unit is null) return null;
+
+        // Prefer the attack sheet (animated, right-facing idle) when present.
+        var sheet = JobTextureLibrary.TryLoadAttack(unit.Job, unit.Gender);
+        if (sheet is not null)
+        {
+            var animator = new SpriteSheetAnimator
+            {
+                CustomMinimumSize = new Vector2(size, size),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            animator.Configure(sheet);
+            _unitAnimators[unit.Id] = animator;
+            return animator;
+        }
+
         var texture = JobTextureLibrary.TryLoad(unit.Job, unit.Gender);
         if (texture is null) return null;
 
@@ -1549,7 +1578,9 @@ public partial class BattleUI : Godot.Control
         switch (battleEvent)
         {
             case AllyOffenseEvent ally:
-                // 味方の攻撃が敵へ命中 → 敵カードを赤くフラッシュし、敵カード上にダメージを出す。
+                // 味方の攻撃が敵へ命中 → 攻撃者の立ち絵を攻撃モーション再生（シート未導入なら無反応）、
+                // 敵カードを赤くフラッシュし、敵カード上にダメージを出す。
+                PlayUnitAttack(ally.AttackerId);
                 FlashControl(_enemyCard, DangerFrameColor);
                 SpawnDamagePopup(_enemyCard, $"-{ally.Damage}", DamagePopupColor);
                 return false;
@@ -1589,6 +1620,18 @@ public partial class BattleUI : Godot.Control
             default:
                 // ローテーション・決着など、盤面着弾を伴わないイベントは演出なし。
                 return false;
+        }
+    }
+
+    /// <summary>
+    /// 攻撃者の立ち絵アニメータ（<see cref="_unitAnimators"/>）に攻撃モーションを 1 回再生させる。
+    /// 攻撃シート（{job}/{gender}_attack.png）が無いジョブは索引に居ないため、静かに no-op になる。
+    /// </summary>
+    private void PlayUnitAttack(Guid attackerId)
+    {
+        if (_unitAnimators.TryGetValue(attackerId, out var animator))
+        {
+            animator.PlayAttack();
         }
     }
 

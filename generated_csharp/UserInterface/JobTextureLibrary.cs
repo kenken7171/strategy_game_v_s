@@ -65,4 +65,20 @@ public static class JobTextureLibrary
         // Two-stage, content-sniffing resolve (a JPEG/WebP saved as .png still loads).
         return TextureDiskLoader.Resolve($"{JobTextureRoot}{slug}/{file}.png");
     }
+
+    /// <summary>
+    /// Load the attack animation sheet for a job + gender, or null when absent.
+    /// The sheet is a horizontal strip of square frames at
+    /// res://Assets/Textures/Jobs/{slug}/{male|female}_attack.png (see
+    /// docs/UNIT_ATTACK_ANIMATION.md). Absence is normal (units simply stay static),
+    /// so callers fall back to <see cref="TryLoad"/> when this returns null.
+    /// </summary>
+    public static Texture2D? TryLoadAttack(JobId job, Gender gender = Gender.Male)
+    {
+        var slug = Slug(job);
+        if (slug.Length == 0) return null;
+
+        var file = gender == Gender.Female ? "female" : "male";
+        return TextureDiskLoader.Resolve($"{JobTextureRoot}{slug}/{file}_attack.png");
+    }
 }
