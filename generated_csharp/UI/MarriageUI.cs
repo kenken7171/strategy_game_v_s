@@ -12,16 +12,13 @@
 //   │  [結婚させる]                                       │
 //   └────────────────────────────────────────────────────┘
 //
-//   ┌─ ⚔ スカウト（候補から採用） ──────────────────────┐
-//   │  血縁なしの外様候補（総合値に連動したコスト）      │
-//   │  🗡 Sniper 22歳   [スカウト (6 pt)]                 │
-//   │  ── 🎓 入団待ち（血縁の子・0 pt で加入） ──         │
-//   │  🎓 Medic  17歳   [加入 (0 pt)]                     │
+//   ┌─ ⚔ スカウト ──────────────────────────────────────┐
+//   │  外様も成人した血縁の子も区別なく 1 列（差はコスト）│
+//   │  Sniper 22歳   [スカウト (6 pt)]                    │
+//   │  Medic  17歳   [スカウト (0 pt)]  ← 血縁の子(0 pt)  │
 //   └────────────────────────────────────────────────────┘
 //
-//   ┌─ 👶 家系図（子供たち：結婚タブ） ─────────────────┐
-//   │  成人した子は［スカウト］タブの入団待ちから加入    │
-//   │  ── 👶 成長中 ──                                    │
+//   ┌─ 👶 家系図（成長中の子：結婚タブ） ───────────────┐
 //   │  👶 Tactician 3歳                                   │
 //   │  👶 Sorcerer 8歳                                    │
 //   └────────────────────────────────────────────────────┘
@@ -122,8 +119,6 @@ public partial class MarriageUI : Godot.Control
     private Button? _marriageExecuteButton;
 
     // 家系図セクション
-    private Label? _readyChildrenLabel;          // スカウトタブの「入団待ち」見出し（居ないとき隠す）
-    private VBoxContainer? _readyChildrenContainer;
     private VBoxContainer? _minorChildrenContainer;
 
     // 旅団兵器廠（商店・強化）セクション
@@ -302,32 +297,16 @@ public partial class MarriageUI : Godot.Control
         panel.AddThemeConstantOverride("separation", 10);
         panel.SetMeta(TestIdMetaKey, "guild-tab-scout");
 
-        var title = new Label { Text = "── ⚔ スカウト（候補から採用） ──" };
+        var title = new Label { Text = "── ⚔ スカウト ──" };
         title.SetMeta(TestIdMetaKey, "guild-scout-title");
         panel.AddChild(title);
 
-        var hint = new Label
-        {
-            Text = "血縁なしの外様候補。コストは強さ（総合値）に連動。選んで採用する（世代ごとに更新）。",
-        };
-        hint.SetMeta(TestIdMetaKey, "guild-scout-hint");
-        panel.AddChild(hint);
-
+        // 外様候補も成人した血縁の子も、区別せず 1 列に並べる（違いはコストだけ＝子は 0 pt）。
         _scoutCandidatesContainer = new VBoxContainer();
         _scoutCandidatesContainer.AddThemeConstantOverride("separation", 6);
         _scoutCandidatesContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _scoutCandidatesContainer.SetMeta(TestIdMetaKey, "guild-scout-list");
         panel.AddChild(_scoutCandidatesContainer);
-
-        // 入団待ち（血縁の子・0 pt で加入）を、外様候補と同じ列に並べる。居ないときは隠す。
-        _readyChildrenLabel = new Label { Text = "── 🎓 入団待ち（血縁の子・0 pt で加入） ──" };
-        _readyChildrenLabel.SetMeta(TestIdMetaKey, "guild-ready-children-label");
-        panel.AddChild(_readyChildrenLabel);
-        _readyChildrenContainer = new VBoxContainer();
-        _readyChildrenContainer.AddThemeConstantOverride("separation", 6);
-        _readyChildrenContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _readyChildrenContainer.SetMeta(TestIdMetaKey, "guild-ready-children-list");
-        panel.AddChild(_readyChildrenContainer);
 
         return panel;
     }
@@ -414,16 +393,9 @@ public partial class MarriageUI : Godot.Control
         _marriageExecuteButton.Pressed += OnMarriageExecutePressed;
         panel.AddChild(_marriageExecuteButton);
 
-        var familyTitle = new Label { Text = "── 👶 家系図（子供たち） ──" };
+        var familyTitle = new Label { Text = "── 👶 家系図（成長中の子） ──" };
         familyTitle.SetMeta(TestIdMetaKey, "marriage-family-title");
         panel.AddChild(familyTitle);
-
-        var familyHint = new Label
-        {
-            Text = "成人した子は［スカウト］タブの「入団待ち」から 0 pt で加入させます。",
-        };
-        familyHint.SetMeta(TestIdMetaKey, "marriage-family-hint");
-        panel.AddChild(familyHint);
 
         var minorLabel = new Label { Text = "👶 成長中" };
         minorLabel.SetMeta(TestIdMetaKey, "marriage-family-minor-label");
@@ -475,16 +447,17 @@ public partial class MarriageUI : Godot.Control
     {
         // 残高そのものは GameDirector の固定ヘッダが表示。ここでは残高依存の見積り・活性のみ更新。
         RenderQuote(); // 残高変動で affordable が変わる可能性
-        RenderScoutCandidates(); // 残高変動で各候補の採用ボタン活性が変わる
+        RenderScoutList(); // 残高変動で各候補の採用ボタン活性が変わる
         RenderShop();  // 残高変動で購入・強化ボタンの活性が変わる
     }
 
     private void OnRosterChanged()
     {
         RenderUnitList();
+        RenderScoutList(); // 血縁の子が入団待ち（＝スカウト列）に増減する
         RenderUnitSelectors();
         RenderQuote();
-        RenderChildrenLists();
+        RenderMinorChildren();
         RenderShop();
         RenderInventory();
     }
@@ -494,8 +467,8 @@ public partial class MarriageUI : Godot.Control
     /// <summary>持ち物が増減した（ドロップ取得・付け替え）ときのハンドラ。持ち物パネルだけを狙い撃ち再描画。</summary>
     private void OnInventoryChanged() => RenderInventory();
 
-    /// <summary>スカウト候補プールが変化した（採用・世代更新）ときのハンドラ。候補リストを再描画。</summary>
-    private void OnScoutCandidatesChanged() => RenderScoutCandidates();
+    /// <summary>スカウト候補プールが変化した（採用・世代更新）ときのハンドラ。スカウト列を再描画。</summary>
+    private void OnScoutCandidatesChanged() => RenderScoutList();
 
     /// <summary>
     /// 今年の行動が変わった（SetPlannedAction が FormationChanged を発火）ときのハンドラ。
@@ -509,10 +482,10 @@ public partial class MarriageUI : Godot.Control
     {
         RenderActionChoice();
         RenderUnitList();
-        RenderScoutCandidates();
+        RenderScoutList();
         RenderUnitSelectors();
         RenderQuote();
-        RenderChildrenLists();
+        RenderMinorChildren();
         RenderShop();
         RenderInventory();
     }
@@ -697,53 +670,66 @@ public partial class MarriageUI : Godot.Control
     }
 
     /// <summary>
-    /// スカウトタブの候補プール（<see cref="ChronicleGlobal.ScoutCandidates"/>）を無状態に再構築する。
-    /// 各行＝立ち絵 ＋ 種別/年齢/氏名 ＋ パラメータ ＋ ［スカウト (cost pt)］（残高不足は Disabled）。
+    /// スカウトタブの 1 列を無状態に再構築する。外様候補（有償・<see cref="ChronicleGlobal.ScoutCandidates"/>）と
+    /// 成人した血縁の子（0 pt・入団待ち）を区別せず同じ列に並べる。違いはコストだけ（子＝0 pt）。
     /// </summary>
-    private void RenderScoutCandidates()
+    private void RenderScoutList()
     {
         if (_chronicleGlobal is null || _scoutCandidatesContainer is null) return;
 
         foreach (var c in _scoutCandidatesContainer.GetChildren()) c.QueueFree();
 
-        var candidates = _chronicleGlobal.ScoutCandidates;
-        if (candidates.Count == 0)
+        var economy = _chronicleGlobal.CurrentEconomy;
+
+        // 外様候補（強さに連動した有償）。
+        foreach (var cand in _chronicleGlobal.ScoutCandidates)
         {
-            var empty = new Label { Text = "（スカウト候補がいません）" };
+            var id = cand.Unit.Id;
+            AddRecruitRow(cand.Unit, cand.Cost, economy.CanAfford(cand.Cost),
+                () => OnScoutCandidatePressed(id));
+        }
+
+        // 成人した血縁の子（0 pt・入団待ち）。外様と混ぜて並べる（結婚由来だと分からなくてよい）。
+        foreach (var unit in _chronicleGlobal.BattalionRoster)
+        {
+            if (!unit.IsAlive || !unit.HasParentage) continue;
+            if (unit.Age < AdultAge || unit.Age > AdultAge + 2) continue; // 15〜17歳
+            if (_ceremoniallyEnlisted.Contains(unit.Id)) continue;
+            var id = unit.Id;
+            AddRecruitRow(unit, cost: 0, canAfford: true, () => OnEnlistChildPressed(id));
+        }
+
+        if (_scoutCandidatesContainer.GetChildCount() == 0)
+        {
+            var empty = new Label { Text = "（スカウトできるユニットがいません）" };
             empty.SetMeta(TestIdMetaKey, "guild-scout-empty");
             _scoutCandidatesContainer.AddChild(empty);
-            return;
         }
+    }
 
-        var economy = _chronicleGlobal.CurrentEconomy;
-        foreach (var cand in candidates)
-        {
-            var unit = cand.Unit;
-            var capturedId = unit.Id;
+    /// <summary>スカウト列の 1 行（大きめ立ち絵＋パラメータ表＋［スカウト (cost pt)］）を組んで追加する。</summary>
+    private void AddRecruitRow(Unit unit, int cost, bool canAfford, Action onPressed)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        row.SetMeta(TestIdMetaKey, $"guild-scout-row-{unit.Id}");
 
-            var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 12);
-            row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            row.SetMeta(TestIdMetaKey, $"guild-scout-row-{capturedId}");
+        var icon = MakeUnitListIcon(unit);
+        if (icon is not null) row.AddChild(icon);
 
-            // スカウト候補もユニットリストと同じ大きめの立ち絵で見やすくする。
-            var icon = MakeUnitListIcon(unit);
-            if (icon is not null) row.AddChild(icon);
+        var info = BuildUnitInfoColumn(
+            $"{JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal!.ResolveDisplayName(unit)}",
+            unit.Job);
+        row.AddChild(info);
 
-            var info = BuildUnitInfoColumn(
-                $"{JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}",
-                unit.Job);
-            row.AddChild(info);
+        var scoutBtn = new Button { Text = $"スカウト ({cost} pt)", Disabled = !canAfford };
+        scoutBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        scoutBtn.SetMeta(TestIdMetaKey, $"guild-scout-button-{unit.Id}");
+        scoutBtn.Pressed += () => onPressed();
+        row.AddChild(scoutBtn);
 
-            var canAfford = economy.CanAfford(cand.Cost);
-            var scoutBtn = new Button { Text = $"スカウト ({cand.Cost} pt)", Disabled = !canAfford };
-            scoutBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-            scoutBtn.SetMeta(TestIdMetaKey, $"guild-scout-button-{capturedId}");
-            scoutBtn.Pressed += () => OnScoutCandidatePressed(capturedId);
-            row.AddChild(scoutBtn);
-
-            _scoutCandidatesContainer.AddChild(row);
-        }
+        _scoutCandidatesContainer!.AddChild(row);
     }
 
     /// <summary>
@@ -876,69 +862,30 @@ public partial class MarriageUI : Godot.Control
         return frame;
     }
 
-    private void RenderChildrenLists()
+    /// <summary>
+    /// 結婚タブの家系図（成長中の子＝Age 0〜14）を無状態に再構築する。成人した血縁の子は
+    /// スカウト列（<see cref="RenderScoutList"/>）へ出るため、ここには出さない。
+    /// </summary>
+    private void RenderMinorChildren()
     {
-        if (_chronicleGlobal is null) return;
-        if (_readyChildrenContainer is null || _minorChildrenContainer is null) return;
+        if (_chronicleGlobal is null || _minorChildrenContainer is null) return;
 
-        // 既存子要素をクリア
-        foreach (var c in _readyChildrenContainer.GetChildren()) c.QueueFree();
         foreach (var c in _minorChildrenContainer.GetChildren()) c.QueueFree();
 
-        var readyCount = 0;
         foreach (var unit in _chronicleGlobal.BattalionRoster)
         {
-            if (!unit.IsAlive) continue;
+            if (!unit.IsAlive || !unit.HasParentage) continue;
+            if (unit.Age >= AdultAge) continue; // 成人はスカウト列（入団待ち）or 通常メンバー
 
-            // 創設メンバー・スカウト傭兵（血縁なし）は最初から正式な大隊員。
-            // 子ども欄（成長中＝結婚タブ／入団待ち＝スカウトタブ）に出すのは血縁の子のみ。
-            if (!unit.HasParentage) continue;
-
-            if (unit.Age < AdultAge)
-            {
-                // 成長中 (0〜14歳) — 結婚タブの家系図に情報表示（アクションなし）。
-                var row = new HBoxContainer();
-                row.SetMeta(TestIdMetaKey, $"marriage-family-minor-row-{unit.Id}");
-                var minorIcon = MakeUnitIcon(unit);
-                if (minorIcon is not null) row.AddChild(minorIcon);
-                var minorName = new Label { Text = $"👶 {JobName(unit.Job)} {unit.Age}歳" };
-                minorName.SetMeta(TestIdMetaKey, $"marriage-family-minor-name-{unit.Id}");
-                row.AddChild(minorName);
-                _minorChildrenContainer.AddChild(row);
-            }
-            else if (unit.Age <= AdultAge + 2 && !_ceremoniallyEnlisted.Contains(unit.Id))
-            {
-                // 入団待ち（Age 15〜17・未加入の血縁の子）— スカウトタブに候補と並べる（0 pt で加入）。
-                // ※ Age >= 18 は通常成人扱いで本リストから外す
-                readyCount++;
-                var capturedId = unit.Id;
-
-                var row = new HBoxContainer();
-                row.AddThemeConstantOverride("separation", 12);
-                row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-                row.SetMeta(TestIdMetaKey, $"guild-ready-child-row-{capturedId}");
-
-                var icon = MakeUnitListIcon(unit); // スカウト候補と同じ大きめ立ち絵で揃える
-                if (icon is not null) row.AddChild(icon);
-
-                var info = BuildUnitInfoColumn(
-                    $"🎓 {JobName(unit.Job)} (Age {unit.Age}) {_chronicleGlobal.ResolveDisplayName(unit)}",
-                    unit.Job);
-                row.AddChild(info);
-
-                var enlistBtn = new Button { Text = "加入 (0 pt)" };
-                enlistBtn.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-                enlistBtn.SetMeta(TestIdMetaKey, $"guild-enlist-button-{capturedId}");
-                enlistBtn.Pressed += () => OnEnlistChildPressed(capturedId);
-                row.AddChild(enlistBtn);
-
-                _readyChildrenContainer.AddChild(row);
-            }
+            var row = new HBoxContainer();
+            row.SetMeta(TestIdMetaKey, $"marriage-family-minor-row-{unit.Id}");
+            var minorIcon = MakeUnitIcon(unit);
+            if (minorIcon is not null) row.AddChild(minorIcon);
+            var minorName = new Label { Text = $"👶 {JobName(unit.Job)} {unit.Age}歳" };
+            minorName.SetMeta(TestIdMetaKey, $"marriage-family-minor-name-{unit.Id}");
+            row.AddChild(minorName);
+            _minorChildrenContainer.AddChild(row);
         }
-
-        // 入団待ちが居ないときは、スカウトタブの見出し・枠ごと隠す（外様候補だけを見せる）。
-        if (_readyChildrenLabel is not null) _readyChildrenLabel.Visible = readyCount > 0;
-        _readyChildrenContainer.Visible = readyCount > 0;
     }
 
     /// <summary>
@@ -1412,7 +1359,7 @@ public partial class MarriageUI : Godot.Control
         // UI 側で「儀式済み」状態を管理することで以降のリスト表示から除外する。
         _ceremoniallyEnlisted.Add(childId);
         GD.Print($"[MarriageUI] 🎓 0 pt で正式入団: {childId}");
-        RenderChildrenLists();
+        RenderScoutList(); // 加入済みの子をスカウト列から外す
     }
 
     // ─── 旅団兵器廠（商店・強化）ハンドラ ─────────────────────────────────
