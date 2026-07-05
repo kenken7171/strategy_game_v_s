@@ -79,14 +79,15 @@ thick dark outline, soft cel shading, limited palette, single character,
 three-quarter view, body angled about 45 degrees toward the RIGHT (diagonal),
 head, torso, hips and feet all angled to the right but still partly facing the viewer,
 right shoulder leading, right foot slightly forward, standing,
-transparent background, centered, no shadow
+plain solid background, centered, no shadow
 ```
 **Negative**
 ```
 full side profile, exact side view, 90 degree profile, flat profile,
 front view, facing camera, torso square to camera, only the head turned,
 back view, multiple characters, text, watermark, blurry, extra limbs, cropped,
-background scenery, shadow, ground shadow, drop shadow, cast shadow, shadow under the feet
+background scenery, shadow, ground shadow, drop shadow, cast shadow, shadow under the feet,
+checkerboard, checkered background, transparency pattern, gray checker squares
 ```
 - **向きは `three-quarter view`（3/4＝斜め）を主語に**。`side view` / `body in profile` は**完全横向き**になるので使わない。
 - **参照強度で角度を微調整**（前回2回で挟めている）: 参照 **強すぎ→首だけ正面** / **弱すぎ＋side view→完全横**。
@@ -94,6 +95,10 @@ background scenery, shadow, ground shadow, drop shadow, cast shadow, shadow unde
   まだ正面気味なら `about 60 degrees` に振って角度を数値で詰める。
 - 影が出る場合は Negative の shadow 系に加え、Scenario の **Remove Background / transparent 出力**で床影ごと除去する。
   Scenario 側に学習済みピクセルモデルがあれば base に使う。
+- **⚠ 透過の落とし穴**: プロンプトに `transparent background` と書くと、モデルが**“透明を表す市松模様”を絵として描き込む**
+  （RGB・アルファ無しで焼き込まれる）ことが多い。→ プロンプトは **`plain solid background`（無地）**にし、透過は
+  **Scenario の Remove Background で後付け**する。書き出した PNG が **RGBA・角が透明**か必ず確認（`sips -g hasAlpha` が `yes`）。
+  焼き込み市松のまま置くと、戦闘画面でキャラ背後にグレーの箱が出る。
 - 他ジョブは被写体だけ差し替え（例 狙撃兵＝`archer holding a bow, light leather armor` / 呪術師＝`sorcerer with a long staff, dark hooded robe`）。①③④相当（画風・透過・`3/4 view facing RIGHT`）は全職で固定して16体を揃える。
 
 ### Pixel Engine 用プロンプト（動きだけ／鉄壁騎士・剣）
