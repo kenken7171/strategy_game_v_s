@@ -74,17 +74,24 @@
 **Positive**
 ```
 detailed 16-bit SNES JRPG pixel art, full-body knight in silver plate armor,
-flowing red cape, heater shield with a red cross crest on the left arm,
-sword in the right hand, thick dark outline, soft cel shading, limited palette,
-single character, standing, 3/4 view facing RIGHT,
-transparent background, centered, feet on the bottom baseline
+flowing red cape, heater shield on the left arm, sword in the right hand,
+thick dark outline, soft cel shading, limited palette, single character,
+side view, the ENTIRE BODY turned to the RIGHT: head, shoulders, torso, hips,
+legs and feet all pointing right, right foot stepping forward, striding to the right,
+body in profile, transparent background, centered, no shadow
 ```
 **Negative**
 ```
-front view, back view, multiple characters, text, watermark, blurry,
-extra limbs, cropped, background scenery, ground shadow
+front view, facing camera, torso facing forward, shoulders square to camera,
+only the head turned while body faces front, back view, multiple characters,
+text, watermark, blurry, extra limbs, cropped, background scenery,
+shadow, ground shadow, drop shadow, cast shadow, shadow under the feet
 ```
-- 既存立ち絵を**参照画像**に入れ、強度は「デザインは残るが向きは右へ回る」中程度から調整。Scenario 側に学習済みピクセルモデルがあれば base に使う。
+- 既存立ち絵を**参照画像**に入れる。**「首だけ右」になるのは参照の向きに引っ張られているサイン**なので、
+  **画像の影響（Image influence / reference strength）を弱め（＝creativity を上げ）**て体ごと回るようにする。
+  それでも足りなければ `side view` / `body in profile` を強め、`3/4` 寄せに戻すのは体が回ってから。
+- 影が出る場合は Negative の shadow 系を効かせるほか、Scenario の **Remove Background / transparent 出力**で床影ごと除去する。
+  Scenario 側に学習済みピクセルモデルがあれば base に使う。
 - 他ジョブは被写体だけ差し替え（例 狙撃兵＝`archer holding a bow, light leather armor` / 呪術師＝`sorcerer with a long staff, dark hooded robe`）。①③④相当（画風・透過・`3/4 view facing RIGHT`）は全職で固定して16体を揃える。
 
 ### Pixel Engine 用プロンプト（動きだけ／鉄壁騎士・剣）
